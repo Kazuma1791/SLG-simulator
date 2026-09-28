@@ -19,10 +19,10 @@
     button:disabled { background: #475569; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #1d4ed8; }
     
-    /* 地圖畫布容器 */
+    /* 地圖容器 */
     .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #475569; background: #0f172a; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-    canvas { display: block; width: 100%; height: auto; cursor: pointer; }
-    .log-box { background: #050814; padding: 10px; border-radius: 6px; max-height: 100px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #1e293b; }
+    canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
+    .log-box { background: #050814; padding: 10px; border-radius: 6px; max-height: 110px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #1e293b; }
     .log-box p { margin-bottom: 4px; border-bottom: 1px solid #0f172a; }
   </style>
 </head>
@@ -43,15 +43,18 @@
     <!-- 2D 像素大地圖沙盤 -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3>🗺️ 世界沙盤（點選敵國城堡發起進攻）</h3>
-        <span style="font-size:0.8rem; color:#94a3b8;">🔷 己方主城 | 🔴 敵對城邦 | 點擊地圖可進行偵查</span>
+        <h3>🗺️ 世界沙盤（點擊城池發動偵查或出征）</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span style="font-size:0.8rem; color:#94a3b8;">🟡 己方主城 | 🔴 敵對城邦</span>
+          <button onclick="locateHome()" style="background:#0284c7; padding:4px 10px; font-size:0.8rem;">📍 定位我的城堡</button>
+        </div>
       </div>
       <div class="map-frame">
         <canvas id="worldCanvas" width="880" height="440"></canvas>
       </div>
     </div>
 
-    <!-- 設施營造 -->
+    <!-- 城內建設 -->
     <div class="card">
       <h3>城內設施營造</h3>
       <div class="grid" id="building-container"></div>
@@ -62,7 +65,7 @@
 
     <!-- 戰報中心 -->
     <div class="card">
-      <h3>王國戰報紀錄</h3>
+      <h3>王國戰事紀錄</h3>
       <div class="log-box" id="log-list"></div>
     </div>
   </div>
@@ -74,6 +77,7 @@
       getFirestore, doc, getDoc, setDoc, onSnapshot, collection, runTransaction 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+    // 你的 Firebase 專案配置
     const firebaseConfig = {
       apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
       authDomain: "slg-game-617b3.firebaseapp.com",
@@ -105,14 +109,14 @@
       }
     };
 
-    // 核心算法：基於座標確定地形（草地/密林/高山/湖泊），所有玩家看到的世界地形完全相同
+    // 程序化地形算法：基於座標確定地形，保證全服地貌完全一致
     function getTileType(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
       const rand = v - Math.floor(v);
-      if (rand < 0.55) return 'plains';   // 55% 綠原平地
-      if (rand < 0.75) return 'forest';   // 20% 森林
-      if (rand < 0.88) return 'mountain'; // 13% 山脈
-      return 'water';                     // 12% 湖泊水系
+      if (rand < 0.55) return 'plains';   // 平原草地
+      if (rand < 0.75) return 'forest';   // 森林
+      if (rand < 0.88) return 'mountain'; // 高山
+      return 'water';                     // 湖泊
     }
 
     signInAnonymously(auth).catch(console.error);
@@ -155,6 +159,8 @@
       });
 
       setInterval(tickAndSync, 1000);
+      // 每 100ms 重繪一次以維持金色光環呼吸動畫
+      setInterval(drawWorldMap, 100);
     });
 
     async function tickAndSync() {
@@ -190,7 +196,7 @@
       }
     }
 
-    // Canvas 2D 沙盤渲染引擎
+    // 2D Canvas 大地圖主渲染
     function drawWorldMap() {
       if (!myData) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -198,7 +204,7 @@
       const cols = Math.ceil(canvas.width / TILE_SIZE);
       const rows = Math.ceil(canvas.height / TILE_SIZE);
 
-      // 1. 繪製自然地形瓦片
+      // 1. 繪製地形瓦片
       for (let x = 0; x < cols; x++) {
         for (let y = 0; y < rows; y++) {
           const px = x * TILE_SIZE;
@@ -206,24 +212,20 @@
           const type = getTileType(x, y);
 
           if (type === 'plains') {
-            // 平原草地
             ctx.fillStyle = '#1e3a1e';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
             ctx.fillStyle = '#2d5a2d';
             ctx.fillRect(px + 10, py + 12, 3, 6);
             ctx.fillRect(px + 28, py + 34, 4, 7);
           } else if (type === 'forest') {
-            // 茂密森林
             ctx.fillStyle = '#142914';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-            // 繪製樹木幾何貼圖
             ctx.fillStyle = '#10b981';
             ctx.beginPath();
             ctx.arc(px + 20, py + 22, 10, 0, Math.PI * 2);
             ctx.arc(px + 36, py + 30, 8, 0, Math.PI * 2);
             ctx.fill();
           } else if (type === 'mountain') {
-            // 高山險隘
             ctx.fillStyle = '#262626';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
             ctx.fillStyle = '#52525b';
@@ -233,7 +235,6 @@
             ctx.lineTo(px + 45, py + 45);
             ctx.closePath();
             ctx.fill();
-            // 山頂雪線
             ctx.fillStyle = '#e4e4e7';
             ctx.beginPath();
             ctx.moveTo(px + 27, py + 10);
@@ -242,7 +243,6 @@
             ctx.closePath();
             ctx.fill();
           } else if (type === 'water') {
-            // 湖泊河流
             ctx.fillStyle = '#1e3a8a';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
             ctx.fillStyle = '#38bdf8';
@@ -250,30 +250,48 @@
             ctx.fillRect(px + 24, py + 32, 20, 2);
           }
 
-          // 格子網格邊框
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+          // 網格線與座標標記
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
           ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.font = '9px sans-serif';
+          ctx.fillText(`${x},${y}`, px + 3, py + 11);
         }
       }
 
-      // 2. 繪製城池堡壘與旗幟
+      // 2. 繪製城池與高亮標籤
       allPlayers.forEach(p => {
         const isMe = (p.id === myUid);
         const px = p.x * TILE_SIZE;
         const py = p.y * TILE_SIZE;
 
-        // 領地底座光環
-        ctx.fillStyle = isMe ? 'rgba(37, 99, 235, 0.4)' : 'rgba(220, 38, 38, 0.4)';
+        // 自己專屬：金色動態脈動光環與「你的王國」指針
+        if (isMe) {
+          const pulse = 24 + Math.sin(Date.now() / 250) * 4;
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, pulse, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('▼ 你的王國', px + TILE_SIZE / 2, py - 4);
+        }
+
+        // 領地底座
+        ctx.fillStyle = isMe ? 'rgba(37, 99, 235, 0.6)' : 'rgba(220, 38, 38, 0.4)';
         ctx.beginPath();
-        ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, 22, 0, Math.PI * 2);
+        ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, 22, 0, Math.PI * 2);
         ctx.fill();
 
-        // 城堡石牆主體
-        ctx.fillStyle = isMe ? '#1d4ed8' : '#7f1d1d';
+        // 城堡石牆
+        ctx.fillStyle = isMe ? '#2563eb' : '#7f1d1d';
         ctx.fillRect(px + 12, py + 16, 31, 26);
 
-        // 箭樓塔樓
-        ctx.fillStyle = isMe ? '#3b82f6' : '#b91c1c';
+        // 箭樓塔身
+        ctx.fillStyle = isMe ? '#60a5fa' : '#b91c1c';
         ctx.fillRect(px + 9, py + 12, 10, 30);
         ctx.fillRect(px + 36, py + 12, 10, 30);
 
@@ -287,15 +305,15 @@
         ctx.fillRect(px + 22, py + 30, 11, 12);
 
         // 領主名稱標籤
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = isMe ? '#fef08a' : '#ffffff';
+        ctx.font = isMe ? 'bold 11px sans-serif' : '10px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(p.name, px + TILE_SIZE / 2, py + 50);
+        ctx.fillText(p.name + (isMe ? ' (主城)' : ''), px + TILE_SIZE / 2, py + 52);
 
-        // 駐軍軍力標記
-        ctx.fillStyle = '#fde047';
+        // 駐軍
+        ctx.fillStyle = '#fbbf24';
         ctx.font = '10px sans-serif';
-        ctx.fillText(`⚔️${p.troops || 0}`, px + TILE_SIZE / 2, py + 8);
+        ctx.fillText(`⚔️${p.troops || 0}`, px + TILE_SIZE / 2, py + 9);
       });
     }
 
@@ -395,6 +413,12 @@
 
       document.getElementById('log-list').innerHTML = myData.logs.slice(0, 6).map(l => `<p>${l}</p>`).join('');
     }
+
+    // 全域功能函式
+    window.locateHome = () => {
+      if (!myData) return;
+      alert(`🏰 你的主城坐標為：X=${myData.x}, Y=${myData.y}\n在地圖橫向第 ${myData.x + 1} 格、縱向第 ${myData.y + 1} 格（帶有金色呼吸光環標記）`);
+    };
 
     window.upgradeBuilding = async (key) => {
       if (myData.buildQueue) return;
