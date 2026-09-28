@@ -131,6 +131,55 @@
       }
     };
 
+    // 1. 將 2D exploredTiles 壓縮為 Base64 字串
+    function serializeFog(matrix) {
+      const totalBits = WORLD_COLS * WORLD_ROWS;
+      const buffer = new Uint8Array(Math.ceil(totalBits / 8));
+    
+      for (let x = 0; x < WORLD_COLS; x++) {
+        for (let y = 0; y < WORLD_ROWS; y++) {
+          if (matrix[x][y]) {
+            const index = y * WORLD_COLS + x;
+            const byteIdx = Math.floor(index / 8);
+            const bitOffset = index % 8;
+            buffer[byteIdx] |= (1 << bitOffset);
+          }
+        }
+      }
+    
+      // 將二進位字節轉為緊湊的 Base64 字串（長度約 420 字元）
+      let binaryString = '';
+      for (let i = 0; i < buffer.length; i++) {
+        binaryString += String.fromCharCode(buffer[i]);
+      }
+      return btoa(binaryString);
+    }
+    
+    // 2. 將 Base64 字串還原解碼至 2D exploredTiles 矩陣
+    function deserializeFog(base64Str, targetMatrix) {
+      if (!base64Str) return;
+      try {
+        const binaryString = atob(base64Str);
+        const buffer = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          buffer[i] = binaryString.charCodeAt(i);
+        }
+    
+        for (let x = 0; x < WORLD_COLS; x++) {
+          for (let y = 0; y < WORLD_ROWS; y++) {
+            const index = y * WORLD_COLS + x;
+            const byteIdx = Math.floor(index / 8);
+            const bitOffset = index % 8;
+            if (byteIdx < buffer.length) {
+              targetMatrix[x][y] = (buffer[byteIdx] & (1 << bitOffset)) !== 0;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("迷霧資料解碼失敗:", err);
+      }
+    }
+
     // 確定性地形算法
     function getTileType(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
@@ -205,7 +254,14 @@
       onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
-          updateFogOfWar();
+      
+          // 若資料庫內已有迷霧存檔，進行解碼還原；若無則執行首次開霧
+          if (myData.fog) {
+            deserializeFog(myData.fog, exploredTiles);
+          } else {
+            updateFogOfWar();
+          }
+      
           if (!hasCentered) {
             centerCameraOn(myData.x, myData.y);
             hasCentered = true;
@@ -255,12 +311,16 @@
       }
 
       renderSelf();
-
-      if (needSave || Math.random() < 0.15) {
+      
+      // 當有新迷霧揭開或常規同步週期到達時，打包上傳
+      if (needSave || fogDirty || Math.random() < 0.15) {
+        if (fogDirty) {
+          myData.fog = serializeFog(exploredTiles); // 寫入壓縮後的 Base64 字串
+          fogDirty = false;
+        }
         await setDoc(doc(db, "players", myUid), myData, { merge: true });
       }
     }
-
     // 核心渲染：包含戰爭迷霧三層過濾
     function drawWorldMap() {
       if (!myData) return;
