@@ -27,6 +27,17 @@
   </style>
 </head>
 <body>
+  <!-- 帳號登入面板 (覆蓋在遊戲上層) -->
+  <div id="login-panel" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 11, 20, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center;">
+    <div style="background: #131d2e; padding: 30px; border-radius: 8px; border: 1px solid #23354d; width: 320px; text-align: center;">
+      <h2 style="color: #38bdf8; margin-bottom: 20px;">🏰 領地戰登入</h2>
+      <input type="email" id="email-input" placeholder="信箱 (Email)" style="width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 4px; border: none; background: #0a0f1d; color: white;">
+      <input type="password" id="password-input" placeholder="密碼 (至少6碼)" style="width: 100%; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: none; background: #0a0f1d; color: white;">
+      
+      <button onclick="loginUser()" style="width: 100%; background: #2563eb; padding: 10px; margin-bottom: 10px; font-size: 1rem;">登入遊戲</button>
+      <button onclick="registerUser()" style="width: 100%; background: #059669; padding: 10px; font-size: 1rem;">註冊新帳號</button>
+    </div>
+  </div>
   <div class="container">
     <div class="card">
       <h2 id="player-title">🏰 正在連線領地...</h2>
@@ -42,6 +53,7 @@
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h3>🗺️ 世界沙盤（已啟用低耗額度模式）</h3>
+        <button onclick="logoutUser()" style="background:#dc2626; padding:4px 10px; font-size:0.8rem;">🚪 登出</button>
         <div style="display:flex; gap:8px; align-items:center;">
           <span style="font-size:0.8rem; color:#94a3b8;" id="zoom-indicator">縮放: 100%</span>
           <button onclick="refreshMap()" style="background:#0284c7; padding:4px 10px; font-size:0.8rem;">🔄 刷新大地圖</button>
@@ -70,7 +82,9 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } 
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    
     import { 
       getFirestore, doc, getDoc, getDocs, setDoc, onSnapshot, collection, runTransaction 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -87,6 +101,70 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const loginPanel = document.getElementById("login-panel");
+
+    // 監聽玩家登入狀態
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // 【已登入】隱藏登入面板，載入遊戲資料
+        loginPanel.style.display = "none";
+        myUid = user.uid;
+    
+        const playerRef = doc(db, "players", myUid);
+        const worldRef = doc(db, "world_map", myUid);
+        const pSnap = await getDoc(playerRef);
+        const wSnap = await getDoc(worldRef);
+        
+        // ... (保留原本這裡的初始化玩家資料 currentData 等代碼) ...
+        // ... (包含 onSnapshot 監聽與 setInterval 等邏輯) ...
+    
+      } else {
+        // 【未登入】顯示登入面板，停止遊戲背景運算
+        loginPanel.style.display = "flex";
+        myUid = null;
+        myData = null;
+      }
+    });
+    
+    // 註冊新帳號函式
+    window.registerUser = () => {
+      const email = document.getElementById("email-input").value;
+      const password = document.getElementById("password-input").value;
+      if (!email || password.length < 6) return alert("請輸入有效的信箱，且密碼至少 6 碼！");
+      
+      createUserWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          alert("✅ 註冊成功！歡迎來到領地戰！");
+        })
+        .catch((error) => {
+          alert("❌ 註冊失敗: " + error.message);
+        });
+    };
+    
+    // 登入現有帳號函式
+    window.loginUser = () => {
+      const email = document.getElementById("email-input").value;
+      const password = document.getElementById("password-input").value;
+      if (!email || !password) return alert("請輸入信箱與密碼！");
+    
+      signInWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          // 登入成功，onAuthStateChanged 會自動觸發並隱藏登入介面
+        })
+        .catch((error) => {
+          alert("❌ 登入失敗，請檢查帳號密碼是否正確。");
+        });
+    };
+    
+    // 登出函式
+    window.logoutUser = () => {
+      if (confirm("確定要登出並返回登入畫面嗎？")) {
+        signOut(auth).then(() => {
+          location.reload(); // 重新整理網頁以清除所有遊戲殘留狀態
+        });
+      }
+    };
+
     const db = getFirestore(app);
 
     let myUid = null;
@@ -183,8 +261,6 @@
         console.error("刷新大地圖失敗:", e);
       }
     };
-
-    signInAnonymously(auth).catch(console.error);
 
     onAuthStateChanged(auth, async (user) => {
       if (!user) return;
