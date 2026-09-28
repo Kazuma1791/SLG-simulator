@@ -28,7 +28,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- 個人私有資源展示 -->
     <div class="card">
       <h2 id="player-title">🏰 正在連線領地...</h2>
       <div class="res-grid">
@@ -40,7 +39,6 @@
       <div id="queue-status" style="color: #f59e0b; font-size: 0.85rem; min-height: 18px;"></div>
     </div>
 
-    <!-- 公開大地圖沙盤 -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h3>🗺️ 世界沙盤（已啟用低耗額度模式）</h3>
@@ -56,7 +54,6 @@
       </div>
     </div>
 
-    <!-- 城內建設與徵兵 -->
     <div class="card">
       <h3>城內設施營造</h3>
       <div class="grid" id="building-container"></div>
@@ -65,7 +62,6 @@
       </div>
     </div>
 
-    <!-- 戰報中心 -->
     <div class="card">
       <h3>王國戰事紀錄</h3>
       <div class="log-box" id="log-list"></div>
@@ -76,7 +72,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
     import { 
-      getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot, collection, runTransaction 
+      getFirestore, doc, getDoc, getDocs, setDoc, onSnapshot, collection, runTransaction 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -94,11 +90,10 @@
     const db = getFirestore(app);
 
     let myUid = null;
-    let myData = null;       // 私有文檔數據 (players/{uid})
-    let allCastles = [];     // 公開沙盤列表 (world_map/{uid})
+    let myData = null;       
+    let allCastles = [];     
     let hasCentered = false;
 
-    // 地圖與相機
     const TILE_SIZE = 55;
     const WORLD_COLS = 50;
     const WORLD_ROWS = 50;
@@ -164,25 +159,20 @@
       drawWorldMap();
     }
 
-    // ==========================================
-    // 關鍵優化 1：極低頻度的儲存函式（僅事件觸發）
-    // ==========================================
     async function savePrivateData() {
       if (!myUid || !myData) return;
       myData.lastTick = Date.now();
       await setDoc(doc(db, "players", myUid), myData, { merge: true });
     }
 
+    // 修復 1：改用 setDoc({merge: true}) 防範無檔案時更新崩潰
     async function syncPublicTroops() {
       if (!myUid || !myData) return;
-      await updateDoc(doc(db, "world_map", myUid), {
+      await setDoc(doc(db, "world_map", myUid), {
         troops: myData.troops
-      });
+      }, { merge: true });
     }
 
-    // ==========================================
-    // 關鍵優化 2：單次拉取大地圖（取代即時全集合監聽）
-    // ==========================================
     window.refreshMap = async function() {
       try {
         const snap = await getDocs(collection(db, "world_map"));
@@ -194,7 +184,6 @@
       }
     };
 
-    // 登入與資料綁定
     signInAnonymously(auth).catch(console.error);
 
     onAuthStateChanged(auth, async (user) => {
@@ -205,14 +194,17 @@
       const worldRef = doc(db, "world_map", myUid);
 
       const pSnap = await getDoc(playerRef);
+      const wSnap = await getDoc(worldRef);
+      
+      let currentData = null;
 
       if (!pSnap.exists()) {
+        // 全新玩家
         const startX = Math.floor(Math.random() * 38) + 6;
         const startY = Math.floor(Math.random() * 38) + 6;
         const playerName = `領主_${myUid.slice(0, 4)}`;
 
-        // 1. 初始化私有數據 (players/{uid})
-        const initPrivate = {
+        currentData = {
           name: playerName,
           x: startX,
           y: startY,
@@ -223,20 +215,21 @@
           lastTick: Date.now(),
           logs: ['領地建立，沙盤座標已登錄。']
         };
-
-        // 2. 初始化公開數據 (world_map/{uid})
-        const initPublic = {
-          name: playerName,
-          x: startX,
-          y: startY,
-          troops: 0
-        };
-
-        await setDoc(playerRef, initPrivate);
-        await setDoc(worldRef, initPublic);
+        await setDoc(playerRef, currentData);
+      } else {
+        currentData = pSnap.data();
       }
 
-      // 關鍵優化 3：僅監聽自己的單篇私有文檔（被攻擊掠奪時能收到即時結算）
+      // 修復 2：強制為缺乏公開資料的舊玩家補建世界地圖檔案（向後相容）
+      if (!wSnap.exists()) {
+        await setDoc(worldRef, {
+          name: currentData.name,
+          x: currentData.x,
+          y: currentData.y,
+          troops: currentData.troops || 0
+        });
+      }
+
       onSnapshot(playerRef, (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
@@ -250,33 +243,25 @@
         }
       });
 
-      // 初次進入時抓取一次大地圖
       await window.refreshMap();
 
-      // 本機計算心跳（純算術，不產生網路請求）
       setInterval(localTick, 1000);
       setInterval(drawWorldMap, 100);
-      // 大地圖每 60 秒極低頻輪詢一次，亦可透過按鈕手動更新
       setInterval(window.refreshMap, 60000);
     });
 
-    // 關閉網頁時執行最後一次結算儲存
     window.addEventListener("beforeunload", () => {
       if (myUid && myData) {
         savePrivateData();
       }
     });
 
-    // ==========================================
-    // 本機資源推演（完全零網路開銷）
-    // ==========================================
     async function localTick() {
       if (!myData || !myUid) return;
       const now = Date.now();
       const dt = (now - myData.lastTick) / 1000;
       myData.lastTick = now;
 
-      // 產出推演
       myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
       myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
       myData.food += dt * (CFG.buildings.farm.rate * myData.buildings.farm);
@@ -284,7 +269,6 @@
       let needPrivateSave = false;
       let needPublicTroopSync = false;
 
-      // 隊列到期判定：僅在此時才觸發資料庫寫入
       if (myData.buildQueue && now >= myData.buildQueue.finishesAt) {
         myData.buildings[myData.buildQueue.target]++;
         myData.logs.unshift(`[建造就緒] ${CFG.buildings[myData.buildQueue.target].name} 升級完成`);
@@ -306,7 +290,6 @@
       if (needPublicTroopSync) await syncPublicTroops();
     }
 
-    // 畫布沙盤渲染
     function drawWorldMap() {
       if (!myData) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -324,7 +307,6 @@
       const startRow = Math.max(0, Math.floor(camY / TILE_SIZE) - 1);
       const endRow   = Math.min(WORLD_ROWS, Math.ceil((camY + viewH) / TILE_SIZE) + 1);
 
-      // 地形與迷霧
       for (let x = startCol; x < endCol; x++) {
         for (let y = startRow; y < endRow; y++) {
           const px = x * TILE_SIZE;
@@ -376,7 +358,6 @@
         }
       }
 
-      // 從公開列表中繪製城池（過濾迷霧）
       allCastles.forEach(p => {
         const isMe = (p.id === myUid);
         const dist = Math.hypot(p.x - myData.x, p.y - myData.y);
@@ -431,7 +412,6 @@
       ctx.restore();
     }
 
-    // 畫布操作：拖曳漫遊與縮放
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -517,7 +497,7 @@
       }
     });
 
-    // 跨集合安全事務結算
+    // 修復 3：攻擊結算也改用 merge 安全寫入，防範對手資料缺漏
     async function attackPlayer(targetUid) {
       if (myData.troops < 5) return alert('可用步兵不足 5 名！');
 
@@ -539,16 +519,15 @@
             const lootWood = Math.floor(target.wood * 0.3);
             const lootIron = Math.floor(target.iron * 0.3);
 
-            // 更新防守方私有與公開狀態
-            transaction.update(targetPrivateRef, {
+            transaction.set(targetPrivateRef, {
               wood: target.wood - lootWood,
               iron: target.iron - lootIron,
               troops: 0,
               logs: [`[城破] 遭到 ${myData.name} 破城！損失木材 ${lootWood}、鐵礦 ${lootIron}`, ...(target.logs || [])]
-            });
-            transaction.update(targetPublicRef, { troops: 0 });
+            }, { merge: true });
+            
+            transaction.set(targetPublicRef, { troops: 0 }, { merge: true });
 
-            // 更新攻擊方私有狀態
             myData.wood += lootWood;
             myData.iron += lootIron;
             myData.logs.unshift(`[大捷] 攻破 ${target.name}，掠奪木材 ${lootWood}、鐵礦 ${lootIron}！`);
@@ -556,17 +535,18 @@
             myData.troops -= 5;
             const newDefTroops = Math.max(0, defenderTroops - 2);
 
-            transaction.update(targetPrivateRef, {
+            transaction.set(targetPrivateRef, {
               troops: newDefTroops,
               logs: [`[堅壁清野] 擊退來自 ${myData.name} 的突襲部隊！`, ...(target.logs || [])]
-            });
-            transaction.update(targetPublicRef, { troops: newDefTroops });
+            }, { merge: true });
+            
+            transaction.set(targetPublicRef, { troops: newDefTroops }, { merge: true });
 
             myData.logs.unshift(`[征戰失利] 突擊 ${target.name} 遭遇重創，5 名步兵陣亡！`);
           }
 
           transaction.set(myPrivateRef, myData, { merge: true });
-          transaction.update(myPublicRef, { troops: myData.troops });
+          transaction.set(myPublicRef, { troops: myData.troops }, { merge: true });
         });
 
         await window.refreshMap();
@@ -618,7 +598,7 @@
       currentVisionBonus += 3;
       updateFogOfWar();
       drawWorldMap();
-      savePrivateData(); // 扣除糧食，觸發一次事件存檔
+      savePrivateData();
 
       setTimeout(() => {
         currentVisionBonus = Math.max(0, currentVisionBonus - 3);
@@ -636,7 +616,7 @@
       myData.wood -= wCost;
       myData.iron -= iCost;
       myData.buildQueue = { target: key, finishesAt: Date.now() + 6000 };
-      await savePrivateData(); // 事件觸發存檔
+      await savePrivateData();
     };
 
     window.trainTroops = async () => {
@@ -647,7 +627,7 @@
       myData.wood -= 40;
       myData.iron -= 30;
       myData.trainQueue = { count: 5, finishesAt: Date.now() + 5000 };
-      await savePrivateData(); // 事件觸發存檔
+      await savePrivateData();
     };
   </script>
 </body>
