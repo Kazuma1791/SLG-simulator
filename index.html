@@ -142,9 +142,17 @@
         await setDoc(userRef, initData);
       }
 
-      onSnapshot(userRef, (docSnap) => {
+      onSnapshot(userRef, async (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
+      
+          // 💡 自動防護：若歷史座標超出畫布 (X >= 15 或 Y >= 7)，自動強制重設回畫布中央
+          if (myData.x >= 15 || myData.y >= 7 || myData.x <= 0 || myData.y <= 0) {
+            myData.x = Math.floor(Math.random() * 12) + 2; // 2 ~ 13
+            myData.y = Math.floor(Math.random() * 5) + 1;  // 1 ~ 5
+            await setDoc(userRef, { x: myData.x, y: myData.y }, { merge: true });
+          }
+      
           renderSelf();
           drawWorldMap();
         }
