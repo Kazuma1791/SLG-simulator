@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多人領地戰 - 生態平衡修復版</title>
+  <title>多人領地戰 - 生態繁榮版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #070b14; color: #f1f5f9; padding: 16px; }
@@ -52,7 +52,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- 登入面板 -->
     <div id="login-panel" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 11, 20, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center;">
       <div style="background: #131d2e; padding: 30px; border-radius: 8px; border: 1px solid #23354d; width: 320px; text-align: center;">
         <h2 style="color: #38bdf8; margin-bottom: 20px;">🏰 領地戰登入</h2>
@@ -63,7 +62,6 @@
       </div>
     </div>
 
-    <!-- 改名 Modal -->
     <div id="rename-modal" class="modal-overlay">
       <div class="action-modal">
         <h3 style="color:#38bdf8;">✏️ 更改領主名稱</h3>
@@ -76,7 +74,6 @@
       </div>
     </div>
 
-    <!-- 頂部資訊列 -->
     <div class="card">
       <h2 id="player-title" style="display:flex; align-items:center; gap:10px;">
         <span>🏰 正在連線領地...</span>
@@ -101,7 +98,6 @@
       <button onclick="logoutUser()" style="background:#dc2626; padding:4px 10px; font-size:0.8rem; height: 34px; margin-top: 4px;">🚪 登出</button>
     </div>
 
-    <!-- ==================== 世界沙盤 ==================== -->
     <div id="tab-world" class="tab-content active">
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -139,7 +135,6 @@
       </div>
     </div>
 
-    <!-- ==================== 城內政務 ==================== -->
     <div id="tab-city" class="tab-content">
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 16px;">
@@ -158,7 +153,6 @@
       </div>
     </div>
 
-    <!-- 戰報 -->
     <div class="card">
       <h3>📜 王國日誌</h3>
       <div class="log-box" id="log-list"></div>
@@ -221,14 +215,14 @@
       if (worldBoss && worldBoss.x === x && worldBoss.y === y) return null;
       if (getTileType(x, y) === 'water') return null;
       
-      // 💡 修復生態系機率：確保使用純小數，不再被負數污染覆蓋
+      // 💡 大幅調升 NPC 生態機率
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321;
-      const rand = v - Math.floor(v); // 確保落在 0.0 ~ 1.0 之間
+      const rand = v - Math.floor(v); 
       
-      if (rand < 0.002) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 150, loot: { wood: 1000, iron: 1000, food: 1000 } };
-      if (rand < 0.022) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.062) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
-      if (rand < 0.092) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 50, loot: { wood: 200, iron: 200, food: 200 } };
+      if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 150, loot: { wood: 1000, iron: 1000, food: 1000 } };
+      if (rand < 0.060) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
+      if (rand < 0.120) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.160) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 50, loot: { wood: 200, iron: 200, food: 200 } };
       return null;
     }
 
@@ -379,7 +373,7 @@
             startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
             startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
           });
-          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${Math.ceil(timeMs/1000)} 秒抵達！`);
+          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 正朝我方進軍！預計 ${Math.ceil(timeMs/1000)} 秒抵達！`);
           needSave = true;
         }
       }
@@ -626,12 +620,12 @@
     }
 
     // ==========================================
-    // 互動 UI
+    // 互動事件
     // ==========================================
     window.openRenameModal = () => {
       document.getElementById('rename-input').value = "";
       if (!myData.freeRenameUsed) { document.getElementById('rename-desc').innerText = "首次改名免費！請輸入新名稱。"; }
-      else { document.getElementById('rename-desc').innerText = `此次改名需消耗 1 張改名卡 (剩餘: ${myData.items.renameCard || 0})，目前暫無獲取管道。`; }
+      else { document.getElementById('rename-desc').innerText = `改名需消耗 1 張改名卡 (剩餘: ${myData.items.renameCard || 0})，目前暫無獲取管道。`; }
       document.getElementById("rename-modal").style.display='flex';
     };
     window.closeRenameModal = () => { document.getElementById("rename-modal").style.display='none'; };
