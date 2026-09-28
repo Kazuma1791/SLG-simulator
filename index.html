@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>領主王國 - Web SLG</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #12161c; color: #dce3eb; padding: 16px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .card { background: #1c222b; border-radius: 8px; padding: 16px; margin-bottom: 14px; border: 1px solid #2e3846; }
+    h2, h3 { color: #64b5f6; margin-bottom: 10px; }
+    .res-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+    .res-box { background: #151a21; padding: 10px; border-radius: 6px; text-align: center; border: 1px solid #27303c; }
+    .res-box span { font-weight: bold; font-size: 1.1rem; color: #fff; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .item-box { background: #151a21; padding: 12px; border-radius: 6px; border: 1px solid #27303c; display: flex; flex-direction: column; justify-content: space-between; }
+    button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-weight: 500; }
+    button:disabled { background: #374151; cursor: not-allowed; opacity: 0.6; }
+    button:hover:not(:disabled) { background: #1d4ed8; }
+    .cost { font-size: 0.8rem; color: #9ca3af; margin: 6px 0; }
+    .log-box { background: #0f1217; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #222934; }
+    .log-box p { margin-bottom: 4px; border-bottom: 1px solid #1c222b; padding-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>🏰 領地管理中心</h2>
+      <div class="res-grid">
+        <div class="res-box">🌲 木材<br><span id="wood">0</span></div>
+        <div class="res-box">⛏️ 鐵礦<br><span id="iron">0</span></div>
+        <div class="res-box">🌾 糧食<br><span id="food">0</span></div>
+        <div class="res-box">🛡️ 步兵<br><span id="troops">0</span></div>
+      </div>
+      <div id="queue-bar" style="color: #f59e0b; font-size: 0.9rem; min-height: 20px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>建築設施</h3>
+      <div class="grid" id="buildings-container"></div>
+    </div>
+
+    <div class="card">
+      <h3>部隊與軍事征戰</h3>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+        <button id="train-btn" onclick="trainTroops(5)">招募 5 名步兵 (木50 鐵30)</button>
+        <button onclick="attackNPC(1)">討伐 迷霧流寇 (需5兵)</button>
+        <button onclick="attackNPC(2)">征伐 墮落衛隊 (需15兵)</button>
+      </div>
+      <div id="march-bar" style="color: #38bdf8; font-size: 0.9rem; min-height: 20px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>王國戰報紀錄</h3>
+      <div class="log-box" id="logs"></div>
+    </div>
+  </div>
+
+  <script>
+    // 遊戲存檔初始狀態
+    const DEFAULT_DATA = {
+      wood: 100, iron: 100, food: 100, troops: 0,
+      buildings: { lumber: 1, mine: 1, farm: 1, barracks: 0 },
+      buildQueue: null, // { target, finishesAt }
+      trainQueue: null, // { count, finishesAt }
+      marchQueue: null, // { targetLvl, finishesAt }
+      lastTick: Date.now(),
+      logs: ['王國建立，榮光始於足下。']
+    };
+
+    let state = JSON.parse(localStorage.getItem('SLG_SAVE')) || DEFAULT_DATA;
+
+    const CFG = {
+      lumber:   { name: '伐木場', wood: 40, iron: 20, rate: 5 },
+      mine:     { name: '鐵礦場', wood: 20, iron: 50, rate: 4 },
+      farm:     { name: '農田',   wood: 30, iron: 30, rate: 6 },
+      barracks: { name: '兵營',   wood: 80, iron: 80, rate: 0 }
+    };
+
+    function save() {
+      localStorage.setItem('SLG_SAVE', JSON.stringify(state));
+    }
+
+    // 核心心跳循環（包含離線進度計算）
+    function tick() {
+      const now = Date.now();
+      const dt = (now - state.lastTick) / 1000;
+      state.lastTick = now;
+
+      // 產量計算
+      state.wood += dt * (CFG.lumber.rate * state.buildings.lumber);
+      state.iron += dt * (CFG.mine.rate * state.buildings.mine);
+      state.food += dt * (CFG.farm.rate * state.buildings.farm);
+
+      // 建築隊列
+      if (state.buildQueue && now >= state.buildQueue.finishesAt) {
+        state.buildings[state.buildQueue.target]++;
+        state.logs.unshift(`[建造完成] ${CFG[state.buildQueue.target].name} 升級至 Lv.${state.buildings[state.buildQueue.target]}`);
+        state.buildQueue = null;
+      }
+
+      // 造兵隊列
+      if (state.trainQueue && now >= state.trainQueue.finishesAt) {
+        state.troops += state.trainQueue.count;
+        state.logs.unshift(`[部隊就緒] 訓練完成了 ${state.trainQueue.count} 名步兵`);
+        state.trainQueue = null;
+      }
+
+      // 行軍戰鬥隊列
+      if (state.marchQueue && now >= state.marchQueue.finishesAt) {
+        const win = Math.random() > 0.3;
+        if (win) {
+          const loot = state.marchQueue.targetLvl * 120;
+          state.wood += loot; state.iron += loot;
+          state.logs.unshift(`[大捷] 成功剿滅目標，繳獲木材與鐵礦各 ${loot}！`);
+        } else {
+          const loss = Math.min(state.troops, state.marchQueue.targetLvl * 4);
+          state.troops -= loss;
+          state.logs.unshift(`[慘敗] 遭遇埋伏，部隊折損了 ${loss} 名士兵！`);
+        }
+        state.marchQueue = null;
+      }
+
+      render();
+      save();
+    }
+
+    function render() {
+      document.getElementById('wood').innerText = Math.floor(state.wood);
+      document.getElementById('iron').innerText = Math.floor(state.iron);
+      document.getElementById('food').innerText = Math.floor(state.food);
+      document.getElementById('troops').innerText = state.troops;
+
+      // 建築清單
+      const bContainer = document.getElementById('buildings-container');
+      bContainer.innerHTML = Object.entries(state.buildings).map(([key, lvl]) => {
+        const nextCostWood = CFG[key].wood * (lvl + 1);
+        const nextCostIron = CFG[key].iron * (lvl + 1);
+        return `
+          <div class="item-box">
+            <div>
+              <strong>${CFG[key].name}</strong> (Lv.${lvl})
+              <div class="cost">升級需: 🌲${nextCostWood} ⛏️${nextCostIron}</div>
+            </div>
+            <button onclick="upgrade('${key}')" ${state.buildQueue ? 'disabled' : ''}>升級</button>
+          </div>
+        `;
+      }).join('');
+
+      // 佇列進度顯示
+      const now = Date.now();
+      let qText = [];
+      if (state.buildQueue) {
+        qText.push(`🏗️ ${CFG[state.buildQueue.target].name} 升級中... 剩餘 ${Math.max(0, Math.ceil((state.buildQueue.finishesAt - now)/1000))} 秒`);
+      }
+      if (state.trainQueue) {
+        qText.push(`⚔️ 士兵招募中... 剩餘 ${Math.max(0, Math.ceil((state.trainQueue.finishesAt - now)/1000))} 秒`);
+      }
+      document.getElementById('queue-bar').innerText = qText.join(' | ');
+
+      // 行軍顯示
+      document.getElementById('march-bar').innerText = state.marchQueue 
+        ? `🐎 行軍征伐中... 預計 ${Math.max(0, Math.ceil((state.marchQueue.finishesAt - now)/1000))} 秒後抵達目標` 
+        : '';
+
+      // 日誌
+      document.getElementById('logs').innerHTML = state.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
+    }
+
+    function upgrade(key) {
+      if (state.buildQueue) return;
+      const lvl = state.buildings[key];
+      const wCost = CFG[key].wood * (lvl + 1);
+      const iCost = CFG[key].iron * (lvl + 1);
+      if (state.wood < wCost || state.iron < iCost) return alert('資源不足！');
+
+      state.wood -= wCost;
+      state.iron -= iCost;
+      state.buildQueue = { target: key, finishesAt: Date.now() + 6000 }; // 升級耗時 6 秒
+    }
+
+    function trainTroops(count) {
+      if (state.trainQueue) return;
+      if (state.buildings.barracks < 1) return alert('請先建造兵營！');
+      if (state.wood < 50 || state.iron < 30) return alert('資源不足！');
+
+      state.wood -= 50; state.iron -= 30;
+      state.trainQueue = { count, finishesAt: Date.now() + 5000 };
+    }
+
+    function attackNPC(lvl) {
+      if (state.marchQueue) return;
+      const need = lvl === 1 ? 5 : 15;
+      if (state.troops < need) return alert(`兵力不足！需要至少 ${need} 名士兵出征`);
+      state.marchQueue = { targetLvl: lvl, finishesAt: Date.now() + 8000 };
+    }
+
+    setInterval(tick, 1000);
+    tick(); // 啟動初次結算
+  </script>
+</body>
+</html>
