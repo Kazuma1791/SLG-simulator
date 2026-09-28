@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多人領地戰 - VIP與改名系統</title>
+  <title>多人領地戰 - 生態平衡修復版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #070b14; color: #f1f5f9; padding: 16px; }
@@ -48,10 +48,6 @@
     
     .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #182333; }
     .log-box p { margin-bottom: 4px; border-bottom: 1px solid #0d1522; padding-bottom: 2px; }
-    
-    .vip-banner { background: linear-gradient(90deg, #b45309, #d97706); padding: 16px; border-radius: 8px; text-align: center; margin-bottom: 16px; border: 2px solid #facc15; }
-    .vip-banner h3 { color: white; margin-bottom: 8px; }
-    .inventory-box { background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1e2c40; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -101,7 +97,6 @@
     <div class="tabs">
       <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 世界沙盤</button>
       <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 城內政務</button>
-      <button class="tab-btn" id="btn-tab-vip" onclick="switchTab('vip')">💎 VIP商城</button>
       <div style="flex-grow: 1;"></div>
       <button onclick="logoutUser()" style="background:#dc2626; padding:4px 10px; font-size:0.8rem; height: 34px; margin-top: 4px;">🚪 登出</button>
     </div>
@@ -160,37 +155,6 @@
           <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:4px 8px;">⏳ 使用加速 (兵)</button>
         </h3>
         <div class="grid" id="train-container"></div>
-      </div>
-    </div>
-
-    <!-- ==================== VIP 商城 ==================== -->
-    <div id="tab-vip" class="tab-content">
-      <div class="vip-banner" id="vip-status-banner">
-        <h3>未開通尊貴 VIP 資格</h3>
-        <p style="font-size:0.9rem; margin-bottom:12px;">開通即可獲得專屬紅名標籤、改名卡，以及每日物資與加速福利！</p>
-        <button onclick="buyVIP()" style="background:#f59e0b; color:black; font-weight:bold;">💎 模擬儲值開通 VIP (免費)</button>
-      </div>
-
-      <div class="card">
-        <h3 style="display: flex; justify-content: space-between; align-items:center;">
-          <span>🎁 VIP 每日專屬補給</span>
-          <button id="btn-claim-vip" onclick="claimVIPDaily()" style="background:#059669; font-size:0.9rem;">領取今日福利</button>
-        </h3>
-        <p style="font-size:0.85rem; color:#94a3b8; margin-top:8px;">每日可獲得：2x ⏳加速卡, 1x 📦資源卡</p>
-      </div>
-
-      <div class="card">
-        <h3>🎒 領主背包</h3>
-        <div class="grid">
-          <div class="inventory-box">
-            <div><strong style="font-size:1.1rem;">💳 改名卡</strong><br><span style="color:#94a3b8; font-size:0.8rem;">擁有的數量: <span id="inv-rename" style="color:#f8fafc;">0</span></span></div>
-            <!-- 改名卡在上方標題旁使用，不在此放按鈕 -->
-          </div>
-          <div class="inventory-box">
-            <div><strong style="font-size:1.1rem;">📦 資源大禮包</strong><br><span style="color:#94a3b8; font-size:0.8rem;">擁有的數量: <span id="inv-rescard" style="color:#f8fafc;">0</span></span></div>
-            <button onclick="useResourceCard()" style="background:#3b82f6;">使用</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -257,11 +221,14 @@
       if (worldBoss && worldBoss.x === x && worldBoss.y === y) return null;
       if (getTileType(x, y) === 'water') return null;
       
-      const rand = (Math.sin(x * 45.123 + y * 89.456) * 98765.4321) % 1;
-      if (rand < 0.005) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 150, loot: { wood: 1000, iron: 1000, food: 1000 } };
-      if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.065) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
-      if (rand < 0.095) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 50, loot: { wood: 200, iron: 200, food: 200 } };
+      // 💡 修復生態系機率：確保使用純小數，不再被負數污染覆蓋
+      const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321;
+      const rand = v - Math.floor(v); // 確保落在 0.0 ~ 1.0 之間
+      
+      if (rand < 0.002) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 150, loot: { wood: 1000, iron: 1000, food: 1000 } };
+      if (rand < 0.022) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
+      if (rand < 0.062) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.092) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 50, loot: { wood: 200, iron: 200, food: 200 } };
       return null;
     }
 
@@ -297,7 +264,7 @@
             troops: { infantry: 10, archer: 0, cavalry: 0 },
             buildings: { castle: 1, lumber: 1, mine: 1, farm: 1, barracks: 0 },
             items: { speedup: 3, renameCard: 0, resourceCard: 0 },
-            isVIP: false, freeRenameUsed: false, lastVIPRewardDate: 0,
+            freeRenameUsed: false,
             buildQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['領地建立。']
           };
           await setDoc(playerRef, d);
@@ -306,8 +273,6 @@
           if (typeof d.troops === 'number') d.troops = { infantry: d.troops, archer: 0, cavalry: 0 };
           if (!d.items) d.items = { speedup: 3, renameCard: 0, resourceCard: 0 }; 
           if (d.items.renameCard === undefined) d.items.renameCard = 0;
-          if (d.items.resourceCard === undefined) d.items.resourceCard = 0;
-          if (d.isVIP === undefined) d.isVIP = false;
           if (d.freeRenameUsed === undefined) d.freeRenameUsed = false;
           if (!d.buildings.castle) d.buildings.castle = 1; 
           if (!d.marches) d.marches = []; if (!d.clearedPOI) d.clearedPOI = [];
@@ -315,9 +280,9 @@
         }
 
         if (!wSnap.exists()) { 
-          await setDoc(worldRef, { name: d.name, x: d.x, y: d.y, troops: d.troops.infantry+d.troops.archer+d.troops.cavalry, castleLevel: d.buildings.castle, isVIP: d.isVIP }); 
+          await setDoc(worldRef, { name: d.name, x: d.x, y: d.y, troops: d.troops.infantry+d.troops.archer+d.troops.cavalry, castleLevel: d.buildings.castle }); 
         } else {
-          await setDoc(worldRef, { castleLevel: d.buildings.castle, isVIP: d.isVIP }, {merge:true});
+          await setDoc(worldRef, { castleLevel: d.buildings.castle }, {merge:true});
         }
 
         onSnapshot(playerRef, (docSnap) => {
@@ -629,9 +594,8 @@
         }
 
         if (zoom>0.5) {
-          let nameDisp = p.isVIP ? `[VIP] ${p.name}` : p.name;
-          ctx.fillStyle=isMe?'#fef08a':(p.isVIP?'#facc15':'#fff'); ctx.font=isMe?'bold 11px sans-serif':'10px sans-serif'; ctx.textAlign='center';
-          ctx.fillText(nameDisp, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${p.troops||0}`, px+TILE_SIZE/2, py+8);
+          ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 11px sans-serif':'10px sans-serif'; ctx.textAlign='center';
+          ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${p.troops||0}`, px+TILE_SIZE/2, py+8);
         }
         ctx.textAlign='start';
       });
@@ -662,8 +626,28 @@
     }
 
     // ==========================================
-    // UI 控制
+    // 互動 UI
     // ==========================================
+    window.openRenameModal = () => {
+      document.getElementById('rename-input').value = "";
+      if (!myData.freeRenameUsed) { document.getElementById('rename-desc').innerText = "首次改名免費！請輸入新名稱。"; }
+      else { document.getElementById('rename-desc').innerText = `此次改名需消耗 1 張改名卡 (剩餘: ${myData.items.renameCard || 0})，目前暫無獲取管道。`; }
+      document.getElementById("rename-modal").style.display='flex';
+    };
+    window.closeRenameModal = () => { document.getElementById("rename-modal").style.display='none'; };
+    
+    window.confirmRename = async () => {
+      const newName = document.getElementById('rename-input').value.trim();
+      if(newName.length < 2 || newName.length > 8) return alert('名字長度需為 2~8 字元！');
+      
+      if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
+      else if (myData.items.renameCard > 0) myData.items.renameCard--;
+      else return alert('需要改名卡！');
+
+      myData.name = newName; await savePrivateData(); await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
+      alert("✅ 名稱已更改！"); closeRenameModal(); renderSelf(); drawWorldMap();
+    };
+
     let isDragging = false, dragSX = 0, dragSY = 0, dragDist = 0;
     canvas.addEventListener("mousedown", (e) => { isDragging=true; dragSX=e.clientX; dragSY=e.clientY; dragDist=0; canvas.style.cursor='grabbing'; document.getElementById("hover-hud").style.display='none'; });
     window.addEventListener("mouseup", () => { isDragging=false; canvas.style.cursor='grab'; });
@@ -688,7 +672,7 @@
           const tC = allCastles.find(p=>p.x===tX&&p.y===tY), ent = getTileEntity(tX,tY);
           if (tC) { 
             document.getElementById("hud-title").innerText = tC.id===myUid?"👑 你的主城":"🔴 敵對城邦"; 
-            document.getElementById("hud-content").innerHTML = `領主: ${tC.isVIP?'[VIP] ':''}${tC.name} (Lv.${tC.castleLevel||1})<br>座標: (${tX}, ${tY})`; canvas.style.cursor='pointer'; 
+            document.getElementById("hud-content").innerHTML = `領主: ${tC.name} (Lv.${tC.castleLevel||1})<br>座標: (${tX}, ${tY})`; canvas.style.cursor='pointer'; 
           }
           else if (worldBoss && worldBoss.x===tX && worldBoss.y===tY) { document.getElementById("hud-title").innerText = "🐉 世界首領"; document.getElementById("hud-content").innerHTML = `${worldBoss.name}<br>HP: ${worldBoss.hp}/${worldBoss.maxHp}`; canvas.style.cursor='crosshair'; }
           else if (ent) { document.getElementById("hud-title").innerText = myData.clearedPOI.includes(`${tX},${tY}`)?"🔥 廢墟":ent.name; document.getElementById("hud-content").innerHTML = `座標: (${tX}, ${tY})`; canvas.style.cursor='pointer'; }
@@ -775,72 +759,10 @@
     });
 
     // ==========================================
-    // VIP & 道具系統 & 渲染
+    // 渲染 UI 資訊
     // ==========================================
-    window.openRenameModal = () => {
-      document.getElementById('rename-input').value = "";
-      if (!myData.freeRenameUsed) { document.getElementById('rename-desc').innerText = "首次改名免費！請輸入新名稱。"; }
-      else { document.getElementById('rename-desc').innerText = `此次改名需消耗 1 張改名卡 (剩餘: ${myData.items.renameCard})`; }
-      document.getElementById("rename-modal").style.display='flex';
-    };
-
-    window.closeRenameModal = () => { document.getElementById("rename-modal").style.display='none'; };
-
-    window.confirmRename = async () => {
-      const newName = document.getElementById('rename-input').value.trim();
-      if(newName.length < 2 || newName.length > 8) return alert('名字長度需為 2~8 字元！');
-      
-      if (!myData.freeRenameUsed) {
-        myData.freeRenameUsed = true;
-      } else if (myData.items.renameCard > 0) {
-        myData.items.renameCard--;
-      } else {
-        return alert('需要改名卡！請至 VIP 商城領取或獲取。');
-      }
-
-      myData.name = newName;
-      await savePrivateData();
-      await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
-      alert("✅ 領主名稱已成功更改為: " + newName);
-      closeRenameModal(); renderSelf(); drawWorldMap();
-    };
-
-    window.buyVIP = async () => {
-      if (myData.isVIP) return alert("您已經是尊貴的 VIP 玩家了！");
-      myData.isVIP = true;
-      myData.items.renameCard++; // 贈送改名卡
-      await savePrivateData();
-      await setDoc(doc(db, "world_map", myUid), { isVIP: true }, { merge: true });
-      alert("🎉 感謝支持！VIP 已開通，並贈送 1 張改名卡！");
-      renderSelf();
-    };
-
-    window.claimVIPDaily = async () => {
-      if (!myData.isVIP) return alert("⚠️ 需開通 VIP 才能領取每日福利！");
-      const todayStr = new Date().toDateString();
-      if (myData.lastVIPRewardDate === todayStr) return alert("今日福利已領取過，請明日再來！");
-      
-      myData.items.speedup += 2;
-      myData.items.resourceCard += 1;
-      myData.lastVIPRewardDate = todayStr;
-      myData.logs.unshift(`[VIP福利] 領取成功！獲得 2x加速卡, 1x資源卡。`);
-      await savePrivateData();
-      alert("🎁 領取成功！已存入領主背包。");
-      renderSelf();
-    };
-
-    window.useResourceCard = async () => {
-      if (myData.items.resourceCard <= 0) return alert("背包中沒有資源大禮包！");
-      myData.items.resourceCard--;
-      myData.wood += 2000; myData.iron += 2000; myData.food += 2000;
-      myData.logs.unshift(`[背包] 使用資源大禮包，各項資源增加 2000！`);
-      await savePrivateData();
-      renderSelf();
-    };
-
     function renderSelf() {
-      const pNameDisp = myData.isVIP ? `[VIP] ${myData.name}` : myData.name;
-      document.getElementById('player-title').innerHTML = `<span>👑 ${pNameDisp} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:4px 8px; font-size:0.8rem;">✏️ 改名</button>`;
+      document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:4px 8px; font-size:0.8rem;">✏️ 改名</button>`;
       
       document.getElementById('res-wood').innerText = Math.floor(myData.wood); document.getElementById('res-iron').innerText = Math.floor(myData.iron); document.getElementById('res-food').innerText = Math.floor(myData.food);
       document.getElementById('res-inf').innerText = myData.troops.infantry; document.getElementById('res-arc').innerText = myData.troops.archer; document.getElementById('res-cav').innerText = myData.troops.cavalry;
@@ -856,16 +778,6 @@
       tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
         return `<div class="item-card"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>行軍: ${d.speed}s/格 | 戰力: ${d.pwr}</div></div><button style="width:100%; background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5 名 (${d.time}s)</button></div>`;
       }).join('');
-
-      // 更新 VIP 與背包狀態
-      const vipBanner = document.getElementById("vip-status-banner");
-      if (myData.isVIP) {
-        vipBanner.innerHTML = `<h3 style="color:white; margin-bottom:8px;">💎 尊貴 VIP 已開通</h3><p style="font-size:0.9rem;">享有尊貴金名標示，每日可領取豐厚補給！</p>`;
-        document.getElementById("btn-claim-vip").disabled = (myData.lastVIPRewardDate === new Date().toDateString());
-        document.getElementById("btn-claim-vip").innerText = (myData.lastVIPRewardDate === new Date().toDateString()) ? "今日已領取" : "領取今日福利";
-      }
-      document.getElementById("inv-rename").innerText = myData.items.renameCard || 0;
-      document.getElementById("inv-rescard").innerText = myData.items.resourceCard || 0;
 
       let qMsg = []; const now = Date.now();
       if (myData.buildQueue) qMsg.push(`🏗️ 升級中... (${Math.max(0, Math.ceil((myData.buildQueue.finishesAt-now)/1000))}s)`);
