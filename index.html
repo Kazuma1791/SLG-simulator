@@ -3,33 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多人領地戰 - 2D 沙盤 SLG</title>
+  <title>多人領地戰 - 戰爭迷霧 SLG</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #0b1120; color: #f1f5f9; padding: 16px; }
+    body { background: #070b14; color: #f1f5f9; padding: 16px; }
     .container { max-width: 920px; margin: 0 auto; }
-    .card { background: #1e293b; border-radius: 8px; padding: 14px 18px; margin-bottom: 14px; border: 1px solid #334155; }
+    .card { background: #131d2e; border-radius: 8px; padding: 14px 18px; margin-bottom: 14px; border: 1px solid #23354d; }
     h2, h3 { color: #38bdf8; margin-bottom: 8px; }
     .res-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 6px; }
-    .res-box { background: #0b1120; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #334155; }
+    .res-box { background: #0a0f1d; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #1e2c40; }
     .res-box span { font-weight: bold; font-size: 1.15rem; color: #38bdf8; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-    .item-card { background: #0b1120; padding: 10px; border-radius: 6px; border: 1px solid #334155; }
+    .item-card { background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1e2c40; }
     button { background: #2563eb; color: white; border: none; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-weight: 500; }
-    button:disabled { background: #475569; cursor: not-allowed; }
+    button:disabled { background: #334155; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #1d4ed8; }
     
-    /* 地圖畫布容器 */
-    .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #475569; background: #0f172a; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+    /* 沙盤與畫布 */
+    .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
     canvas { display: block; width: 100%; height: auto; cursor: grab; }
     canvas:active { cursor: grabbing; }
-    .log-box { background: #050814; padding: 10px; border-radius: 6px; max-height: 110px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #1e293b; }
-    .log-box p { margin-bottom: 4px; border-bottom: 1px solid #0f172a; }
+    .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 110px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #182333; }
+    .log-box p { margin-bottom: 4px; border-bottom: 1px solid #0d1522; }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- 頂部資訊與資源狀態 -->
+    <!-- 資源面板 -->
     <div class="card">
       <h2 id="player-title">🏰 正在探測領地坐標...</h2>
       <div class="res-grid">
@@ -41,21 +41,26 @@
       <div id="queue-status" style="color: #f59e0b; font-size: 0.85rem; min-height: 18px;"></div>
     </div>
 
-    <!-- 2D Canvas 大地圖沙盤 -->
+    <!-- 2D 戰爭迷霧大地圖 -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3>🗺️ 世界沙盤（拖曳平移地圖 / 滾輪縮放視野）</h3>
+        <h3>🗺️ 世界沙盤（籠罩於戰爭迷霧中）</h3>
         <div style="display:flex; gap:8px; align-items:center;">
           <span style="font-size:0.8rem; color:#94a3b8;" id="zoom-indicator">縮放: 100%</span>
+          <button onclick="dispatchScout()" style="background:#059669; padding:4px 10px; font-size:0.8rem;">🦅 斥候開霧 (糧30)</button>
           <button onclick="locateHome()" style="background:#0284c7; padding:4px 10px; font-size:0.8rem;">📍 定位我的城堡</button>
         </div>
       </div>
       <div class="map-frame">
         <canvas id="worldCanvas" width="880" height="440"></canvas>
       </div>
+      <div style="margin-top:6px; font-size:0.75rem; color:#64748b; display:flex; justify-content:space-between;">
+        <span>💡 亮光區：主城 5 格即時視野 | 半透明暗區：已探明地形（無敵情） | 黑幕：未探索區域</span>
+        <span>滑鼠拖曳漫遊，滾輪縮放視角</span>
+      </div>
     </div>
 
-    <!-- 城內建設與徵兵 -->
+    <!-- 城內營建與徵兵 -->
     <div class="card">
       <h3>城內設施營造</h3>
       <div class="grid" id="building-container"></div>
@@ -98,16 +103,21 @@
     let allPlayers = [];
     let hasCentered = false;
 
-    // 地圖與相機系統參數
+    // 地圖與相機參數
     const TILE_SIZE = 55;
     const WORLD_COLS = 50;
     const WORLD_ROWS = 50;
+    const BASE_VISION_RADIUS = 5; // 基礎視野半徑（以主城為中心 5 格）
+    let currentVisionBonus = 0;   // 斥候帶來的額外視野加成
 
     let camX = 0;
     let camY = 0;
     let zoom = 1.0;
-    const MIN_ZOOM = 0.35; // 宏觀俯瞰視角
-    const MAX_ZOOM = 1.8;  // 特寫視角
+    const MIN_ZOOM = 0.35;
+    const MAX_ZOOM = 1.8;
+
+    // 探索記憶矩陣：記錄哪些格子已被玩家探明（預設全黑）
+    const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
     const canvas = document.getElementById("worldCanvas");
     const ctx = canvas.getContext("2d");
@@ -121,7 +131,7 @@
       }
     };
 
-    // 確定性地形生成演算法
+    // 確定性地形算法
     function getTileType(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
       const rand = v - Math.floor(v);
@@ -131,7 +141,21 @@
       return 'water';
     }
 
-    // 相機邊界限制
+    // 視野更新：以主城為中心點亮地塊並永久記錄已探索狀態
+    function updateFogOfWar() {
+      if (!myData) return;
+      const effectiveRadius = BASE_VISION_RADIUS + currentVisionBonus;
+      for (let x = 0; x < WORLD_COLS; x++) {
+        for (let y = 0; y < WORLD_ROWS; y++) {
+          const dist = Math.hypot(x - myData.x, y - myData.y);
+          if (dist <= effectiveRadius) {
+            exploredTiles[x][y] = true;
+          }
+        }
+      }
+    }
+
+    // 相機邊界約束
     function clampCamera() {
       const viewW = canvas.width / zoom;
       const viewH = canvas.height / zoom;
@@ -144,7 +168,7 @@
       camY = Math.max(0, Math.min(camY, maxCamY));
     }
 
-    // 將鏡頭聚焦到指定格子
+    // 鏡頭居中
     function centerCameraOn(tileX, tileY) {
       const viewW = canvas.width / zoom;
       const viewH = canvas.height / zoom;
@@ -154,7 +178,7 @@
       drawWorldMap();
     }
 
-    // 登入與資料監聽
+    // 初始化登入與資料監聽
     signInAnonymously(auth).catch(console.error);
 
     onAuthStateChanged(auth, async (user) => {
@@ -173,7 +197,7 @@
           buildQueue: null,
           trainQueue: null,
           lastTick: Date.now(),
-          logs: ['王國立基於大地之上，沙盤已展開。']
+          logs: ['城邦建立於蠻荒大陸，四方迷霧籠罩。']
         };
         await setDoc(userRef, initData);
       }
@@ -181,6 +205,7 @@
       onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
+          updateFogOfWar();
           if (!hasCentered) {
             centerCameraOn(myData.x, myData.y);
             hasCentered = true;
@@ -199,10 +224,10 @@
       });
 
       setInterval(tickAndSync, 1000);
-      setInterval(drawWorldMap, 100); // 驅動金色呼吸動畫
+      setInterval(drawWorldMap, 100);
     });
 
-    // 惰性數值結算心跳
+    // 惰性循環
     async function tickAndSync() {
       if (!myData || !myUid) return;
       const now = Date.now();
@@ -236,7 +261,7 @@
       }
     }
 
-    // Canvas 大地圖主渲染（矩陣變換 + 視錐剔除）
+    // 核心渲染：包含戰爭迷霧三層過濾
     function drawWorldMap() {
       if (!myData) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -247,19 +272,31 @@
 
       const viewW = canvas.width / zoom;
       const viewH = canvas.height / zoom;
+      const effectiveRadius = BASE_VISION_RADIUS + currentVisionBonus;
 
       const startCol = Math.max(0, Math.floor(camX / TILE_SIZE) - 1);
       const endCol   = Math.min(WORLD_COLS, Math.ceil((camX + viewW) / TILE_SIZE) + 1);
       const startRow = Math.max(0, Math.floor(camY / TILE_SIZE) - 1);
       const endRow   = Math.min(WORLD_ROWS, Math.ceil((camY + viewH) / TILE_SIZE) + 1);
 
-      // 1. 繪製地形瓦片
+      // 1. 繪製地形與迷霧覆蓋
       for (let x = startCol; x < endCol; x++) {
         for (let y = startRow; y < endRow; y++) {
           const px = x * TILE_SIZE;
           const py = y * TILE_SIZE;
-          const type = getTileType(x, y);
+          const isExplored = exploredTiles[x][y];
+          const distToMe = Math.hypot(x - myData.x, y - myData.y);
+          const isCurrentlyVisible = distToMe <= effectiveRadius;
 
+          // 狀態 A：完全未探索（深黑天幕，完全不渲染地形）
+          if (!isExplored) {
+            ctx.fillStyle = '#050811';
+            ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+            continue;
+          }
+
+          // 狀態 B：已探索地形繪製
+          const type = getTileType(x, y);
           if (type === 'plains') {
             ctx.fillStyle = '#1e3a1e';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
@@ -302,7 +339,11 @@
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
 
-          if (zoom > 0.6) {
+          // 狀態 C：已探索但非當前視野（覆蓋 70% 迷霧半透明陰影）
+          if (!isCurrentlyVisible) {
+            ctx.fillStyle = 'rgba(5, 8, 17, 0.70)';
+            ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          } else if (zoom > 0.6) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             ctx.font = '9px sans-serif';
             ctx.fillText(`${x},${y}`, px + 3, py + 11);
@@ -310,9 +351,16 @@
         }
       }
 
-      // 2. 繪製城池與高亮標籤
+      // 2. 繪製城池（嚴格迷霧過濾：迷霧外的敵方城堡完全不渲染）
       allPlayers.forEach(p => {
         const isMe = (p.id === myUid);
+        const dist = Math.hypot(p.x - myData.x, p.y - myData.y);
+
+        // 防透視核心：非己方城邦若不在當前視野半徑內，直接剔除繪製
+        if (!isMe && dist > effectiveRadius) {
+          return;
+        }
+
         const px = p.x * TILE_SIZE;
         const py = p.y * TILE_SIZE;
 
@@ -321,7 +369,7 @@
           return;
         }
 
-        // 金色脈動呼吸光圈與指示標籤
+        // 金色脈動呼吸光圈與指示指針
         if (isMe) {
           const pulse = 24 + Math.sin(Date.now() / 250) * 4;
           ctx.strokeStyle = '#facc15';
@@ -355,7 +403,6 @@
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(px + 22, py + 30, 11, 12);
 
-        // 文字標籤隨視距調整
         if (zoom > 0.5) {
           ctx.fillStyle = isMe ? '#fef08a' : '#ffffff';
           ctx.font = isMe ? 'bold 11px sans-serif' : '10px sans-serif';
@@ -372,7 +419,7 @@
       ctx.restore();
     }
 
-    // 互動控制：平移（Pan）、縮放（Zoom）與點擊
+    // 互動控制：平移、縮放與點擊進攻
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -428,8 +475,9 @@
       }
     }, { passive: false });
 
+    // 點擊事件：嚴格防止點擊迷霧進攻
     canvas.addEventListener("click", (e) => {
-      if (totalDragDistance > 6) return; // 判定為拖曳漫遊，不觸發點擊操作
+      if (totalDragDistance > 6) return;
 
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -445,6 +493,14 @@
         if (target.id === myUid) {
           alert(`👑 這是你的主城 (${target.x}, ${target.y})\n當前防守步兵：${target.troops}`);
         } else {
+          // 迷霧校驗：超出即時視野禁止盲打
+          const effectiveRadius = BASE_VISION_RADIUS + currentVisionBonus;
+          const dist = Math.hypot(target.x - myData.x, target.y - myData.y);
+          if (dist > effectiveRadius) {
+            alert("🌫️ 該區域籠罩在戰爭迷霧中，未探明敵情，無法盲目發動跨迷霧進攻！");
+            return;
+          }
+
           const ok = confirm(`偵查到敵對勢力：【${target.name}】\n座標：(${target.x}, ${target.y})\n敵軍約：${target.troops} 步兵\n\n是否派遣 5 名步兵出征討伐？`);
           if (ok) attackPlayer(target.id);
         }
@@ -526,9 +582,27 @@
       document.getElementById('log-list').innerHTML = myData.logs.slice(0, 6).map(l => `<p>${l}</p>`).join('');
     }
 
+    // 全域功能
     window.locateHome = () => {
       if (!myData) return;
       centerCameraOn(myData.x, myData.y);
+    };
+
+    // 派遣斥候：消耗 30 糧食，增加 3 格視野半徑，持續 30 秒
+    window.dispatchScout = () => {
+      if (!myData) return;
+      if (myData.food < 30) return alert('糧食不足 30，無法維持斥候巡查消耗！');
+      myData.food -= 30;
+      currentVisionBonus += 3;
+      updateFogOfWar();
+      drawWorldMap();
+      myData.logs.unshift('🦅 斥候鷹隊升空！王國視野半徑擴大 3 格，持續 30 秒。');
+      renderSelf();
+
+      setTimeout(() => {
+        currentVisionBonus = Math.max(0, currentVisionBonus - 3);
+        drawWorldMap();
+      }, 30000);
     };
 
     window.upgradeBuilding = async (key) => {
