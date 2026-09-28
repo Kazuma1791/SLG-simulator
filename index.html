@@ -3,56 +3,67 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多人領地戰 - Firebase SLG</title>
+  <title>多人領地戰 - 2D Canvas 沙盤 SLG</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #111827; color: #f3f4f6; padding: 16px; }
-    .container { max-width: 850px; margin: 0 auto; }
-    .card { background: #1f2937; border-radius: 8px; padding: 16px; margin-bottom: 14px; border: 1px solid #374151; }
-    h2, h3 { color: #60a5fa; margin-bottom: 12px; }
+    body { background: #0f172a; color: #f1f5f9; padding: 16px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .card { background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 14px; border: 1px solid #334155; }
+    h2, h3 { color: #38bdf8; margin-bottom: 10px; }
     .res-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 8px; }
-    .res-box { background: #111827; padding: 10px; border-radius: 6px; text-align: center; border: 1px solid #374151; }
-    .res-box span { font-weight: bold; font-size: 1.15rem; color: #38bdf8; }
+    .res-box { background: #0f172a; padding: 8px; border-radius: 6px; text-align: center; border: 1px solid #334155; }
+    .res-box span { font-weight: bold; font-size: 1.1rem; color: #38bdf8; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-    .item-card { background: #111827; padding: 12px; border-radius: 6px; border: 1px solid #374151; display: flex; flex-direction: column; justify-content: space-between; }
+    .item-card { background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid #334155; }
     button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: 500; }
-    button:disabled { background: #4b5563; cursor: not-allowed; }
+    button:disabled { background: #475569; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #1d4ed8; }
-    .danger-btn { background: #dc2626; }
-    .danger-btn:hover:not(:disabled) { background: #b91c1c; }
-    .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #111827; border-radius: 6px; margin-bottom: 8px; border: 1px solid #374151; }
-    .log-box { background: #030712; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #1f2937; }
-    .log-box p { margin-bottom: 4px; border-bottom: 1px solid #111827; padding-bottom: 2px; }
+    
+    /* Canvas 地圖樣式 */
+    .map-wrapper { position: relative; width: 100%; overflow: hidden; border-radius: 6px; border: 2px solid #475569; }
+    canvas { display: block; background: #152238; cursor: crosshair; }
+    .map-tooltip { position: absolute; display: none; background: rgba(15, 23, 42, 0.95); padding: 8px 12px; border-radius: 6px; border: 1px solid #38bdf8; font-size: 0.85rem; pointer-events: none; }
+    .log-box { background: #020617; padding: 10px; border-radius: 6px; max-height: 110px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #1e293b; }
+    .log-box p { margin-bottom: 3px; border-bottom: 1px solid #0f172a; }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- 頂部領地與資源 -->
     <div class="card">
-      <h2 id="player-title">🏰 載入領地中...</h2>
+      <h2 id="player-title">🏰 載入王國中...</h2>
       <div class="res-grid">
         <div class="res-box">🌲 木材<br><span id="res-wood">0</span></div>
         <div class="res-box">⛏️ 鐵礦<br><span id="res-iron">0</span></div>
         <div class="res-box">🌾 糧食<br><span id="res-food">0</span></div>
         <div class="res-box">🛡️ 步兵<br><span id="res-troops">0</span></div>
       </div>
-      <div id="queue-status" style="color: #f59e0b; font-size: 0.9rem; min-height: 20px;"></div>
+      <div id="queue-status" style="color: #f59e0b; font-size: 0.85rem; min-height: 18px;"></div>
     </div>
 
+    <!-- 2D Canvas 大地圖沙盤 -->
     <div class="card">
-      <h3>基地建設與徵兵</h3>
-      <div class="grid" id="building-container"></div>
-      <div style="margin-top: 12px;">
-        <button id="train-btn" onclick="trainTroops()">招募 5 名步兵 (木40 鐵30，耗時 5 秒)</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3>🌍 實時地緣沙盤 (點擊地圖上的城堡發動進攻)</h3>
+        <span style="font-size:0.8rem; color:#94a3b8;">🔵 己方城堡 | 🔴 敵方城邦</span>
+      </div>
+      <div class="map-wrapper">
+        <canvas id="worldCanvas" width="860" height="420"></canvas>
       </div>
     </div>
 
+    <!-- 建築與招募 -->
     <div class="card">
-      <h3>🌍 世界大地圖（即時在線領主）</h3>
-      <div id="world-container">正在搜索世界鄰邦...</div>
+      <h3>城內設施營建</h3>
+      <div class="grid" id="building-container"></div>
+      <div style="margin-top: 10px;">
+        <button id="train-btn" onclick="trainTroops()">招募 5 名步兵 (耗時 5 秒)</button>
+      </div>
     </div>
 
+    <!-- 戰報中心 -->
     <div class="card">
-      <h3>戰報與領地紀錄</h3>
+      <h3>王國戰事紀錄</h3>
       <div class="log-box" id="log-list"></div>
     </div>
   </div>
@@ -64,7 +75,7 @@
       getFirestore, doc, getDoc, setDoc, onSnapshot, collection, runTransaction 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // 1. 請替換為你自己在 Firebase 控制台複製的設定
+    // 你的 Firebase 配置
     const firebaseConfig = {
       apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
       authDomain: "slg-game-617b3.firebaseapp.com",
@@ -81,6 +92,13 @@
 
     let myUid = null;
     let myData = null;
+    let allPlayers = [];
+
+    // 地圖與瓦片配置
+    const TILE_SIZE = 50; // 每個格子 50x50 像素
+    const WORLD_SIZE = 50; // 50x50 地塊
+    const canvas = document.getElementById("worldCanvas");
+    const ctx = canvas.getContext("2d");
 
     const CFG = {
       buildings: {
@@ -91,7 +109,6 @@
       }
     };
 
-    // 2. 匿名登入與資料初始化
     signInAnonymously(auth).catch(console.error);
 
     onAuthStateChanged(auth, async (user) => {
@@ -103,88 +120,202 @@
       if (!snap.exists()) {
         const initData = {
           name: `領主_${myUid.slice(0, 4)}`,
-          x: Math.floor(Math.random() * 50) + 1,
-          y: Math.floor(Math.random() * 50) + 1,
+          x: Math.floor(Math.random() * 16) + 2, // 限制在 2~18 格內方便測試相遇
+          y: Math.floor(Math.random() * 8) + 2,
           wood: 100, iron: 100, food: 100, troops: 0,
           buildings: { lumber: 1, mine: 1, farm: 1, barracks: 0 },
           buildQueue: null,
           trainQueue: null,
           lastTick: Date.now(),
-          logs: ['城堡建立，旗幟已在此插下。']
+          logs: ['城邦落成，沙盤視野已解鎖。']
         };
         await setDoc(userRef, initData);
       }
 
-      // 即時監聽自己的資料變化（包含被其他玩家掠奪後的即時反應）
+      // 監聽自身數據
       onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
           renderSelf();
+          drawMap();
         }
       });
 
-      // 即時監聽全服其他玩家狀態
+      // 監聽全服所有玩家（用於在 Canvas 繪製敵方城池）
       onSnapshot(collection(db, "players"), (querySnap) => {
-        const others = [];
+        allPlayers = [];
         querySnap.forEach((docSnap) => {
-          if (docSnap.id !== myUid) {
-            others.push({ id: docSnap.id, ...docSnap.data() });
-          }
+          allPlayers.push({ id: docSnap.id, ...docSnap.data() });
         });
-        renderWorld(others);
+        drawMap();
       });
 
-      // 啟動本機惰性計算與定期同步心跳
       setInterval(tickAndSync, 1000);
     });
 
-    // 3. 惰性資源計算與隊列結算
+    // 核心循環：惰性結算
     async function tickAndSync() {
       if (!myData || !myUid) return;
       const now = Date.now();
       const dt = (now - myData.lastTick) / 1000;
       myData.lastTick = now;
 
-      // 生產資源
       myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
       myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
       myData.food += dt * (CFG.buildings.farm.rate * myData.buildings.farm);
 
       let needSave = false;
 
-      // 建築隊列結算
       if (myData.buildQueue && now >= myData.buildQueue.finishesAt) {
         myData.buildings[myData.buildQueue.target]++;
-        myData.logs.unshift(`[建造完成] ${CFG.buildings[myData.buildQueue.target].name} 升級完成`);
+        myData.logs.unshift(`[建設完成] ${CFG.buildings[myData.buildQueue.target].name} 升級完成`);
         myData.buildQueue = null;
         needSave = true;
       }
 
-      // 徵兵隊列結算
       if (myData.trainQueue && now >= myData.trainQueue.finishesAt) {
         myData.troops += myData.trainQueue.count;
-        myData.logs.unshift(`[軍隊訓練] ${myData.trainQueue.count} 名步兵入伍待命`);
+        myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名步兵入列待命`);
         myData.trainQueue = null;
         needSave = true;
       }
 
       renderSelf();
 
-      // 每 8 秒或有事件完成時向 Firebase 寫入一次存檔
       if (needSave || Math.random() < 0.15) {
         await setDoc(doc(db, "players", myUid), myData, { merge: true });
       }
     }
 
-    // 4. 前端渲染邏輯
+    // Canvas 渲染主函式
+    function drawMap() {
+      if (!myData) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 1. 繪製棋盤網格與地塊
+      const cols = Math.ceil(canvas.width / TILE_SIZE);
+      const rows = Math.ceil(canvas.height / TILE_SIZE);
+
+      for (let x = 0; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+          ctx.strokeStyle = "#1e293b";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+          // 顯示地塊座標標籤
+          ctx.fillStyle = "#334155";
+          ctx.font = "9px sans-serif";
+          ctx.fillText(`${x},${y}`, x * TILE_SIZE + 4, y * TILE_SIZE + 12);
+        }
+      }
+
+      // 2. 遍歷並繪製全服玩家城池
+      allPlayers.forEach(p => {
+        const isMe = (p.id === myUid);
+        const px = p.x * TILE_SIZE;
+        const py = p.y * TILE_SIZE;
+
+        // 城堡本體背景框
+        ctx.fillStyle = isMe ? "#1d4ed8" : "#991b1b";
+        ctx.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+
+        // 城堡外框
+        ctx.strokeStyle = isMe ? "#60a5fa" : "#f87171";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+
+        // 圖標
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "18px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(isMe ? "🏰" : "🏯", px + TILE_SIZE / 2, py + 26);
+
+        // 領主名稱與駐軍文字
+        ctx.font = "10px sans-serif";
+        ctx.fillText(p.name, px + TILE_SIZE / 2, py + 38);
+        ctx.fillStyle = "#fbbf24";
+        ctx.fillText(`🛡️${p.troops || 0}`, px + TILE_SIZE / 2, py + 47);
+        ctx.textAlign = "start"; // 重置對齊
+      });
+    }
+
+    // 點擊地圖互動事件
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      const tileX = Math.floor(clickX / TILE_SIZE);
+      const tileY = Math.floor(clickY / TILE_SIZE);
+
+      // 檢查是否點中某個玩家的城堡
+      const target = allPlayers.find(p => p.x === tileX && p.y === tileY);
+      if (target) {
+        if (target.id === myUid) {
+          alert(`這是你的主城 (${target.x}, ${target.y})，當前駐軍：${target.troops}`);
+        } else {
+          const confirmAttack = confirm(`探測到敵方城池：【${target.name}】\n座標：(${target.x}, ${target.y})\n敵方守軍約：${target.troops} 兵力\n\n是否消耗 5 名步兵發動突襲？`);
+          if (confirmAttack) {
+            attackPlayer(target.id);
+          }
+        }
+      }
+    });
+
+    // 攻擊事務
+    async function attackPlayer(targetUid) {
+      if (myData.troops < 5) return alert('步兵不足 5 名，無法發動跨城討伐！');
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          const targetRef = doc(db, "players", targetUid);
+          const targetDoc = await transaction.get(targetRef);
+          if (!targetDoc.exists()) throw new Error("目標領主已遷城");
+
+          const target = targetDoc.data();
+          const attackerTroops = 5;
+          const defenderTroops = target.troops || 0;
+
+          if (attackerTroops > defenderTroops) {
+            const lootWood = Math.floor(target.wood * 0.3);
+            const lootIron = Math.floor(target.iron * 0.3);
+
+            transaction.update(targetRef, {
+              wood: target.wood - lootWood,
+              iron: target.iron - lootIron,
+              troops: 0,
+              logs: [`[城破] 遭到 ${myData.name} 破城！損失木材 ${lootWood}、鐵礦 ${lootIron}`, ...(target.logs || [])]
+            });
+
+            myData.wood += lootWood;
+            myData.iron += lootIron;
+            myData.logs.unshift(`[攻陷大捷] 成功攻陷 ${target.name}，繳獲木材 ${lootWood}、鐵礦 ${lootIron}！`);
+          } else {
+            myData.troops -= 5;
+            transaction.update(targetRef, {
+              troops: Math.max(0, defenderTroops - 2),
+              logs: [`[守城固若金湯] 成功殲滅了來自 ${myData.name} 的先鋒隊！`, ...(target.logs || [])]
+            });
+            myData.logs.unshift(`[攻城潰敗] 進攻 ${target.name} 失敗，5 名部隊全數陣亡！`);
+          }
+
+          transaction.set(doc(db, "players", myUid), myData, { merge: true });
+        });
+        drawMap();
+      } catch (err) {
+        alert("作戰未執行：" + err.message);
+      }
+    }
+
+    // 介面渲染
     function renderSelf() {
-      document.getElementById('player-title').innerText = `🏰 ${myData.name} 的城堡 (${myData.x}, ${myData.y})`;
+      document.getElementById('player-title').innerText = `🏰 ${myData.name} 的領地 (${myData.x}, ${myData.y})`;
       document.getElementById('res-wood').innerText = Math.floor(myData.wood);
       document.getElementById('res-iron').innerText = Math.floor(myData.iron);
       document.getElementById('res-food').innerText = Math.floor(myData.food);
       document.getElementById('res-troops').innerText = myData.troops;
 
-      // 建築渲染
       const bContainer = document.getElementById('building-container');
       bContainer.innerHTML = Object.entries(myData.buildings).map(([key, lvl]) => {
         const nextWood = CFG.buildings[key].wood * (lvl + 1);
@@ -193,46 +324,22 @@
           <div class="item-card">
             <div>
               <strong>${CFG.buildings[key].name}</strong> (Lv.${lvl})
-              <div style="font-size:0.8rem; color:#9ca3af; margin:4px 0;">升級需: 🌲${nextWood} ⛏️${nextIron}</div>
+              <div style="font-size:0.8rem; color:#94a3b8; margin:4px 0;">升級需: 🌲${nextWood} ⛏️${nextIron}</div>
             </div>
-            <button onclick="window.upgradeBuilding('${key}')" ${myData.buildQueue ? 'disabled' : ''}>升級 (需6秒)</button>
+            <button onclick="window.upgradeBuilding('${key}')" ${myData.buildQueue ? 'disabled' : ''}>升級 (6s)</button>
           </div>
         `;
       }).join('');
 
-      // 佇列進度
       const now = Date.now();
       let qMsg = [];
-      if (myData.buildQueue) {
-        qMsg.push(`🏗️ ${CFG.buildings[myData.buildQueue.target].name} 升級中 (${Math.max(0, Math.ceil((myData.buildQueue.finishesAt - now)/1000))}s)`);
-      }
-      if (myData.trainQueue) {
-        qMsg.push(`⚔️ 步兵招募中 (${Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now)/1000))}s)`);
-      }
+      if (myData.buildQueue) qMsg.push(`🏗️ 營建中... (${Math.max(0, Math.ceil((myData.buildQueue.finishesAt - now)/1000))}s)`);
+      if (myData.trainQueue) qMsg.push(`⚔️ 練兵中... (${Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now)/1000))}s)`);
       document.getElementById('queue-status').innerText = qMsg.join(' | ');
 
-      // 戰報日誌
-      document.getElementById('log-list').innerHTML = myData.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
+      document.getElementById('log-list').innerHTML = myData.logs.slice(0, 6).map(l => `<p>${l}</p>`).join('');
     }
 
-    function renderWorld(others) {
-      const container = document.getElementById('world-container');
-      if (others.length === 0) {
-        container.innerHTML = '<p style="color:#9ca3af;">方圓百里內沒有其他領主（你可以開一個無痕視窗扮演另一名玩家）</p>';
-        return;
-      }
-      container.innerHTML = others.map(p => `
-        <div class="player-row">
-          <div>
-            <strong>${p.name}</strong> 座標: (${p.x}, ${p.y})<br>
-            <span style="font-size: 0.85rem; color: #9ca3af;">駐軍: ${p.troops} 兵力 | 儲備物資估算中</span>
-          </div>
-          <button class="danger-btn" onclick="window.attackPlayer('${p.id}')">派遣 5 名步兵突襲</button>
-        </div>
-      `).join('');
-    }
-
-    // 5. 跨玩家戰鬥與交易事務（Firestore runTransaction 保證並發安全）
     window.upgradeBuilding = async (key) => {
       if (myData.buildQueue) return;
       const lvl = myData.buildings[key];
@@ -255,54 +362,6 @@
       myData.iron -= 30;
       myData.trainQueue = { count: 5, finishesAt: Date.now() + 5000 };
       await setDoc(doc(db, "players", myUid), myData, { merge: true });
-    };
-
-    window.attackPlayer = async (targetUid) => {
-      if (myData.troops < 5) return alert('至少需要 5 名步兵才能發動進攻！');
-
-      // 使用 Firestore 事務同時修改攻擊方與被攻擊方數據，防止數據不同步
-      try {
-        await runTransaction(db, async (transaction) => {
-          const targetRef = doc(db, "players", targetUid);
-          const targetDoc = await transaction.get(targetRef);
-          if (!targetDoc.exists()) throw new Error("目標領主已棄城離去");
-
-          const target = targetDoc.data();
-          const attackerTroops = 5;
-          const defenderTroops = target.troops || 0;
-
-          if (attackerTroops > defenderTroops) {
-            // 戰勝：掠奪目標 30% 資源
-            const lootWood = Math.floor(target.wood * 0.3);
-            const lootIron = Math.floor(target.iron * 0.3);
-
-            transaction.update(targetRef, {
-              wood: target.wood - lootWood,
-              iron: target.iron - lootIron,
-              troops: 0,
-              logs: [`[遭到突襲] 被 ${myData.name} 攻破，損失步兵，被搶走木材 ${lootWood}、鐵礦 ${lootIron}！`, ...(target.logs || [])]
-            });
-
-            myData.wood += lootWood;
-            myData.iron += lootIron;
-            myData.logs.unshift(`[大捷] 成功攻陷 ${target.name}，掠奪木材 ${lootWood}、鐵礦 ${lootIron}！`);
-          } else {
-            // 潰敗：扣除進攻兵力
-            myData.troops -= 5;
-            transaction.update(targetRef, {
-              troops: Math.max(0, defenderTroops - 2),
-              logs: [`[守城大捷] 成功擊退來自 ${myData.name} 的入侵部隊！`, ...(target.logs || [])]
-            });
-            myData.logs.unshift(`[遠征失利] 進攻 ${target.name} 遭遇重創，5 名步兵陣亡！`);
-          }
-
-          transaction.set(doc(db, "players", myUid), myData, { merge: true });
-        });
-        alert('戰事結算完成！請查看最新戰報。');
-      } catch (err) {
-        console.error("攻擊失敗:", err);
-        alert("作戰未執行: " + err.message);
-      }
     };
   </script>
 </body>
