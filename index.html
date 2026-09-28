@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>多人領地戰 - 戰爭迷霧 SLG</title>
+  <title>多人領地戰 - 高效節省配額版 SLG</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #070b14; color: #f1f5f9; padding: 16px; }
@@ -19,7 +19,6 @@
     button:disabled { background: #334155; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #1d4ed8; }
     
-    /* 沙盤與畫布 */
     .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; box-shadow: 0 4px 20px rgba(0,0,0,0.6); }
     canvas { display: block; width: 100%; height: auto; cursor: grab; }
     canvas:active { cursor: grabbing; }
@@ -29,9 +28,9 @@
 </head>
 <body>
   <div class="container">
-    <!-- 資源面板 -->
+    <!-- 個人私有資源展示 -->
     <div class="card">
-      <h2 id="player-title">🏰 正在探測領地坐標...</h2>
+      <h2 id="player-title">🏰 正在連線領地...</h2>
       <div class="res-grid">
         <div class="res-box">🌲 木材<br><span id="res-wood">0</span></div>
         <div class="res-box">⛏️ 鐵礦<br><span id="res-iron">0</span></div>
@@ -41,31 +40,28 @@
       <div id="queue-status" style="color: #f59e0b; font-size: 0.85rem; min-height: 18px;"></div>
     </div>
 
-    <!-- 2D 戰爭迷霧大地圖 -->
+    <!-- 公開大地圖沙盤 -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <h3>🗺️ 世界沙盤（籠罩於戰爭迷霧中）</h3>
+        <h3>🗺️ 世界沙盤（已啟用低耗額度模式）</h3>
         <div style="display:flex; gap:8px; align-items:center;">
           <span style="font-size:0.8rem; color:#94a3b8;" id="zoom-indicator">縮放: 100%</span>
+          <button onclick="refreshMap()" style="background:#0284c7; padding:4px 10px; font-size:0.8rem;">🔄 刷新大地圖</button>
           <button onclick="dispatchScout()" style="background:#059669; padding:4px 10px; font-size:0.8rem;">🦅 斥候開霧 (糧30)</button>
-          <button onclick="locateHome()" style="background:#0284c7; padding:4px 10px; font-size:0.8rem;">📍 定位我的城堡</button>
+          <button onclick="locateHome()" style="background:#475569; padding:4px 10px; font-size:0.8rem;">📍 回城</button>
         </div>
       </div>
       <div class="map-frame">
         <canvas id="worldCanvas" width="880" height="440"></canvas>
       </div>
-      <div style="margin-top:6px; font-size:0.75rem; color:#64748b; display:flex; justify-content:space-between;">
-        <span>💡 亮光區：主城 5 格即時視野 | 半透明暗區：已探明地形（無敵情） | 黑幕：未探索區域</span>
-        <span>滑鼠拖曳漫遊，滾輪縮放視角</span>
-      </div>
     </div>
 
-    <!-- 城內營建與徵兵 -->
+    <!-- 城內建設與徵兵 -->
     <div class="card">
       <h3>城內設施營造</h3>
       <div class="grid" id="building-container"></div>
       <div style="margin-top: 10px;">
-        <button id="train-btn" onclick="trainTroops()">招募 5 名步兵 (耗時 5 秒)</button>
+        <button id="train-btn" onclick="trainTroops()">招募 5 名步兵 (木40 鐵30，耗時 5 秒)</button>
       </div>
     </div>
 
@@ -80,10 +76,9 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
     import { 
-      getFirestore, doc, getDoc, setDoc, onSnapshot, collection, runTransaction 
+      getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot, collection, runTransaction 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // Firebase 專案配置
     const firebaseConfig = {
       apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
       authDomain: "slg-game-617b3.firebaseapp.com",
@@ -99,16 +94,16 @@
     const db = getFirestore(app);
 
     let myUid = null;
-    let myData = null;
-    let allPlayers = [];
+    let myData = null;       // 私有文檔數據 (players/{uid})
+    let allCastles = [];     // 公開沙盤列表 (world_map/{uid})
     let hasCentered = false;
 
-    // 地圖與相機參數
+    // 地圖與相機
     const TILE_SIZE = 55;
     const WORLD_COLS = 50;
     const WORLD_ROWS = 50;
-    const BASE_VISION_RADIUS = 5; // 基礎視野半徑（以主城為中心 5 格）
-    let currentVisionBonus = 0;   // 斥候帶來的額外視野加成
+    const BASE_VISION_RADIUS = 5;
+    let currentVisionBonus = 0;
 
     let camX = 0;
     let camY = 0;
@@ -116,9 +111,7 @@
     const MIN_ZOOM = 0.35;
     const MAX_ZOOM = 1.8;
 
-    // 探索記憶矩陣：記錄哪些格子已被玩家探明（預設全黑）
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
-
     const canvas = document.getElementById("worldCanvas");
     const ctx = canvas.getContext("2d");
 
@@ -131,56 +124,6 @@
       }
     };
 
-    // 1. 將 2D exploredTiles 壓縮為 Base64 字串
-    function serializeFog(matrix) {
-      const totalBits = WORLD_COLS * WORLD_ROWS;
-      const buffer = new Uint8Array(Math.ceil(totalBits / 8));
-    
-      for (let x = 0; x < WORLD_COLS; x++) {
-        for (let y = 0; y < WORLD_ROWS; y++) {
-          if (matrix[x][y]) {
-            const index = y * WORLD_COLS + x;
-            const byteIdx = Math.floor(index / 8);
-            const bitOffset = index % 8;
-            buffer[byteIdx] |= (1 << bitOffset);
-          }
-        }
-      }
-    
-      // 將二進位字節轉為緊湊的 Base64 字串（長度約 420 字元）
-      let binaryString = '';
-      for (let i = 0; i < buffer.length; i++) {
-        binaryString += String.fromCharCode(buffer[i]);
-      }
-      return btoa(binaryString);
-    }
-    
-    // 2. 將 Base64 字串還原解碼至 2D exploredTiles 矩陣
-    function deserializeFog(base64Str, targetMatrix) {
-      if (!base64Str) return;
-      try {
-        const binaryString = atob(base64Str);
-        const buffer = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          buffer[i] = binaryString.charCodeAt(i);
-        }
-    
-        for (let x = 0; x < WORLD_COLS; x++) {
-          for (let y = 0; y < WORLD_ROWS; y++) {
-            const index = y * WORLD_COLS + x;
-            const byteIdx = Math.floor(index / 8);
-            const bitOffset = index % 8;
-            if (byteIdx < buffer.length) {
-              targetMatrix[x][y] = (buffer[byteIdx] & (1 << bitOffset)) !== 0;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("迷霧資料解碼失敗:", err);
-      }
-    }
-
-    // 確定性地形算法
     function getTileType(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
       const rand = v - Math.floor(v);
@@ -190,7 +133,6 @@
       return 'water';
     }
 
-    // 視野更新：以主城為中心點亮地塊並永久記錄已探索狀態
     function updateFogOfWar() {
       if (!myData) return;
       const effectiveRadius = BASE_VISION_RADIUS + currentVisionBonus;
@@ -204,20 +146,15 @@
       }
     }
 
-    // 相機邊界約束
     function clampCamera() {
       const viewW = canvas.width / zoom;
       const viewH = canvas.height / zoom;
-      const worldW = WORLD_COLS * TILE_SIZE;
-      const worldH = WORLD_ROWS * TILE_SIZE;
-
-      const maxCamX = Math.max(0, worldW - viewW);
-      const maxCamY = Math.max(0, worldH - viewH);
+      const maxCamX = Math.max(0, WORLD_COLS * TILE_SIZE - viewW);
+      const maxCamY = Math.max(0, WORLD_ROWS * TILE_SIZE - viewH);
       camX = Math.max(0, Math.min(camX, maxCamX));
       camY = Math.max(0, Math.min(camY, maxCamY));
     }
 
-    // 鏡頭居中
     function centerCameraOn(tileX, tileY) {
       const viewW = canvas.width / zoom;
       const viewH = canvas.height / zoom;
@@ -227,41 +164,83 @@
       drawWorldMap();
     }
 
-    // 初始化登入與資料監聽
+    // ==========================================
+    // 關鍵優化 1：極低頻度的儲存函式（僅事件觸發）
+    // ==========================================
+    async function savePrivateData() {
+      if (!myUid || !myData) return;
+      myData.lastTick = Date.now();
+      await setDoc(doc(db, "players", myUid), myData, { merge: true });
+    }
+
+    async function syncPublicTroops() {
+      if (!myUid || !myData) return;
+      await updateDoc(doc(db, "world_map", myUid), {
+        troops: myData.troops
+      });
+    }
+
+    // ==========================================
+    // 關鍵優化 2：單次拉取大地圖（取代即時全集合監聽）
+    // ==========================================
+    window.refreshMap = async function() {
+      try {
+        const snap = await getDocs(collection(db, "world_map"));
+        allCastles = [];
+        snap.forEach(d => allCastles.push({ id: d.id, ...d.data() }));
+        drawWorldMap();
+      } catch (e) {
+        console.error("刷新大地圖失敗:", e);
+      }
+    };
+
+    // 登入與資料綁定
     signInAnonymously(auth).catch(console.error);
 
     onAuthStateChanged(auth, async (user) => {
       if (!user) return;
       myUid = user.uid;
-      const userRef = doc(db, "players", myUid);
-      const snap = await getDoc(userRef);
 
-      if (!snap.exists()) {
-        const initData = {
-          name: `領主_${myUid.slice(0, 4)}`,
-          x: Math.floor(Math.random() * 40) + 5,
-          y: Math.floor(Math.random() * 40) + 5,
+      const playerRef = doc(db, "players", myUid);
+      const worldRef = doc(db, "world_map", myUid);
+
+      const pSnap = await getDoc(playerRef);
+
+      if (!pSnap.exists()) {
+        const startX = Math.floor(Math.random() * 38) + 6;
+        const startY = Math.floor(Math.random() * 38) + 6;
+        const playerName = `領主_${myUid.slice(0, 4)}`;
+
+        // 1. 初始化私有數據 (players/{uid})
+        const initPrivate = {
+          name: playerName,
+          x: startX,
+          y: startY,
           wood: 100, iron: 100, food: 100, troops: 0,
           buildings: { lumber: 1, mine: 1, farm: 1, barracks: 0 },
           buildQueue: null,
           trainQueue: null,
           lastTick: Date.now(),
-          logs: ['城邦建立於蠻荒大陸，四方迷霧籠罩。']
+          logs: ['領地建立，沙盤座標已登錄。']
         };
-        await setDoc(userRef, initData);
+
+        // 2. 初始化公開數據 (world_map/{uid})
+        const initPublic = {
+          name: playerName,
+          x: startX,
+          y: startY,
+          troops: 0
+        };
+
+        await setDoc(playerRef, initPrivate);
+        await setDoc(worldRef, initPublic);
       }
 
-      onSnapshot(userRef, (docSnap) => {
+      // 關鍵優化 3：僅監聽自己的單篇私有文檔（被攻擊掠奪時能收到即時結算）
+      onSnapshot(playerRef, (docSnap) => {
         if (docSnap.exists()) {
           myData = docSnap.data();
-      
-          // 若資料庫內已有迷霧存檔，進行解碼還原；若無則執行首次開霧
-          if (myData.fog) {
-            deserializeFog(myData.fog, exploredTiles);
-          } else {
-            updateFogOfWar();
-          }
-      
+          updateFogOfWar();
           if (!hasCentered) {
             centerCameraOn(myData.x, myData.y);
             hasCentered = true;
@@ -271,57 +250,63 @@
         }
       });
 
-      onSnapshot(collection(db, "players"), (querySnap) => {
-        allPlayers = [];
-        querySnap.forEach((docSnap) => {
-          allPlayers.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        drawWorldMap();
-      });
+      // 初次進入時抓取一次大地圖
+      await window.refreshMap();
 
-      setInterval(tickAndSync, 1000);
+      // 本機計算心跳（純算術，不產生網路請求）
+      setInterval(localTick, 1000);
       setInterval(drawWorldMap, 100);
+      // 大地圖每 60 秒極低頻輪詢一次，亦可透過按鈕手動更新
+      setInterval(window.refreshMap, 60000);
     });
 
-    // 惰性循環
-    async function tickAndSync() {
+    // 關閉網頁時執行最後一次結算儲存
+    window.addEventListener("beforeunload", () => {
+      if (myUid && myData) {
+        savePrivateData();
+      }
+    });
+
+    // ==========================================
+    // 本機資源推演（完全零網路開銷）
+    // ==========================================
+    async function localTick() {
       if (!myData || !myUid) return;
       const now = Date.now();
       const dt = (now - myData.lastTick) / 1000;
       myData.lastTick = now;
 
+      // 產出推演
       myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
       myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
       myData.food += dt * (CFG.buildings.farm.rate * myData.buildings.farm);
 
-      let needSave = false;
+      let needPrivateSave = false;
+      let needPublicTroopSync = false;
 
+      // 隊列到期判定：僅在此時才觸發資料庫寫入
       if (myData.buildQueue && now >= myData.buildQueue.finishesAt) {
         myData.buildings[myData.buildQueue.target]++;
         myData.logs.unshift(`[建造就緒] ${CFG.buildings[myData.buildQueue.target].name} 升級完成`);
         myData.buildQueue = null;
-        needSave = true;
+        needPrivateSave = true;
       }
 
       if (myData.trainQueue && now >= myData.trainQueue.finishesAt) {
         myData.troops += myData.trainQueue.count;
-        myData.logs.unshift(`[部隊入營] ${myData.trainQueue.count} 名步兵完成整訓`);
+        myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名步兵入列待命`);
         myData.trainQueue = null;
-        needSave = true;
+        needPrivateSave = true;
+        needPublicTroopSync = true;
       }
 
       renderSelf();
-      
-      // 當有新迷霧揭開或常規同步週期到達時，打包上傳
-      if (needSave || fogDirty || Math.random() < 0.15) {
-        if (fogDirty) {
-          myData.fog = serializeFog(exploredTiles); // 寫入壓縮後的 Base64 字串
-          fogDirty = false;
-        }
-        await setDoc(doc(db, "players", myUid), myData, { merge: true });
-      }
+
+      if (needPrivateSave) await savePrivateData();
+      if (needPublicTroopSync) await syncPublicTroops();
     }
-    // 核心渲染：包含戰爭迷霧三層過濾
+
+    // 畫布沙盤渲染
     function drawWorldMap() {
       if (!myData) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -339,7 +324,7 @@
       const startRow = Math.max(0, Math.floor(camY / TILE_SIZE) - 1);
       const endRow   = Math.min(WORLD_ROWS, Math.ceil((camY + viewH) / TILE_SIZE) + 1);
 
-      // 1. 繪製地形與迷霧覆蓋
+      // 地形與迷霧
       for (let x = startCol; x < endCol; x++) {
         for (let y = startRow; y < endRow; y++) {
           const px = x * TILE_SIZE;
@@ -348,21 +333,16 @@
           const distToMe = Math.hypot(x - myData.x, y - myData.y);
           const isCurrentlyVisible = distToMe <= effectiveRadius;
 
-          // 狀態 A：完全未探索（深黑天幕，完全不渲染地形）
           if (!isExplored) {
             ctx.fillStyle = '#050811';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
             continue;
           }
 
-          // 狀態 B：已探索地形繪製
           const type = getTileType(x, y);
           if (type === 'plains') {
             ctx.fillStyle = '#1e3a1e';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-            ctx.fillStyle = '#2d5a2d';
-            ctx.fillRect(px + 10, py + 12, 3, 6);
-            ctx.fillRect(px + 28, py + 34, 4, 7);
           } else if (type === 'forest') {
             ctx.fillStyle = '#142914';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
@@ -381,45 +361,27 @@
             ctx.lineTo(px + 45, py + 45);
             ctx.closePath();
             ctx.fill();
-            ctx.fillStyle = '#e4e4e7';
-            ctx.beginPath();
-            ctx.moveTo(px + 27, py + 10);
-            ctx.lineTo(px + 20, py + 22);
-            ctx.lineTo(px + 34, py + 22);
-            ctx.closePath();
-            ctx.fill();
           } else if (type === 'water') {
             ctx.fillStyle = '#1e3a8a';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-            ctx.fillStyle = '#38bdf8';
-            ctx.fillRect(px + 8, py + 18, 16, 2);
-            ctx.fillRect(px + 24, py + 32, 20, 2);
           }
 
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
 
-          // 狀態 C：已探索但非當前視野（覆蓋 70% 迷霧半透明陰影）
           if (!isCurrentlyVisible) {
             ctx.fillStyle = 'rgba(5, 8, 17, 0.70)';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-          } else if (zoom > 0.6) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.font = '9px sans-serif';
-            ctx.fillText(`${x},${y}`, px + 3, py + 11);
           }
         }
       }
 
-      // 2. 繪製城池（嚴格迷霧過濾：迷霧外的敵方城堡完全不渲染）
-      allPlayers.forEach(p => {
+      // 從公開列表中繪製城池（過濾迷霧）
+      allCastles.forEach(p => {
         const isMe = (p.id === myUid);
         const dist = Math.hypot(p.x - myData.x, p.y - myData.y);
 
-        // 防透視核心：非己方城邦若不在當前視野半徑內，直接剔除繪製
-        if (!isMe && dist > effectiveRadius) {
-          return;
-        }
+        if (!isMe && dist > effectiveRadius) return;
 
         const px = p.x * TILE_SIZE;
         const py = p.y * TILE_SIZE;
@@ -429,7 +391,6 @@
           return;
         }
 
-        // 金色脈動呼吸光圈與指示指針
         if (isMe) {
           const pulse = 24 + Math.sin(Date.now() / 250) * 4;
           ctx.strokeStyle = '#facc15';
@@ -444,21 +405,12 @@
           ctx.fillText('▼ 你的王國', px + TILE_SIZE / 2, py - 4);
         }
 
-        ctx.fillStyle = isMe ? 'rgba(37, 99, 235, 0.6)' : 'rgba(220, 38, 38, 0.4)';
-        ctx.beginPath();
-        ctx.arc(px + TILE_SIZE / 2, py + TILE_SIZE / 2, 22, 0, Math.PI * 2);
-        ctx.fill();
-
         ctx.fillStyle = isMe ? '#2563eb' : '#7f1d1d';
         ctx.fillRect(px + 12, py + 16, 31, 26);
 
         ctx.fillStyle = isMe ? '#60a5fa' : '#b91c1c';
         ctx.fillRect(px + 9, py + 12, 10, 30);
         ctx.fillRect(px + 36, py + 12, 10, 30);
-
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(px + 10, py + 8, 4, 4);
-        ctx.fillRect(px + 41, py + 8, 4, 4);
 
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(px + 22, py + 30, 11, 12);
@@ -479,7 +431,7 @@
       ctx.restore();
     }
 
-    // 互動控制：平移、縮放與點擊進攻
+    // 畫布操作：拖曳漫遊與縮放
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -535,7 +487,6 @@
       }
     }, { passive: false });
 
-    // 點擊事件：嚴格防止點擊迷霧進攻
     canvas.addEventListener("click", (e) => {
       if (totalDragDistance > 6) return;
 
@@ -548,16 +499,15 @@
       const tileX = Math.floor((screenX / zoom + camX) / TILE_SIZE);
       const tileY = Math.floor((screenY / zoom + camY) / TILE_SIZE);
 
-      const target = allPlayers.find(p => p.x === tileX && p.y === tileY);
+      const target = allCastles.find(p => p.x === tileX && p.y === tileY);
       if (target) {
         if (target.id === myUid) {
-          alert(`👑 這是你的主城 (${target.x}, ${target.y})\n當前防守步兵：${target.troops}`);
+          alert(`👑 你的主城 (${target.x}, ${target.y})\n當前防守步兵：${myData.troops}`);
         } else {
-          // 迷霧校驗：超出即時視野禁止盲打
           const effectiveRadius = BASE_VISION_RADIUS + currentVisionBonus;
           const dist = Math.hypot(target.x - myData.x, target.y - myData.y);
           if (dist > effectiveRadius) {
-            alert("🌫️ 該區域籠罩在戰爭迷霧中，未探明敵情，無法盲目發動跨迷霧進攻！");
+            alert("🌫️ 該區域籠罩在迷霧中，無法跨迷霧出征！");
             return;
           }
 
@@ -567,13 +517,18 @@
       }
     });
 
+    // 跨集合安全事務結算
     async function attackPlayer(targetUid) {
-      if (myData.troops < 5) return alert('步兵不足 5 名，無法發動遠征！');
+      if (myData.troops < 5) return alert('可用步兵不足 5 名！');
 
       try {
         await runTransaction(db, async (transaction) => {
-          const targetRef = doc(db, "players", targetUid);
-          const targetDoc = await transaction.get(targetRef);
+          const targetPrivateRef = doc(db, "players", targetUid);
+          const targetPublicRef = doc(db, "world_map", targetUid);
+          const myPrivateRef = doc(db, "players", myUid);
+          const myPublicRef = doc(db, "world_map", myUid);
+
+          const targetDoc = await transaction.get(targetPrivateRef);
           if (!targetDoc.exists()) throw new Error("該城池已被廢棄");
 
           const target = targetDoc.data();
@@ -584,30 +539,39 @@
             const lootWood = Math.floor(target.wood * 0.3);
             const lootIron = Math.floor(target.iron * 0.3);
 
-            transaction.update(targetRef, {
+            // 更新防守方私有與公開狀態
+            transaction.update(targetPrivateRef, {
               wood: target.wood - lootWood,
               iron: target.iron - lootIron,
               troops: 0,
-              logs: [`[城防告急] 遭到 ${myData.name} 破城！被掠奪木材 ${lootWood}、鐵礦 ${lootIron}`, ...(target.logs || [])]
+              logs: [`[城破] 遭到 ${myData.name} 破城！損失木材 ${lootWood}、鐵礦 ${lootIron}`, ...(target.logs || [])]
             });
+            transaction.update(targetPublicRef, { troops: 0 });
 
+            // 更新攻擊方私有狀態
             myData.wood += lootWood;
             myData.iron += lootIron;
-            myData.logs.unshift(`[凱旋而歸] 攻克 ${target.name}，帶回木材 ${lootWood}、鐵礦 ${lootIron}！`);
+            myData.logs.unshift(`[大捷] 攻破 ${target.name}，掠奪木材 ${lootWood}、鐵礦 ${lootIron}！`);
           } else {
             myData.troops -= 5;
-            transaction.update(targetRef, {
-              troops: Math.max(0, defenderTroops - 2),
-              logs: [`[堅壁清野] 成功擊退來自 ${myData.name} 的入侵先鋒！`, ...(target.logs || [])]
+            const newDefTroops = Math.max(0, defenderTroops - 2);
+
+            transaction.update(targetPrivateRef, {
+              troops: newDefTroops,
+              logs: [`[堅壁清野] 擊退來自 ${myData.name} 的突襲部隊！`, ...(target.logs || [])]
             });
-            myData.logs.unshift(`[征戰失利] 突擊 ${target.name} 遭受伏擊，5 名步兵陣亡！`);
+            transaction.update(targetPublicRef, { troops: newDefTroops });
+
+            myData.logs.unshift(`[征戰失利] 突擊 ${target.name} 遭遇重創，5 名步兵陣亡！`);
           }
 
-          transaction.set(doc(db, "players", myUid), myData, { merge: true });
+          transaction.set(myPrivateRef, myData, { merge: true });
+          transaction.update(myPublicRef, { troops: myData.troops });
         });
-        drawWorldMap();
+
+        await window.refreshMap();
       } catch (err) {
-        alert("指令失敗：" + err.message);
+        alert("作戰未執行：" + err.message);
       }
     }
 
@@ -642,22 +606,19 @@
       document.getElementById('log-list').innerHTML = myData.logs.slice(0, 6).map(l => `<p>${l}</p>`).join('');
     }
 
-    // 全域功能
     window.locateHome = () => {
       if (!myData) return;
       centerCameraOn(myData.x, myData.y);
     };
 
-    // 派遣斥候：消耗 30 糧食，增加 3 格視野半徑，持續 30 秒
     window.dispatchScout = () => {
       if (!myData) return;
-      if (myData.food < 30) return alert('糧食不足 30，無法維持斥候巡查消耗！');
+      if (myData.food < 30) return alert('糧食不足 30！');
       myData.food -= 30;
       currentVisionBonus += 3;
       updateFogOfWar();
       drawWorldMap();
-      myData.logs.unshift('🦅 斥候鷹隊升空！王國視野半徑擴大 3 格，持續 30 秒。');
-      renderSelf();
+      savePrivateData(); // 扣除糧食，觸發一次事件存檔
 
       setTimeout(() => {
         currentVisionBonus = Math.max(0, currentVisionBonus - 3);
@@ -675,7 +636,7 @@
       myData.wood -= wCost;
       myData.iron -= iCost;
       myData.buildQueue = { target: key, finishesAt: Date.now() + 6000 };
-      await setDoc(doc(db, "players", myUid), myData, { merge: true });
+      await savePrivateData(); // 事件觸發存檔
     };
 
     window.trainTroops = async () => {
@@ -686,7 +647,7 @@
       myData.wood -= 40;
       myData.iron -= 30;
       myData.trainQueue = { count: 5, finishesAt: Date.now() + 5000 };
-      await setDoc(doc(db, "players", myUid), myData, { merge: true });
+      await savePrivateData(); // 事件觸發存檔
     };
   </script>
 </body>
