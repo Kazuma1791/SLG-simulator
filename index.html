@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 黑暗王城與核心禁區版</title>
+  <title>多人領地戰 - 真實建造時間版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 10px; overflow-x: hidden; }
@@ -47,7 +47,7 @@
     .rename-input { width: 100%; text-align: left; margin-bottom: 15px; }
 
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-    .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; }
+    .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
     .item-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #3b82f6; }
     
     .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #182333; }
@@ -114,7 +114,7 @@
             <span style="font-size:0.8rem; color:#94a3b8; font-weight:normal;" id="zoom-indicator">100%</span>
           </h3>
           <div style="display:flex; gap:6px;">
-            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候(30糧)</button>
+            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候</button>
             <button onclick="locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
         </div>
@@ -155,7 +155,7 @@
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>⚒️ 基礎設施營造</span>
-          <button onclick="useSpeedUp('build')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速</button>
+          <button onclick="useSpeedUp('build')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
         </h3>
         <div class="grid" id="building-container"></div>
       </div>
@@ -163,7 +163,7 @@
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>⚔️ 軍事招募所</span>
-          <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速</button>
+          <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
         </h3>
         <div class="grid" id="train-container"></div>
       </div>
@@ -202,13 +202,14 @@
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     
+    // 💡 建築配置新增 baseTime (秒)
     const CFG = {
       buildings: { 
-        castle:   { name: '主城',   rate: 0,   baseW: 600, baseI: 600 },
-        lumber:   { name: '伐木場', rate: 1.0, baseW: 100, baseI: 50 }, 
-        mine:     { name: '鐵礦場', rate: 0.8, baseW: 50,  baseI: 100 }, 
-        farm:     { name: '農田',   rate: 1.2, baseW: 80,  baseI: 80 }, 
-        barracks: { name: '兵營',   rate: 0,   baseW: 200, baseI: 200 } 
+        castle:   { name: '主城',   rate: 0,   baseW: 600, baseI: 600, baseTime: 120 },
+        lumber:   { name: '伐木場', rate: 1.0, baseW: 100, baseI: 50,  baseTime: 60 }, 
+        mine:     { name: '鐵礦場', rate: 0.8, baseW: 50,  baseI: 100, baseTime: 60 }, 
+        farm:     { name: '農田',   rate: 1.2, baseW: 80,  baseI: 80,  baseTime: 60 }, 
+        barracks: { name: '兵營',   rate: 0,   baseW: 200, baseI: 200, baseTime: 90 } 
       },
       troops: {
         infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
@@ -221,8 +222,24 @@
       ]
     };
 
+    // 取得指數暴增的資源花費
     function getUpgradeCost(key, level) {
-      const multiplier = Math.pow(1.6, level); return { w: Math.floor(CFG.buildings[key].baseW * multiplier), i: Math.floor(CFG.buildings[key].baseI * multiplier) };
+      const multiplier = Math.pow(1.6, level); 
+      return { w: Math.floor(CFG.buildings[key].baseW * multiplier), i: Math.floor(CFG.buildings[key].baseI * multiplier) };
+    }
+
+    // 💡 取得指數暴增的升級時間 (秒)
+    function getUpgradeTime(key, level) {
+      const base = CFG.buildings[key].baseTime || 60;
+      // 等級越高，時間指數拉長 (Lv1->60s, Lv5->6.5m, Lv10->68m)
+      return Math.floor(base * Math.pow(1.6, Math.max(0, level - 1)));
+    }
+
+    // 💡 時間格式化助手
+    function formatTime(sec) {
+      if (sec < 60) return sec + 's';
+      if (sec < 3600) return Math.floor(sec/60) + 'm' + (sec%60 > 0 ? ' '+(sec%60)+'s' : '');
+      return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
     }
 
     function getTileType(x, y) {
@@ -230,7 +247,6 @@
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
-    // 💡 同心圓生態系與黑暗王城生成邏輯
     function getTileEntity(x, y) {
       if (allCastles.some(p => p.x === x && p.y === y)) return null;
       if (worldBoss && worldBoss.x === x && worldBoss.y === y) return null;
@@ -240,15 +256,12 @@
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; 
       const rand = v - Math.floor(v); 
       
-      // 1. 核心禁區 (距離 0~7)：黑暗王城與豪華遺跡
       if (distToCenter <= 7) {
         if (rand < 0.06) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
         if (rand < 0.15) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         if (rand < 0.20) return { type: 'barbarian', name: '👹 黑暗禁衛軍', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
         return null;
       }
-      
-      // 2. 中間激戰區 (距離 8~16)：高等要塞與野怪
       if (distToCenter <= 16) {
         if (rand < 0.02) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         if (rand < 0.08) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
@@ -256,8 +269,6 @@
         if (rand < 0.22) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
         return null;
       }
-      
-      // 3. 外圍安逸區 (距離 17+)：新手野怪
       if (rand < 0.005) return { type: 'npc_castle', name: '🏰 黑暗軍團前哨', reqPwr: 100, loot: { wood: 800, iron: 800, food: 800 } };
       if (rand < 0.040) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
       if (rand < 0.100) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
@@ -307,7 +318,6 @@
         
         let d = null;
         if (!pSnap.exists()) {
-          // 💡 強制降生在外圍 (距離中心 > 12)
           let startX, startY;
           do {
             startX = Math.floor(Math.random() * 38) + 6;
@@ -660,7 +670,7 @@
         }
 
         if (zoom>0.5) {
-          ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 11px sans-serif':'10px sans-serif'; ctx.textAlign='center';
+          ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
           ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${p.troops||0}`, px+TILE_SIZE/2, py+8);
         }
         ctx.textAlign='start';
@@ -684,7 +694,7 @@
           ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
 
           const left = Math.ceil((m.finishesAt-now)/1000);
-          if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(`${left}s`, cX, cY-20); }
+          if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
           ctx.textAlign = 'start';
         });
       }
@@ -779,7 +789,7 @@
       else if (ent && !getClearedPOI(tX,tY)) {
         targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist };
         document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 遺跡探險`:(ent.type==='npc_capital'?`😈 攻略王城`:(ent.type==='npc_castle'?`⚔️ 攻堅要塞`:`⚔️ 討伐敵陣`));
-        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要極其龐大的兵力與聯軍。`;
+        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要一定兵力強度。`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (!tC && getTileType(tX,tY) !== 'water') {
@@ -842,7 +852,7 @@
     });
 
     // ==========================================
-    // 渲染 UI (淨糧草與建築)
+    // 渲染 UI (淨糧草與建築時間)
     // ==========================================
     function renderSelf() {
       document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:6px 10px; font-size:0.8rem;">✏️ 改名</button>`;
@@ -863,19 +873,20 @@
       const bContainer = document.getElementById('building-container');
       bContainer.innerHTML = Object.entries(myData.buildings).map(([key, lvl]) => {
         const cost = getUpgradeCost(key, lvl);
-        return `<div class="item-card"><div><strong style="font-size:1.1rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">升級所需:<br>🌲 ${cost.w} | ⛏️ ${cost.i}</div></div><button style="width:100%" onclick="window.upgradeBuilding('${key}')" ${myData.buildQueue?'disabled':''}>升級 (6s)</button></div>`;
+        const timeSec = getUpgradeTime(key, lvl);
+        return `<div class="item-card"><div><strong style="font-size:1.1rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">升級所需:<br>🌲 ${cost.w} | ⛏️ ${cost.i}</div></div><button style="width:100%" onclick="window.upgradeBuilding('${key}')" ${myData.buildQueue?'disabled':''}>升級 (${formatTime(timeSec)})</button></div>`;
       }).join('');
 
       const tContainer = document.getElementById('train-container');
       const bLvl = myData.buildings.barracks || 1;
       tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
-        if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5;"><div><strong style="font-size:1.1rem;">🔒 未解鎖兵種</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需要 兵營 Lv.${d.reqLvl} 解鎖</div></div><button style="width:100%; background:#475569;" disabled>解鎖後可招募</button></div>`;
-        return `<div class="item-card"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>行軍: ${d.speed}s/格 | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5 名 (${d.time}s)</button></div>`;
+        if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.1rem;">🔒 未解鎖兵種</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需要 兵營 Lv.${d.reqLvl} 解鎖</div></div><button style="width:100%; background:#475569; margin-top:auto;" disabled>解鎖後可招募</button></div>`;
+        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>行軍: ${d.speed}s/格 | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5 名 (${d.time}s)</button></div>`;
       }).join('');
 
       let qMsg = []; const now = Date.now();
-      if (myData.buildQueue) qMsg.push(`🏗️ 升級中... (${Math.max(0, Math.ceil((myData.buildQueue.finishesAt-now)/1000))}s)`);
-      if (myData.trainQueue) qMsg.push(`⚔️ 招募中... (${Math.max(0, Math.ceil((myData.trainQueue.finishesAt-now)/1000))}s)`);
+      if (myData.buildQueue) qMsg.push(`🏗️ 升級中... (${formatTime(Math.max(0, Math.ceil((myData.buildQueue.finishesAt-now)/1000)))})`);
+      if (myData.trainQueue) qMsg.push(`⚔️ 招募中... (${formatTime(Math.max(0, Math.ceil((myData.trainQueue.finishesAt-now)/1000)))})`);
       if (myData.marches && myData.marches.length > 0) qMsg.push(`🚩 ${myData.marches.length} 支部隊行軍中`);
       document.getElementById('queue-status').innerText = qMsg.join(' | ');
       document.getElementById('log-list').innerHTML = myData.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
@@ -903,7 +914,8 @@
       if (myData.buildQueue) return;
       const lvl = myData.buildings[key], cost = getUpgradeCost(key, lvl);
       if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
-      myData.wood -= cost.w; myData.iron -= cost.i; myData.buildQueue = { target: key, finishesAt: Date.now() + 6000 }; await savePrivateData();
+      const timeSec = getUpgradeTime(key, lvl);
+      myData.wood -= cost.w; myData.iron -= cost.i; myData.buildQueue = { target: key, finishesAt: Date.now() + timeSec * 1000 }; await savePrivateData();
     };
     
     window.trainTroopType = async (typeKey) => {
