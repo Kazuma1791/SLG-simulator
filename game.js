@@ -28,7 +28,7 @@ let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
 // ==========================================
-// 🖼️ 載入外部材質圖片 (支援 7 階段城堡 & 4 種暗黑據點)
+// 🖼️ 載入外部材質圖片 
 // ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
@@ -236,10 +236,9 @@ onAuthStateChanged(auth, async (user) => {
     const playerRef = doc(db, "players", myUid), worldRef = doc(db, "world_map", myUid);
     const pSnap = await getDoc(playerRef), wSnap = await getDoc(worldRef);
     
-    let d = null;
     if (!pSnap.exists()) {
       let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
-      d = {
+      const d = {
         name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
         wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
         buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
@@ -715,7 +714,6 @@ function drawWorldMap() {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
       const px = x*TILE_SIZE, py = y*TILE_SIZE;
       
-      // 💡 繪製原野地形
       const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
@@ -739,13 +737,10 @@ function drawWorldMap() {
         ctx.fillStyle='#1e3a8a'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
         ctx.fillStyle='#3b82f6'; const wave = Math.sin(t/500 + x + y) * 3; ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
       }
-      
-      ctx.strokeStyle='rgba(255,255,255,0.03)'; 
-      ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+      ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
       const isExplored = exploredTiles[x][y] || godModeFog;
 
-      // 🌫️ 迷霧：改用半透明陰影，讓地形仍然可見
       if (!isExplored) { 
           ctx.fillStyle='rgba(5, 8, 17, 0.55)'; 
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -759,7 +754,6 @@ function drawWorldMap() {
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
-          // 💡 依照 NPC 據點等級顯示不同圖片
           if (cell.entity.type === 'npc_capital') {
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
                   ctx.drawImage(imgDarkCapital, px, py + floatY - 10, TILE_SIZE, TILE_SIZE + 10);
@@ -805,89 +799,89 @@ function drawWorldMap() {
         }
       }
     }
+  } // <--- 💡 在這裡正確關閉 x,y 的雙層迴圈！
 
-    worldBosses.forEach(boss => {
-       const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
-       if (boss.hp > 0 && (isExplored || godModeFog)) {
-          const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
-          const bounce = Math.sin(t/200)*5;
-          if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
-              ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
-          } else {
-              ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
-          }
-          ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
-          ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
-       }
-    });
+  worldBosses.forEach(boss => {
+     const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
+     if (boss.hp > 0 && (isExplored || godModeFog)) {
+        const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
+        const bounce = Math.sin(t/200)*5;
+        if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
+            ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
+        } else {
+            ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
+        }
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
+        ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
+     }
+  });
 
-    allCastles.forEach(p => {
-      const isMe = (p.id === myUid);
-      const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
-      if (!godModeFog && !isMe && !isExplored) return;
-      
-      const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
-      if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
+  allCastles.forEach(p => {
+    const isMe = (p.id === myUid);
+    const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
+    if (!godModeFog && !isMe && !isExplored) return;
+    
+    const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
+    if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
 
-      const isShielded = p.shieldEndsAt && p.shieldEndsAt > t;
-      if (isShielded) {
-          ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
-          ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
-      }
-
-      if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
-      
-      // 💡 城堡動態 7 階級判斷系統
-      let cLv = p.castleLevel || 1;
-      let imgIdx = 0;
-      if (cLv >= 20) imgIdx = 6;
-      else if (cLv >= 17) imgIdx = 5;
-      else if (cLv >= 13) imgIdx = 4;
-      else if (cLv >= 9)  imgIdx = 3;
-      else if (cLv >= 6)  imgIdx = 2;
-      else if (cLv >= 3)  imgIdx = 1;
-      
-      let currentCastleImg = castleImgs[imgIdx];
-      
-      if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-          ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
-      } else {
-          ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
-          ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
-          ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
-      }
-
-      if (zoom>0.5) {
-        ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-        ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
-      }
-      ctx.textAlign='start';
-    });
-
-    if (myData.marches && myData.marches.length > 0) {
-      myData.marches.forEach(m => {
-        let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
-        const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
-        const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
-        const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
-
-        ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
-        ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
-        ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
-
-        ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
-        ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
-
-        const left = Math.ceil((m.finishesAt-t)/1000);
-        if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
-        ctx.textAlign = 'start';
-      });
+    const isShielded = p.shieldEndsAt && p.shieldEndsAt > t;
+    if (isShielded) {
+        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
     }
-    ctx.restore();
+
+    if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
+    
+    let cLv = p.castleLevel || 1;
+    let imgIdx = 0;
+    if (cLv >= 20) imgIdx = 6;
+    else if (cLv >= 17) imgIdx = 5;
+    else if (cLv >= 13) imgIdx = 4;
+    else if (cLv >= 9)  imgIdx = 3;
+    else if (cLv >= 6)  imgIdx = 2;
+    else if (cLv >= 3)  imgIdx = 1;
+    
+    let currentCastleImg = castleImgs[imgIdx];
+    
+    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+        ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+    } else {
+        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
+        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
+    }
+
+    if (zoom>0.5) {
+      ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
+    }
+    ctx.textAlign='start';
+  });
+
+  if (myData.marches && myData.marches.length > 0) {
+    myData.marches.forEach(m => {
+      let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
+      const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
+      const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
+      const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
+
+      ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
+      ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+      ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+
+      ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
+      ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
+
+      const left = Math.ceil((m.finishesAt-t)/1000);
+      if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
+      ctx.textAlign = 'start';
+    });
   }
+  ctx.restore();
+}
 
 // ==========================================
 // 實體按鈕縮放與觸控
