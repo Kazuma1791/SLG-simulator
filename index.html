@@ -3,55 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 全息動態視覺版</title>
+  <title>多人領地戰 - 極致流暢與同心圓地標版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
-    body { background: #070b14; color: #f1f5f9; padding: 10px; overflow-x: hidden; }
+    body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
     .container { max-width: 1000px; margin: 0 auto; position: relative; }
-    .card { background: #131d2e; border-radius: 8px; padding: 14px; margin-bottom: 12px; border: 1px solid #23354d; }
-    h2, h3 { color: #38bdf8; margin-bottom: 8px; font-size: 1.1rem; }
+    .card { background: #131d2e; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid #23354d; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    h2, h3 { color: #38bdf8; margin-bottom: 6px; font-size: 1.05rem; }
     
-    .res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; margin-bottom: 6px; }
-    .res-box { background: #0a0f1d; padding: 6px; border-radius: 6px; text-align: center; border: 1px solid #1e2c40; font-size: 0.8rem; position: relative; }
-    .res-box span.val { font-weight: bold; font-size: 1.1rem; color: #38bdf8; display: block; margin-top: 4px; }
-    .res-box span.rate { font-size: 0.7rem; display: block; margin-top: 2px; }
+    .res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 6px; margin-bottom: 4px; }
+    .res-box { background: #0a0f1d; padding: 6px; border-radius: 6px; text-align: center; border: 1px solid #1e2c40; position: relative; }
+    .res-box span.title { font-size: 0.75rem; color: #94a3b8; }
+    .res-box span.val { font-weight: bold; font-size: 1.05rem; color: #38bdf8; display: block; margin-top: 2px; }
+    .res-box span.rate { font-size: 0.65rem; display: block; margin-top: 1px; }
     
-    button { background: #2563eb; color: white; border: none; padding: 10px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.15s; font-size: 0.9rem; }
+    button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.1s; font-size: 0.85rem; }
     button:disabled { background: #334155; cursor: not-allowed; }
     button:hover:not(:disabled) { background: #1d4ed8; }
     
-    .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 2px solid #1e2c40; padding-bottom: 8px; flex-wrap: wrap; }
-    .tab-btn { background: transparent; color: #94a3b8; border: 1px solid transparent; font-size: 1rem; padding: 8px 12px; flex: 1; text-align: center; min-width: 80px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 2px solid #1e2c40; padding-bottom: 6px; flex-wrap: wrap; }
+    .tab-btn { background: transparent; color: #94a3b8; border: 1px solid transparent; font-size: 0.95rem; padding: 6px 10px; flex: 1; text-align: center; min-width: 75px; }
     .tab-btn.active { background: #1e2c40; color: #38bdf8; border: 1px solid #38bdf8; border-radius: 6px; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* 🌍 巨型地圖框 */
-    .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; box-shadow: 0 4px 15px rgba(0,0,0,0.6); width: 100%; height: 68vh; min-height: 480px; }
+    /* 🌍 巨型地圖框：手機佔用更大空間 */
+    .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; width: 100%; height: 68vh; min-height: 480px; }
     canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
     canvas:active { cursor: grabbing; }
     
-    .zoom-controls { position: absolute; bottom: 15px; right: 15px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
-    .zoom-btn { background: rgba(15, 23, 42, 0.85); border: 2px solid #38bdf8; color: #fff; width: 44px; height: 44px; border-radius: 8px; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+    .zoom-controls { position: absolute; bottom: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 5; }
+    .zoom-btn { background: rgba(15, 23, 42, 0.85); border: 2px solid #38bdf8; color: #fff; width: 40px; height: 40px; border-radius: 8px; font-size: 1.4rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
     
     .hud-tooltip { position: absolute; display: none; pointer-events: none; background: rgba(10, 15, 29, 0.95); border: 1px solid #38bdf8; padding: 8px 12px; border-radius: 6px; color: #f1f5f9; font-size: 0.85rem; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 10; white-space: nowrap; }
     .hud-tooltip h4 { color: #facc15; margin-bottom: 4px; font-size: 0.9rem; }
     
-    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 50; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); z-index: 50; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
     .action-modal { background: #131d2e; border: 2px solid #475569; border-radius: 12px; padding: 20px; text-align: center; width: 90%; max-width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,0.9); }
     .action-modal h3 { color: #f87171; margin-bottom: 12px; font-size: 1.2rem; }
     .action-modal p { color: #cbd5e1; font-size: 0.9rem; margin-bottom: 12px; line-height: 1.5; }
     .action-modal .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 15px; }
     
-    .troop-input-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: #0a0f1d; padding: 10px 12px; border-radius: 6px; border: 1px solid #1e2c40; font-size: 0.9rem; }
-    .troop-input-row input, .rename-input { width: 80px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; }
+    .troop-input-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40; font-size: 0.9rem; }
+    .troop-input-row input, .rename-input { width: 70px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; }
     .rename-input { width: 100%; text-align: left; margin-bottom: 15px; }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-    .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;}
     .item-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #3b82f6; }
     
-    .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #182333; }
+    .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.8rem; border: 1px solid #182333; }
     .log-box p { margin-bottom: 6px; border-bottom: 1px solid #0d1522; padding-bottom: 4px; line-height: 1.3; }
     
     .danger-border { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999; box-shadow: inset 0 0 25px 8px rgba(239, 68, 68, 0.8); animation: flashRed 1.2s infinite alternate; display: none; border: 2px solid #ef4444; }
@@ -84,38 +85,38 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2 id="player-title" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="card" style="padding-bottom: 8px;">
+      <h2 id="player-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
         <span style="font-size:1.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏰 連線中...</span>
-        <button onclick="openRenameModal()" style="background:#334155; padding:6px 10px; font-size:0.8rem;">✏️ 改名</button>
+        <button onclick="openRenameModal()" style="background:#334155; padding:5px 10px; font-size:0.75rem;">✏️ 改名</button>
       </h2>
       <div class="res-grid">
-        <div class="res-box">🌲 木材<span class="val" id="res-wood">0</span></div>
-        <div class="res-box">⛏️ 鐵礦<span class="val" id="res-iron">0</span></div>
-        <div class="res-box" style="border-color:#10b981;">🌾 糧草<span class="val" id="res-food">0</span><span class="rate" id="rate-food">+0/h</span></div>
-        <div class="res-box" style="border-color:#3b82f6;">🛡️ 步兵<span class="val" id="res-inf">0</span></div>
-        <div class="res-box" style="border-color:#8b5cf6;">🏹 弓兵<span class="val" id="res-arc">0</span></div>
-        <div class="res-box" style="border-color:#f59e0b;">🐎 騎兵<span class="val" id="res-cav">0</span></div>
-        <div class="res-box" style="border-color:#0ea5e9;">⏳ 加速<span class="val" id="res-speedup">0</span></div>
+        <div class="res-box"><span class="title">🌲 木材</span><span class="val" id="res-wood">0</span></div>
+        <div class="res-box"><span class="title">⛏️ 鐵礦</span><span class="val" id="res-iron">0</span></div>
+        <div class="res-box" style="border-color:#10b981;"><span class="title">🌾 糧草</span><span class="val" id="res-food">0</span><span class="rate" id="rate-food">+0/h</span></div>
+        <div class="res-box" style="border-color:#3b82f6;"><span class="title">🛡️ 步兵</span><span class="val" id="res-inf">0</span></div>
+        <div class="res-box" style="border-color:#8b5cf6;"><span class="title">🏹 弓兵</span><span class="val" id="res-arc">0</span></div>
+        <div class="res-box" style="border-color:#f59e0b;"><span class="title">🐎 騎兵</span><span class="val" id="res-cav">0</span></div>
+        <div class="res-box" style="border-color:#0ea5e9;"><span class="title">⏳ 加速</span><span class="val" id="res-speedup">0</span></div>
       </div>
-      <div id="queue-status" style="color: #f59e0b; font-size: 0.85rem; min-height: 18px; margin-top:4px;"></div>
+      <div id="queue-status" style="color: #f59e0b; font-size: 0.8rem; min-height: 18px; margin-top:2px;"></div>
     </div>
 
     <div class="tabs">
       <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 世界沙盤</button>
       <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 城內政務</button>
-      <button onclick="logoutUser()" style="background:#dc2626; margin-left:auto; padding:8px 12px; font-size:0.85rem;">🚪 登出</button>
+      <button onclick="logoutUser()" style="background:#dc2626; margin-left:auto; padding:6px 10px; font-size:0.8rem;">🚪 登出</button>
     </div>
 
     <div id="tab-world" class="tab-content active">
-      <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
-            🌍 戰略地圖
+      <div class="card" style="padding: 10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <h3 style="margin:0;">🗺️ 地圖</h3>
             <button id="btn-toggle-fog" onclick="toggleFogMode()" style="background:#7c3aed; padding:4px 8px; font-size:0.75rem; border-radius:4px;">👁️ 關閉迷霧</button>
-          </h3>
+          </div>
           <div style="display:flex; gap:6px;">
-            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候</button>
+            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候(30糧)</button>
             <button onclick="locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
         </div>
@@ -124,8 +125,9 @@
           <canvas id="worldCanvas"></canvas>
           
           <div class="zoom-controls">
-            <button class="zoom-btn" onclick="zoomMapBtn(1.2)">+</button>
-            <button class="zoom-btn" onclick="zoomMapBtn(0.8)">-</button>
+            <button class="zoom-btn" onclick="zoomMapBtn(1.3)">+</button>
+            <button class="zoom-btn" onclick="zoomMapBtn(0.7)">-</button>
+            <div style="text-align:center; color:#94a3b8; font-size:0.75rem; margin-top:2px;" id="zoom-indicator">100%</div>
           </div>
 
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
@@ -139,7 +141,7 @@
                 <div class="troop-input-row" id="row-inf"><span>🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span><input type="number" id="send-inf" min="0" value="0"></div>
                 <div class="troop-input-row" id="row-arc"><span>🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span><input type="number" id="send-arc" min="0" value="0"></div>
                 <div class="troop-input-row" id="row-cav"><span>🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span><input type="number" id="send-cav" min="0" value="0"></div>
-                <p id="troop-lock-msg" style="color:#ef4444; font-size:0.8rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
+                <p id="troop-lock-msg" style="color:#ef4444; font-size:0.75rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
               </div>
 
               <div class="btn-group">
@@ -171,7 +173,7 @@
     </div>
 
     <div class="card">
-      <h3>📜 王國日誌</h3>
+      <h3 style="margin-bottom: 6px;">📜 王國日誌</h3>
       <div class="log-box" id="log-list"></div>
     </div>
   </div>
@@ -195,15 +197,18 @@
     const db = getFirestore(app);
 
     let myUid = null, myData = null, allCastles = [], worldBoss = null, hasCentered = false;
-    let godModeFog = false; // 👁️ 上帝視角開關
+    let godModeFog = false; 
 
     const TILE_SIZE = 55, WORLD_COLS = 50, WORLD_ROWS = 50, BASE_VISION_RADIUS = 5;
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
     const MIN_ZOOM = 0.25, MAX_ZOOM = 2.0;
 
-    const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     
+    // 🚀 地圖快取矩陣 (解決 Lag 的關鍵)
+    let MAP_CACHE = [];
+    const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
+
     const CFG = {
       buildings: { 
         castle:   { name: '主城',   rate: 0,   baseW: 600, baseI: 600, baseTime: 120 },
@@ -223,67 +228,74 @@
       ]
     };
 
-    function getUpgradeCost(key, level) {
-      const multiplier = Math.pow(1.6, level); return { w: Math.floor(CFG.buildings[key].baseW * multiplier), i: Math.floor(CFG.buildings[key].baseI * multiplier) };
-    }
-    function getUpgradeTime(key, level) {
-      const base = CFG.buildings[key].baseTime || 60; return Math.floor(base * Math.pow(1.6, Math.max(0, level - 1)));
-    }
+    function getUpgradeCost(key, level) { const m = Math.pow(1.6, level); return { w: Math.floor(CFG.buildings[key].baseW * m), i: Math.floor(CFG.buildings[key].baseI * m) }; }
+    function getUpgradeTime(key, level) { const b = CFG.buildings[key].baseTime || 60; return Math.floor(b * Math.pow(1.6, Math.max(0, level - 1))); }
     function formatTime(sec) {
       if (sec < 60) return sec + 's';
       if (sec < 3600) return Math.floor(sec/60) + 'm' + (sec%60 > 0 ? ' '+(sec%60)+'s' : '');
       return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
     }
 
-    function getTileType(x, y) {
+    // ==========================================
+    // 地圖生成與快取 (僅在載入時執行一次)
+    // ==========================================
+    function getTileTypeRaw(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
-    // 💡 同心圓分佈與中心強制王城生成
-    function getTileEntity(x, y) {
-      if (allCastles.some(p => p.x === x && p.y === y)) return null;
-      if (worldBoss && worldBoss.x === x && worldBoss.y === y) return null;
-      if (getTileType(x, y) === 'water') return null;
-      
-      // 💡 絕對中心點 (25, 25) 固定生成黑暗王城
+    function getTileEntityRaw(x, y, type) {
       if (x === 25 && y === 25) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
-
-      const distToCenter = Math.hypot(x - 25, y - 25);
-      const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; 
-      const rand = v - Math.floor(v); 
+      if (type === 'water') return null;
+      const dist = Math.hypot(x - 25, y - 25);
+      const rand = (Math.sin(x * 45.123 + y * 89.456) * 98765.4321) % 1; 
       
-      // 1. 核心禁區 (距離 1~7)
-      if (distToCenter <= 7) {
-        if (rand < 0.15) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
-        if (rand < 0.25) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
+      if (dist <= 7) {
+        if (rand < 0.10) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
+        if (rand < 0.20) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
         return null;
       }
-      // 2. 中間激戰區 (距離 8~16)
-      if (distToCenter <= 16) {
+      if (dist <= 16) {
         if (rand < 0.02) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         if (rand < 0.08) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
         if (rand < 0.14) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
-        if (rand < 0.22) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
+        if (rand < 0.20) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
         return null;
       }
-      // 3. 外圍安逸區 (距離 17+)
       if (rand < 0.005) return { type: 'npc_castle', name: '🏰 黑暗前哨', reqPwr: 100, loot: { wood: 800, iron: 800, food: 800 } };
       if (rand < 0.040) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.100) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
-      if (rand < 0.130) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
+      if (rand < 0.090) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.120) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
       return null;
     }
 
+    function initMapCache() {
+      for(let x=0; x<WORLD_COLS; x++) {
+        MAP_CACHE[x] = [];
+        for(let y=0; y<WORLD_ROWS; y++) {
+          let t = getTileTypeRaw(x,y);
+          if (x===25 && y===25) t = 'plains'; // 王城必須在陸地
+          MAP_CACHE[x][y] = { type: t, entity: getTileEntityRaw(x,y,t) };
+        }
+      }
+    }
+    initMapCache();
+
     function getClearedPOI(x, y) {
+      if (!myData || !myData.clearedPOI) return null;
       const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
     async function spawnWorldBoss() {
+      let bx, by;
+      do {
+        bx = Math.floor(Math.random() * 14) + 18; 
+        by = Math.floor(Math.random() * 14) + 18;
+      } while(bx === 25 && by === 25); // 避開王城
       const b = CFG.bosses[Math.floor(Math.random() * CFG.bosses.length)];
       await setDoc(doc(db, "world_map", "WORLD_BOSS"), {
-        name: b.name, isBoss: true, x: Math.floor(Math.random()*40)+5, y: Math.floor(Math.random()*40)+5,
+        name: b.name, isBoss: true, x: bx, y: by,
         hp: b.hp, maxHp: b.hp, despawnAt: Date.now() + 6 * 3600 * 1000 
       });
     }
@@ -292,7 +304,7 @@
       godModeFog = !godModeFog;
       document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
       document.getElementById('btn-toggle-fog').style.background = godModeFog ? "#ef4444" : "#7c3aed";
-      updateFogOfWar(); drawWorldMap();
+      updateFogOfWar();
     };
 
     window.switchTab = (tabName) => {
@@ -322,11 +334,10 @@
         
         let d = null;
         if (!pSnap.exists()) {
-          // 強制降生在外圍 (距離中心 > 15)
+          // 強制降生在外圍 (距離中心 > 16)
           let startX, startY;
-          do {
-            startX = Math.floor(Math.random() * 38) + 6; startY = Math.floor(Math.random() * 38) + 6;
-          } while (Math.hypot(startX - 25, startY - 25) <= 15);
+          do { startX = Math.floor(Math.random() * 38) + 6; startY = Math.floor(Math.random() * 38) + 6; } 
+          while (Math.hypot(startX - 25, startY - 25) <= 16);
 
           d = {
             name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
@@ -357,16 +368,18 @@
             if (!hasCentered) { resizeCanvas(); centerCameraOn(myData.x, myData.y); hasCentered = true; }
             const isUnderAttack = myData.marches.some(m => m.type === 'defend_npc');
             document.getElementById('danger-overlay').style.display = isUnderAttack ? 'block' : 'none';
-            renderSelf(); drawWorldMap();
+            renderSelf(); 
           }
         });
 
         onSnapshot(doc(db, "world_map", "WORLD_BOSS"), (snap) => {
-          if (snap.exists()) { worldBoss = snap.data(); drawWorldMap(); } else spawnWorldBoss();
+          if (snap.exists()) { worldBoss = snap.data(); } else spawnWorldBoss();
         });
 
         await window.refreshMap();
-        setInterval(localTick, 1000); setInterval(drawWorldMap, 100); setInterval(window.refreshMap, 60000);
+        setInterval(localTick, 1000); 
+        requestAnimationFrame(renderLoop); // 🚀 啟動 60FPS 渲染循環
+        setInterval(window.refreshMap, 60000);
       } else {
         document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null;
       }
@@ -376,7 +389,7 @@
 
     function resizeCanvas() {
       const frame = document.getElementById('map-frame');
-      if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); drawWorldMap(); }
+      if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); }
     }
     window.addEventListener('resize', resizeCanvas);
 
@@ -401,13 +414,13 @@
     function centerCameraOn(tx, ty) {
       camX = (tx * TILE_SIZE + TILE_SIZE / 2) - (canvas.width / zoom) / 2;
       camY = (ty * TILE_SIZE + TILE_SIZE / 2) - (canvas.height / zoom) / 2;
-      clampCamera(); drawWorldMap();
+      clampCamera();
     }
 
     async function savePrivateData() { myData.lastTick = Date.now(); await setDoc(doc(db, "players", myUid), myData, { merge: true }); }
     window.refreshMap = async function() {
       const snap = await getDocs(collection(db, "world_map"));
-      allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) }); drawWorldMap();
+      allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) });
     };
 
     // ==========================================
@@ -458,10 +471,10 @@
         let nearestNPC = null, minDist = 15;
         for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
           for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
-            const ent = getTileEntity(tx, ty);
-            if (ent && (ent.type === 'npc_castle' || ent.type === 'npc_capital') && !getClearedPOI(tx, ty)) {
+            const cell = MAP_CACHE[tx][ty];
+            if (cell.ent && (cell.ent.type === 'npc_castle' || cell.ent.type === 'npc_capital') && !getClearedPOI(tx, ty)) {
               const dist = Math.hypot(tx - myData.x, ty - myData.y);
-              if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent}; }
+              if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.ent}; }
             }
           }
         }
@@ -472,7 +485,7 @@
             id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
             startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
           });
-          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${Math.ceil(timeMs/1000)} 秒抵達！`);
+          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
           needSave = true;
         }
       }
@@ -606,8 +619,13 @@
     }
 
     // ==========================================
-    // 🎨 渲染世界地圖 (全息動態畫布版)
+    // 🚀 60FPS 渲染循環 (極度流暢)
     // ==========================================
+    function renderLoop() {
+      drawWorldMap();
+      requestAnimationFrame(renderLoop);
+    }
+
     function drawWorldMap() {
       if (!myData) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -622,52 +640,65 @@
 
       for (let x = sC; x < eC; x++) {
         for (let y = sR; y < eR; y++) {
+          if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
           const px = x*TILE_SIZE, py = y*TILE_SIZE;
           if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
-          const type = getTileType(x, y);
-          if (type==='plains') { 
-            ctx.fillStyle='#1e3a1e'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle='#2d5a2d'; ctx.fillRect(px+10,py+15,3,6); ctx.fillRect(px+35,py+30,4,8);
+          const cell = MAP_CACHE[x][y];
+          const dist = Math.hypot(x-25, y-25);
+          const isCore = dist <= 7, isMid = dist > 7 && dist <= 16;
+
+          // 🗺️ 動態同心圓地貌顏色
+          if (cell.type === 'plains') { 
+            ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); 
+            ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+            ctx.fillStyle = isCore ? '#4c1d95' : (isMid ? '#78350f' : '#2d5a2d'); 
+            ctx.fillRect(px+10,py+15,3,6); ctx.fillRect(px+35,py+30,4,8);
           }
-          else if (type==='forest') { 
-            ctx.fillStyle='#142914'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle='#065f46'; ctx.beginPath(); ctx.arc(px+25,py+25,14,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#10b981'; ctx.beginPath(); ctx.arc(px+20,py+22,10,0,Math.PI*2); ctx.arc(px+36,py+30,8,0,Math.PI*2); ctx.fill(); 
+          else if (cell.type === 'forest') { 
+            ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#142914'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+            ctx.fillStyle = isCore ? '#312e81' : (isMid ? '#431407' : '#065f46'); ctx.beginPath(); ctx.arc(px+25,py+25,14,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = isCore ? '#4338ca' : (isMid ? '#7c2d12' : '#10b981'); ctx.beginPath(); ctx.arc(px+20,py+22,10,0,Math.PI*2); ctx.arc(px+36,py+30,8,0,Math.PI*2); ctx.fill(); 
           }
-          else if (type==='mountain') { 
-            ctx.fillStyle='#262626'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle='#52525b'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+5,py+48); ctx.lineTo(px+50,py+48); ctx.fill(); 
-            ctx.fillStyle='#d4d4d8'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+18,py+25); ctx.lineTo(px+36,py+25); ctx.fill(); 
+          else if (cell.type === 'mountain') { 
+            ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#262626'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+            ctx.fillStyle = '#52525b'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+5,py+48); ctx.lineTo(px+50,py+48); ctx.fill(); 
+            ctx.fillStyle = '#d4d4d8'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+18,py+25); ctx.lineTo(px+36,py+25); ctx.fill(); 
           }
           else { 
-            // 動態水波紋
             ctx.fillStyle='#1e3a8a'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle='#3b82f6';
-            const wave = Math.sin(t/500 + x + y) * 3;
-            ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
+            ctx.fillStyle='#3b82f6'; const wave = Math.sin(t/500 + x + y) * 3; ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
           }
           ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
-          const ent = getTileEntity(x, y);
-          if (ent) {
+          // 😈 實體繪製與區分
+          if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
             const clrInfo = getClearedPOI(x, y);
-            const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4; // 活著的野怪會浮動
+            const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
             
-            ctx.font = '24px sans-serif'; ctx.textAlign='center';
             if (clrInfo) {
-              ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+              ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
             } else {
-              // 特效光暈
-              if (ent.type === 'npc_capital') { ctx.shadowColor = '#d946ef'; ctx.shadowBlur = 15; }
-              else if (ent.type === 'relic') { ctx.shadowColor = '#0ea5e9'; ctx.shadowBlur = 10; }
-              else if (ent.type === 'npc_castle') { ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10; }
-              
-              ctx.fillText(ent.name.split(' ')[0], px+TILE_SIZE/2, py+35 + floatY);
-              ctx.shadowBlur = 0; // 重置光暈
+              if (cell.entity.type === 'npc_capital') {
+                ctx.fillStyle = '#4c1d95'; ctx.fillRect(px+2, py+2, TILE_SIZE-4, TILE_SIZE-4);
+                ctx.font = '32px sans-serif'; ctx.textAlign='center'; ctx.fillText('😈', px+TILE_SIZE/2, py+35+floatY);
+                ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('黑暗王城', px+TILE_SIZE/2, py+50);
+              } else if (cell.entity.type === 'npc_castle') {
+                ctx.fillStyle = '#3b0764'; ctx.fillRect(px+10, py+10, 35, 35);
+                ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
+                ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+45);
+              } else if (cell.entity.type === 'barbarian') {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
+                ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
+              } else if (cell.entity.type === 'bandit') {
+                ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
+                ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
+              } else if (cell.entity.type === 'relic') {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+                ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+              }
             }
           }
-          // 迷霧遮罩 (如果上帝視角開啟則不畫)
           if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.75)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
         }
       }
@@ -676,9 +707,7 @@
         const bx = worldBoss.x*TILE_SIZE, by = worldBoss.y*TILE_SIZE;
         if (godModeFog || Math.hypot(worldBoss.x-myData.x, worldBoss.y-myData.y) <= radius) {
           const bounce = Math.sin(t/200)*5;
-          ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 20;
-          ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText(worldBoss.name.split(' ')[0], bx+TILE_SIZE/2, by+40+bounce);
-          ctx.shadowBlur = 0;
+          ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
           ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(worldBoss.hp/worldBoss.maxHp), 6);
           ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
         }
@@ -692,7 +721,6 @@
 
         if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
         
-        // 🏰 立體化主城外觀
         const cLv = p.castleLevel || 1;
         if (cLv < 3) {
           ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.beginPath(); ctx.moveTo(px+27,py+16); ctx.lineTo(px+12,py+40); ctx.lineTo(px+42,py+40); ctx.fill();
@@ -744,7 +772,7 @@
     }
 
     // ==========================================
-    // 實體按鈕縮放與雙指觸控
+    // 實體按鈕縮放與觸控
     // ==========================================
     window.zoomMapBtn = (factor) => {
       const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
@@ -752,7 +780,7 @@
         const cx = canvas.width / 2, cy = canvas.height / 2;
         const wX = cx / zoom + camX, wY = cy / zoom + camY;
         zoom = nZ; camX = wX - cx / zoom; camY = wY - cy / zoom; clampCamera();
-        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; drawWorldMap();
+        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
       }
     };
 
@@ -781,7 +809,7 @@
         const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, initialZoom * (dist / initialPinchDist)));
         if (nZ !== zoom) {
           zoom = nZ; camX = pinchCenter.wX - pinchCenter.x / zoom; camY = pinchCenter.wY - pinchCenter.y / zoom;
-          clampCamera(); document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; drawWorldMap();
+          clampCamera(); document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
         }
         return;
       }
@@ -789,7 +817,7 @@
       e.preventDefault();
       const cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
       const dx = cx - dragSX, dy = cy - dragSY; dragDist += Math.hypot(dx,dy);
-      dragSX = cx; dragSY = cy; camX -= dx/zoom; camY -= dy/zoom; clampCamera(); drawWorldMap();
+      dragSX = cx; dragSY = cy; camX -= dx/zoom; camY -= dy/zoom; clampCamera(); 
     }
 
     function handleUp(e) { 
@@ -814,7 +842,7 @@
       const sX = (cx - r.left) * (canvas.width / r.width), sY = (cy - r.top) * (canvas.height / r.height);
       const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
       
-      const tC = allCastles.find(p=>p.x===tX&&p.y===tY), ent = getTileEntity(tX,tY), dist = Math.hypot(tX-myData.x, tY-myData.y);
+      const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
 
       if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
 
@@ -828,13 +856,14 @@
         document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; document.getElementById("modal-desc").innerHTML = `目標：【${worldBoss.name}】<br>根據造成傷害獲取資源與加速道具！`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
-      else if (ent && !getClearedPOI(tX,tY)) {
+      else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
+        const ent = cell.entity;
         targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist };
-        document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 奇蹟探險`:(ent.type==='npc_capital'?`😈 攻略王城`:(ent.type==='npc_castle'?`⚔️ 攻堅要塞`:`⚔️ 討伐敵陣`));
+        document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 奇蹟探險`:(ent.type==='npc_capital'?`😈 攻略王城`:(ent.type==='npc_castle'?`🏰 攻堅要塞`:`⚔️ 討伐敵陣`));
         document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要一定兵力強度。`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
-      else if (!tC && getTileType(tX,tY) !== 'water') {
+      else if (!tC && getTileTypeRaw(tX,tY) !== 'water') {
         const moveCost = Math.max(100, Math.ceil(dist * 50));
         targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
         document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
@@ -864,7 +893,7 @@
         myData.x = targetAction.x; myData.y = targetAction.y;
         myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
         savePrivateData(); setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });
-        closeActionModal(); updateFogOfWar(); drawWorldMap(); centerCameraOn(myData.x, myData.y); renderSelf(); return;
+        closeActionModal(); updateFogOfWar(); centerCameraOn(myData.x, myData.y); renderSelf(); return;
       }
 
       const sendInf = document.getElementById('row-inf').style.display==='none' ? 0 : (parseInt(document.getElementById('send-inf').value)||0);
@@ -890,11 +919,11 @@
 
       myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
       savePrivateData(); setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
-      closeActionModal(); drawWorldMap(); renderSelf();
+      closeActionModal(); renderSelf();
     });
 
     // ==========================================
-    // 渲染 UI (淨糧草與建築時間)
+    // 渲染 UI
     // ==========================================
     function renderSelf() {
       document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:6px 10px; font-size:0.8rem;">✏️ 改名</button>`;
@@ -923,7 +952,7 @@
       const bLvl = myData.buildings.barracks || 1;
       tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
         if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.1rem;">🔒 未解鎖</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需 兵營 Lv.${d.reqLvl}</div></div><button style="width:100%; background:#475569; margin-top:auto;" disabled>未解鎖</button></div>`;
-        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>維持: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button></div>`;
+        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>行軍: ${d.speed}s/格 | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button></div>`;
       }).join('');
 
       let qMsg = []; const now = Date.now();
@@ -942,14 +971,14 @@
       if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
       else if (myData.items.renameCard > 0) myData.items.renameCard--; else return alert('需要改名卡！');
       myData.name = newName; await savePrivateData(); await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
-      alert("✅ 名稱已更改！"); closeRenameModal(); renderSelf(); drawWorldMap();
+      alert("✅ 名稱已更改！"); closeRenameModal(); renderSelf();
     };
 
     window.locateHome = () => { if (myData) { centerCameraOn(myData.x, myData.y); switchTab('world'); }};
     window.dispatchScout = () => {
       if (!myData) return; if (myData.food < 30) return alert('糧食不足 30！');
-      myData.food -= 30; currentVisionBonus += 3; updateFogOfWar(); drawWorldMap(); savePrivateData();
-      setTimeout(() => { currentVisionBonus = Math.max(0, currentVisionBonus-3); drawWorldMap(); }, 30000);
+      myData.food -= 30; currentVisionBonus += 3; updateFogOfWar(); savePrivateData();
+      setTimeout(() => { currentVisionBonus = Math.max(0, currentVisionBonus-3); }, 30000);
     };
     
     window.upgradeBuilding = async (key) => {
