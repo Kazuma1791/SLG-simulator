@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 史詩貼圖材質版</title>
+  <title>多人領地戰 - 一鍵全圖與防護版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -134,7 +134,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
           <button id="btn-toggle-fog" onclick="toggleFogMode()" style="background:#7c3aed; padding:6px 8px; font-size:0.75rem; border-radius:4px;">👁️ 關閉迷霧</button>
           <div style="display:flex; gap:6px;">
-            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候(30糧)</button>
+            <button onclick="viewFullMap()" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem;">🗺️ 全圖</button>
             <button onclick="locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
         </div>
@@ -148,7 +148,7 @@
           </div>
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
 
-          <!-- 軍事行動彈窗 -->
+          <!-- 軍事行動彈窗 (輸入框自動清零) -->
           <div id="action-modal" class="modal-overlay">
             <div class="action-modal">
               <h3 id="modal-title">⚔️ 軍事行動</h3>
@@ -187,7 +187,7 @@
       </div>
 
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
         <div class="grid" id="research-container"></div>
       </div>
 
@@ -209,7 +209,7 @@
         <div id="radar-boss-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
 
         <h4 style="margin-top: 16px; color:#38bdf8; font-size:0.95rem;">👥 附近的玩家勢力 (最近 5 位)</h4>
-        <div id="radar-players-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
+        <div id="radar-players-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
 
@@ -257,6 +257,7 @@
           <button onclick="gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
         </div>
 
+        <!-- GM 全服天眼 -->
         <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px;">🌐 全服領主監控 (GM專屬)</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
@@ -290,21 +291,23 @@
     let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
     let godModeFog = false, isAdmin = false; 
 
-    // 💡 巨型地圖 100x100
+    // 💡 巨型地圖 100x100，解鎖更小縮放比例以看全圖
     const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
     const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
-    const MIN_ZOOM = 0.20, MAX_ZOOM = 2.0;
+    const MIN_ZOOM = 0.05, MAX_ZOOM = 2.0; // 💡 修改：0.05 允許縮放到極小看全圖
 
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     let MAP_CACHE = [];
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
-    // 🖼️ 載入外部地圖圖片
-    const bgImage = new Image();
-    bgImage.src = 'map_bg.png'; // 💡 請將您上傳的圖片儲存為同資料夾下的 map_bg.png (或 map_bg.jpg，請對應修改附檔名)
-    let isBgLoaded = false;
-    bgImage.onload = () => { isBgLoaded = true; };
+    // 🖼️ 載入外部材質圖片
+    const imgMapBg = new Image(); imgMapBg.src = 'map_bg.png';
+    let isBgLoaded = false; imgMapBg.onload = () => { isBgLoaded = true; };
+
+    const imgCastle = new Image(); imgCastle.src = 'castle.png';
+    const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
+    const imgBoss = new Image(); imgBoss.src = 'boss.png';
 
     const CFG = {
       buildings: { 
@@ -353,7 +356,6 @@
       return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
     }
 
-    // 💡 為了配合圖片地圖，所有地形統一視為平原，取消空氣牆
     function getTileTypeRaw(x, y) { return 'plains'; }
 
     function getStaticEntity(x, y, type) {
@@ -453,6 +455,15 @@
       await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, despawnAt: Date.now() + 6 * 3600 * 1000 });
     }
 
+    // 💡 一鍵觀看全圖功能
+    window.viewFullMap = () => {
+        zoom = Math.max(MIN_ZOOM, Math.min(canvas.width / (WORLD_COLS * TILE_SIZE), canvas.height / (WORLD_ROWS * TILE_SIZE)));
+        camX = (WORLD_COLS * TILE_SIZE) / 2 - (canvas.width / zoom) / 2;
+        camY = (WORLD_ROWS * TILE_SIZE) / 2 - (canvas.height / zoom) / 2;
+        clampCamera();
+        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
+    };
+
     window.toggleFogMode = () => {
       godModeFog = !godModeFog; document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
       document.getElementById('btn-toggle-fog').style.background = godModeFog ? "#ef4444" : "#7c3aed"; updateFogOfWar();
@@ -551,7 +562,7 @@
     window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
     // ==========================================
-    // 👑 GM 專屬功能
+    // 👑 GM 專屬功能 (Admin API)
     // ==========================================
     window.gmAddRes = async (type, amount) => {
       if (!isAdmin) return;
@@ -757,6 +768,7 @@
          if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
       });
 
+      // 💡 NPC 入侵邏輯
       if (Math.random() < 0.005) {
         if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
           let nearestNPC = null, minDist = 15;
@@ -840,7 +852,7 @@
         let dLog = "";
         if (bKeys.length > 0) {
           const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; myData.buildings[rKey]--;
-          dLog = `，【${CFG.buildings[rKey].name}】遭破壞降級！`;
+          dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
           if (rKey === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
         }
         myData.logs.unshift(`[城防潰敗] ${m.npcName} 攻破防線！被掠奪資源${dLog}`);
@@ -937,7 +949,7 @@
     }
 
     // ==========================================
-    // 🎨 渲染世界地圖 (使用貼圖技術)
+    // 🎨 渲染世界地圖 (貼圖渲染)
     // ==========================================
     function renderLoop() {
       if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -956,12 +968,11 @@
       
       const t = Date.now();
 
-      // 1. 繪製全境背景圖 (若載入完成)
+      // 繪製背景底圖
       if (isBgLoaded) {
-          ctx.drawImage(bgImage, 0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
+          ctx.drawImage(imgMapBg, 0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
       } else {
-          ctx.fillStyle = '#423724'; // Fallback
-          ctx.fillRect(0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
+          ctx.fillStyle = '#423724'; ctx.fillRect(0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
       }
 
       for (let x = sC; x < eC; x++) {
@@ -980,22 +991,15 @@
             if (clrInfo) {
               ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
             } else {
-              if (cell.entity.type === 'npc_capital') {
-                ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+2, py+2, TILE_SIZE-4, TILE_SIZE-4);
-                ctx.font = '32px sans-serif'; ctx.textAlign='center'; ctx.fillText('😈', px+TILE_SIZE/2, py+35+floatY);
-                ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('黑暗王城', px+TILE_SIZE/2, py+50);
-              } else if (cell.entity.type === 'npc_fortress') {
-                ctx.fillStyle = 'rgba(63, 0, 15, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+32+floatY);
-                ctx.fillStyle = '#f43f5e'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+45);
-              } else if (cell.entity.type === 'npc_castle') {
-                ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
-                ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
-                ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
-              } else if (cell.entity.type === 'npc_outpost') {
-                ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
-                ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏚️', px+TILE_SIZE/2, py+32+floatY);
-                ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
+              if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_fortress' || cell.entity.type === 'npc_castle' || cell.entity.type === 'npc_outpost') {
+                  if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
+                      ctx.drawImage(imgDarkCastle, px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  } else {
+                      ctx.fillStyle = cell.entity.type === 'npc_capital' ? 'rgba(76, 29, 149, 0.6)' : 'rgba(59, 7, 100, 0.6)';
+                      ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                      ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+35+floatY);
+                  }
+                  ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
               } else if (cell.entity.type === 'barbarian') {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
                 ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
@@ -1017,7 +1021,11 @@
             const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
             if (godModeFog || Math.hypot(boss.x-myData.x, boss.y-myData.y) <= radius) {
                const bounce = Math.sin(t/200)*5;
-               ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText(boss.name.split(' ')[0], bx+TILE_SIZE/2, by+40+bounce);
+               if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
+                   ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
+               } else {
+                   ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
+               }
                ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
                ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
             }
@@ -1039,23 +1047,13 @@
 
         if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
         
-        const cLv = p.castleLevel || 1;
-        if (cLv < 3) {
-          ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.beginPath(); ctx.moveTo(px+27,py+16); ctx.lineTo(px+12,py+40); ctx.lineTo(px+42,py+40); ctx.fill();
-          ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.moveTo(px+27,py+26); ctx.lineTo(px+22,py+40); ctx.lineTo(px+32,py+40); ctx.fill();
-        } else if (cLv < 5) {
-          ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
-          ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
-          ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
+        if (imgCastle.complete && imgCastle.naturalHeight !== 0) {
+            ctx.drawImage(imgCastle, px, py, TILE_SIZE, TILE_SIZE);
         } else {
-          ctx.fillStyle = isMe?'#1e3a8a':'#7f1d1d'; ctx.fillRect(px+10,py+24,35,18);
-          ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+17,py+8,21,34);
-          ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+6,py+16,12,26); ctx.fillRect(px+37,py+16,12,26);
-          ctx.fillStyle = '#facc15'; ctx.fillRect(px+15,py+8,25,4); 
-          ctx.beginPath(); ctx.moveTo(px+12,py+16); ctx.lineTo(px+6,py+22); ctx.lineTo(px+18,py+22); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(px+43,py+16); ctx.lineTo(px+37,py+22); ctx.lineTo(px+49,py+22); ctx.fill();
-          ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
-          ctx.fillStyle = '#f8fafc'; ctx.fillRect(px+27,py+2,2,6); ctx.fillStyle = isMe?'#60a5fa':'#ef4444'; ctx.fillRect(px+29,py+2,6,4);
+            // 備用色塊城堡
+            ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
+            ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
         }
 
         if (zoom>0.5) {
@@ -1294,7 +1292,6 @@
           const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
           const netFood = farmProdPerSec - upkeepPerHr;
 
-          // 使用 formatCompact 壓縮顯示數字
           if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = formatCompact(myData.wood); 
           if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${formatCompact(woodProdPerHr)}/h`;
           if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = formatCompact(myData.iron); 
