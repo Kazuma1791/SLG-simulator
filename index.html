@@ -3,17 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 完美營運與拉桿操作版</title>
+  <title>多人領地戰 - 終極營運版 (防外掛+自訂GM+滑順拉桿)</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* 微調三階加速按鈕與滑桿的排版 */
+    /* 微調三階加速按鈕的排版 */
     .speed-btn-group { display: flex; gap: 4px; margin-top: 8px; }
     .speed-btn-group button { flex: 1; padding: 6px 2px; font-size: 0.75rem; border-radius: 4px; }
     
-    /* 派兵拉桿美化 */
-    input[type=range] { -webkit-appearance: none; background: #1e2c40; height: 6px; border-radius: 3px; outline: none; margin-top: 8px; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #38bdf8; cursor: pointer; }
-    input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #38bdf8; cursor: pointer; border: none; }
+    /* 🎚️ 完美支援手機拖曳的派兵拉桿樣式 */
+    .troop-slider {
+      -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px;
+      background: #334155; outline: none; margin-top: 14px; margin-bottom: 4px;
+    }
+    .troop-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; width: 24px; height: 24px;
+      border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
+    .troop-slider::-moz-range-thumb {
+      width: 24px; height: 24px; border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    }
+    .troop-input-row { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 8px; background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1e2c40; font-size: 0.9rem; }
+    .troop-input-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+    .troop-input-row input[type="number"], .rename-input { width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -28,6 +39,59 @@
       <button onclick="window.logoutUser()" style="margin-top: 30px; background: #475569; padding: 12px 24px; font-size: 1.1rem;">登出帳號</button>
   </div>
 
+  <!-- 改名彈窗 -->
+  <div id="rename-modal" class="modal-overlay">
+    <div class="action-modal">
+      <h3 style="color:#38bdf8;">✏️ 更改名稱</h3>
+      <p id="rename-desc">首次改名免費，之後需消耗改名卡。</p>
+      <input type="text" id="rename-input" class="rename-input" placeholder="輸入新名稱 (2-8字)">
+      <div class="btn-group">
+        <button style="background: #475569; flex: 1;" onclick="window.closeRenameModal()">取消</button>
+        <button style="background: #0ea5e9; flex: 1;" onclick="window.confirmRename()">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⚔️ 軍事行動彈窗 (移出地圖區域，避免拉桿被干擾) -->
+  <div id="action-modal" class="modal-overlay">
+    <div class="action-modal">
+      <h3 id="modal-title">⚔️ 軍事行動</h3>
+      <p id="modal-desc" style="border-bottom: 1px solid #334155; padding-bottom: 10px;"></p>
+      <div id="troop-selector" style="text-align: left; margin-top: 10px; display: none;">
+        
+        <div class="troop-input-row" id="row-inf">
+          <div class="troop-input-header">
+            <span>🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span>
+            <input type="number" id="send-inf" min="0" value="0" oninput="window.syncTroop('inf', 'input')">
+          </div>
+          <input type="range" id="slider-inf" min="0" value="0" class="troop-slider" oninput="window.syncTroop('inf', 'slider')">
+        </div>
+        
+        <div class="troop-input-row" id="row-arc">
+          <div class="troop-input-header">
+            <span>🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span>
+            <input type="number" id="send-arc" min="0" value="0" oninput="window.syncTroop('arc', 'input')">
+          </div>
+          <input type="range" id="slider-arc" min="0" value="0" class="troop-slider" oninput="window.syncTroop('arc', 'slider')">
+        </div>
+
+        <div class="troop-input-row" id="row-cav">
+          <div class="troop-input-header">
+            <span>🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span>
+            <input type="number" id="send-cav" min="0" value="0" oninput="window.syncTroop('cav', 'input')">
+          </div>
+          <input type="range" id="slider-cav" min="0" value="0" class="troop-slider" oninput="window.syncTroop('cav', 'slider')">
+        </div>
+
+        <p id="troop-lock-msg" style="color:#ef4444; font-size:0.75rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
+      </div>
+      <div class="btn-group">
+        <button style="background: #475569; flex: 1;" onclick="window.closeActionModal()">取消</button>
+        <button id="btn-confirm-action" style="background: #dc2626; flex: 1;">確認執行</button>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <!-- 登入面板 -->
     <div id="login-panel" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 11, 20, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center;">
@@ -37,19 +101,6 @@
         <input type="password" id="password-input" placeholder="密碼 (至少6碼)" style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 4px; border: none; background: #0a0f1d; color: white;">
         <button onclick="window.loginUser()" style="width: 100%; background: #2563eb; margin-bottom: 10px;">登入遊戲</button>
         <button onclick="window.registerUser()" style="width: 100%; background: #059669;">註冊新帳號</button>
-      </div>
-    </div>
-
-    <!-- 改名彈窗 -->
-    <div id="rename-modal" class="modal-overlay">
-      <div class="action-modal">
-        <h3 style="color:#38bdf8;">✏️️ 更改名稱</h3>
-        <p id="rename-desc">首次改名免費，之後需消耗改名卡。</p>
-        <input type="text" id="rename-input" class="rename-input" placeholder="輸入新名稱 (2-8字)">
-        <div class="btn-group">
-          <button style="background: #475569; flex: 1;" onclick="window.closeRenameModal()">取消</button>
-          <button style="background: #0ea5e9; flex: 1;" onclick="window.confirmRename()">確認</button>
-        </div>
       </div>
     </div>
 
@@ -98,50 +149,6 @@
             <div style="text-align:center; color:#94a3b8; font-size:0.75rem; margin-top:2px;" id="zoom-indicator">100%</div>
           </div>
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
-
-          <!-- 軍事行動彈窗 (加入直覺拉桿) -->
-          <div id="action-modal" class="modal-overlay">
-            <div class="action-modal">
-              <h3 id="modal-title">⚔️ 軍事行動</h3>
-              <p id="modal-desc" style="border-bottom: 1px solid #334155; padding-bottom: 10px;"></p>
-              
-              <div id="troop-selector" style="text-align: left; margin-top: 10px; display: none;">
-                <!-- 🛡️ 步兵拉桿 -->
-                <div id="row-inf" style="margin-bottom: 12px; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.9rem;">🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span>
-                        <input type="number" id="send-inf" min="0" value="0" style="width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 4px; border-radius: 4px; text-align: right;" oninput="document.getElementById('slider-inf').value = this.value || 0">
-                    </div>
-                    <input type="range" id="slider-inf" min="0" max="0" value="0" style="width: 100%; margin-top: 10px;" oninput="document.getElementById('send-inf').value = this.value">
-                </div>
-                
-                <!-- 🏹 弓兵拉桿 -->
-                <div id="row-arc" style="margin-bottom: 12px; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.9rem;">🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span>
-                        <input type="number" id="send-arc" min="0" value="0" style="width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 4px; border-radius: 4px; text-align: right;" oninput="document.getElementById('slider-arc').value = this.value || 0">
-                    </div>
-                    <input type="range" id="slider-arc" min="0" max="0" value="0" style="width: 100%; margin-top: 10px;" oninput="document.getElementById('send-arc').value = this.value">
-                </div>
-
-                <!-- 🐎 騎兵拉桿 -->
-                <div id="row-cav" style="margin-bottom: 12px; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.9rem;">🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span>
-                        <input type="number" id="send-cav" min="0" value="0" style="width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 4px; border-radius: 4px; text-align: right;" oninput="document.getElementById('slider-cav').value = this.value || 0">
-                    </div>
-                    <input type="range" id="slider-cav" min="0" max="0" value="0" style="width: 100%; margin-top: 10px;" oninput="document.getElementById('send-cav').value = this.value">
-                </div>
-                
-                <p id="troop-lock-msg" style="color:#ef4444; font-size:0.75rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
-              </div>
-
-              <div class="btn-group">
-                <button style="background: #475569; flex: 1;" onclick="window.closeActionModal()">取消</button>
-                <button id="btn-confirm-action" style="background: #dc2626; flex: 1;">確認執行</button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -192,12 +199,6 @@
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主戰略背包</h3>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">📦</div>
-            <strong style="font-size:0.95rem;">物資箱</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-resource" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.useResourceCard()" style="background:#f59e0b; margin-top:auto; width:100%;">開啟</button>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
             <div style="font-size:2rem; margin-bottom:4px;">🛡️</div>
             <strong style="font-size:0.95rem;">護盾 (6h)</strong>
             <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span>
@@ -217,6 +218,12 @@
             <div style="font-size:2rem; margin-bottom:4px;">⏱️</div>
             <strong style="font-size:0.95rem;">1小時加速卡</strong>
             <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed1h" style="color:#fff; font-weight:bold;">0</span></span>
+          </div>
+          <div class="item-card" style="justify-content:center; text-align:center;">
+            <div style="font-size:2rem; margin-bottom:4px;">📦</div>
+            <strong style="font-size:0.95rem;">軍用物資卡</strong>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-resource" style="color:#fff; font-weight:bold;">0</span></span>
+            <button onclick="window.useResourceCard()" style="background:#0ea5e9; margin-top:auto; width:100%;">開啟</button>
           </div>
           <div class="item-card" style="justify-content:center; text-align:center;">
             <div style="font-size:2rem; margin-bottom:4px;">✏️</div>
@@ -244,13 +251,13 @@
         <!-- 🛡️ 帳號查緝與封鎖 -->
         <h4 style="color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">👁️ 帳號查緝與安全操作</h4>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
-          <button onclick="window.gmAuditPlayer()" style="background:#d946ef; flex:2;">📊 審計該玩家 (檢查外掛/修改紀錄)</button>
+          <button onclick="window.gmAuditPlayer()" style="background:#d946ef; flex:2;">📊 審計該玩家 (檢查外掛紀錄)</button>
           <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解封</button>
           <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 封鎖</button>
         </div>
 
-        <!-- ✏️ 自訂數值修改器 (新增贈送與覆寫) -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚙️ 道具發放與數值寫入器</h4>
+        <!-- ✏️ 自訂數值修改器 -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚙️ 自訂數據寫入器</h4>
         <div style="display:flex; gap:6px; margin-top:8px;">
           <select id="gm-custom-field" style="background:#1e2c40; color:white; padding:8px; border-radius:4px; flex:1;">
              <option value="wood">資源 - 木材</option>
@@ -263,19 +270,14 @@
              <option value="speedup30m">道具 - 30分加速卡</option>
              <option value="speedup1h">道具 - 1小時加速卡</option>
              <option value="shieldCard">道具 - 和平護盾</option>
-             <option value="resourceCard">道具 - 綜合資源箱</option>
-             <option value="renameCard">道具 - 改名卡</option>
              <option value="castleLevel">建築 - 主城等級(慎用)</option>
           </select>
-          <input type="number" id="gm-custom-amount" placeholder="數量" style="width:80px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
-        </div>
-        <div style="display:flex; gap:6px; margin-top:6px;">
-          <button onclick="window.gmExecuteCustom('add')" style="background:#10b981; flex:1;">🎁 贈送 (累加)</button>
-          <button onclick="window.gmExecuteCustom('set')" style="background:#ef4444; flex:1;">✏️ 覆寫 (強制修改)</button>
+          <input type="number" id="gm-custom-amount" placeholder="輸入數量" style="width:100px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
+          <button onclick="window.gmExecuteCustom()" style="background:#8b5cf6; padding:8px 12px;">確認寫入</button>
         </div>
 
         <!-- 快速功能 -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚡ 全服伺服器快速操作</h4>
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚡ 伺服器快速操作</h4>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
           <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置地圖所有 Boss</button>
           <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成全伺服器隊列</button>
