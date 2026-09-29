@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 巨型世界與戰略冷卻版</title>
+  <title>多人領地戰 - 史詩首領與經濟修復版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -85,6 +85,7 @@
       </div>
     </div>
 
+    <!-- 資源面板 -->
     <div class="card" style="padding-bottom: 8px;">
       <h2 id="player-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
         <span style="font-size:1.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏰 連線中...</span>
@@ -159,7 +160,7 @@
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>⚒️ 基礎設施營造 <span style="font-size:0.8rem; color:#94a3b8;" id="build-queue-text">(0/1)</span></span>
-          <button onclick="useSpeedUp('build')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
+          <button onclick="useSpeedUp('build')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速</button>
         </h3>
         <div class="grid" id="building-container"></div>
       </div>
@@ -167,7 +168,7 @@
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>🧪 軍事學院 (科技研發)</span>
-          <button onclick="useSpeedUp('research')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
+          <button onclick="useSpeedUp('research')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速</button>
         </h3>
         <div class="grid" id="research-container"></div>
       </div>
@@ -175,7 +176,7 @@
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>⚔️ 軍事招募所</span>
-          <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
+          <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速</button>
         </h3>
         <div class="grid" id="train-container"></div>
       </div>
@@ -217,13 +218,13 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    let myUid = null, myData = null, allCastles = [], worldBoss = null, hasCentered = false;
+    let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
     let godModeFog = false; 
-    let isAdmin = false; // 管理員特權判定
+    let isAdmin = false; 
 
-    // 💡 巨型地圖 100x100 (10000格)
+    // 💡 巨型地圖 100x100
     const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
-    const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; // 💡 12 小時冷卻
+    const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
     const MIN_ZOOM = 0.20, MAX_ZOOM = 2.0;
 
@@ -231,7 +232,6 @@
     let MAP_CACHE = [];
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
-    // 💡 建築配置與科技研發樹
     const CFG = {
       buildings: { 
         castle:   { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 120, maxLevel: 99 },
@@ -251,11 +251,7 @@
         infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
         archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 8, reqLvl: 3, upkeep: 25 },
         cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 12, reqLvl: 5, upkeep: 45 }
-      },
-      bosses: [
-        { name: '🐉 滅世魔龍', hp: 50000 }, { name: '🦅 風暴巨鷹', hp: 40000 },
-        { name: '🦑 深海巨妖', hp: 60000 }, { name: '🗿 大地岩魔', hp: 80000 }
-      ]
+      }
     };
 
     function getUpgradeCost(key, level, isTech=false) { const base = isTech ? CFG.techs[key] : CFG.buildings[key]; const m = Math.pow(1.6, level); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; }
@@ -271,31 +267,30 @@
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
+    // 💡 超級有吸引力的靜態 NPC 戰利品
     function getStaticEntity(x, y, type) {
-      // 💡 絕對中心點更改為 50, 50
-      if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
+      if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10, resourceCard: 2 } };
       if (type === 'water') return null;
       
       const dist = Math.hypot(x - 50, y - 50);
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
       
-      // 💡 按比例放大的生態分佈
       if (dist <= 14) {
-        if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 3000, iron: 3000, food: 3000 } };
-        if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
+        if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 3, resourceCard: 1 } };
+        if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000, food: 1500 } };
         if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         return null;
       }
       if (dist <= 32) {
-        if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
-        if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
+        if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 200, loot: { wood: 4000, iron: 4000, food: 4000, speedup: 1 } };
+        if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400, food: 600 } };
         if (rand < 0.070) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
-        if (rand < 0.110) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
+        if (rand < 0.110) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300, iron: 150 } };
         return null;
       }
-      if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 80, loot: { wood: 800, iron: 800, food: 800 } };
-      if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.055) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 80, loot: { wood: 1500, iron: 1500, food: 1500 } };
+      if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100, food: 200 } };
+      if (rand < 0.055) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80, iron: 50 } };
       if (rand < 0.075) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
       return null;
     }
@@ -315,7 +310,7 @@
     function getTileEntity(x, y) {
       if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
       if (allCastles.some(p => p.x === x && p.y === y)) return null;
-      if (worldBoss && worldBoss.hp > 0 && worldBoss.x === x && worldBoss.y === y) return null;
+      if (worldBosses.some(b => b.hp > 0 && b.x === x && b.y === y)) return null;
       return MAP_CACHE[x][y].entity;
     }
 
@@ -325,10 +320,20 @@
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
-    async function spawnWorldBoss() {
-      let bx, by; do { bx = Math.floor(Math.random() * 30) + 35; by = Math.floor(Math.random() * 30) + 35; } while(bx === 50 && by === 50); 
-      const b = CFG.bosses[Math.floor(Math.random() * CFG.bosses.length)];
-      await setDoc(doc(db, "world_map", "WORLD_BOSS"), { name: b.name, isBoss: true, x: bx, y: by, hp: b.hp, maxHp: b.hp, despawnAt: Date.now() + 6 * 3600 * 1000 });
+    // 💡 3 隻分區世界 Boss 系統
+    async function spawnWorldBoss(id) {
+      let bx, by, bName, bHp, mult;
+      if (id === 'BOSS_CORE') {
+        do { bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6); } while(bx===50&&by===50);
+        bName = '🐉 滅世魔龍'; bHp = 200000; mult = 10;
+      } else if (id === 'BOSS_MID') {
+        do { bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20); } while(Math.hypot(bx-50, by-50) < 15);
+        bName = '🦑 深海巨妖'; bHp = 80000; mult = 5;
+      } else {
+        do { bx=Math.floor(Math.random()*80+10); by=Math.floor(Math.random()*80+10); } while(Math.hypot(bx-50, by-50) <= 35);
+        bName = '🗿 大地岩魔'; bHp = 30000; mult = 2;
+      }
+      await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, despawnAt: Date.now() + 6 * 3600 * 1000 });
     }
 
     window.toggleFogMode = () => {
@@ -363,7 +368,6 @@
         
         let d = null;
         if (!pSnap.exists()) {
-          // 強制降生在外圍 (距離中心 50,50 > 32 格)
           let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
           d = {
             name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
@@ -376,6 +380,11 @@
           await setDoc(playerRef, d);
         } else {
           d = pSnap.data();
+          // 💡 鐵礦 NaN 終極修復防護網
+          if (isNaN(d.wood) || d.wood === null) d.wood = 200;
+          if (isNaN(d.iron) || d.iron === null) d.iron = 200;
+          if (isNaN(d.food) || d.food === null) d.food = 200;
+          
           if (typeof d.troops === 'number') d.troops = { infantry: d.troops, archer: 0, cavalry: 0 };
           if (!d.items) d.items = { speedup: 3, renameCard: 0, resourceCard: 0 }; 
           if (d.freeRenameUsed === undefined) d.freeRenameUsed = false;
@@ -389,7 +398,6 @@
           await setDoc(playerRef, d, {merge:true});
         }
 
-        // 💡 權限判定：信箱是 admin 或者 名字有 GM 都可以免冷卻遷城
         isAdmin = (user.email === 'admin@gmail.com') || (d.name && d.name.includes('GM'));
 
         if (!wSnap.exists()) { 
@@ -409,8 +417,15 @@
           }
         });
 
-        onSnapshot(doc(db, "world_map", "WORLD_BOSS"), (snap) => {
-          if (snap.exists()) { worldBoss = snap.data(); } else spawnWorldBoss();
+        // 💡 監聽 3 隻世界 Boss
+        ['BOSS_CORE', 'BOSS_MID', 'BOSS_OUTER'].forEach(id => {
+           onSnapshot(doc(db, "world_map", id), (snap) => {
+              if (snap.exists()) {
+                 const idx = worldBosses.findIndex(b => b.id === id);
+                 if (idx >= 0) worldBosses[idx] = {id, ...snap.data()};
+                 else worldBosses.push({id, ...snap.data()});
+              } else { spawnWorldBoss(id); }
+           });
         });
 
         await window.refreshMap();
@@ -428,7 +443,6 @@
     }
     window.addEventListener('resize', resizeCanvas);
 
-    // 💡 Bounding Box 範圍優化演算法，確保 1 萬格地圖依舊極速順暢
     function updateFogOfWar() {
       if (!myData) return;
       if (godModeFog) { for (let x=0; x<WORLD_COLS; x++) for(let y=0; y<WORLD_ROWS; y++) exploredTiles[x][y] = true; return; }
@@ -531,7 +545,9 @@
         setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
       }
 
-      if (worldBoss && now > worldBoss.despawnAt) { if (Math.random() < 0.1) spawnWorldBoss(); }
+      worldBosses.forEach(boss => {
+         if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
+      });
 
       if (Math.random() < 0.005) {
         let nearestNPC = null, minDist = 15;
@@ -561,10 +577,12 @@
         if (now >= m.finishesAt) {
           if (m.type === 'return') {
             myData.troops.infantry += m.troops.infantry; myData.troops.archer += m.troops.archer; myData.troops.cavalry += m.troops.cavalry;
-            myData.wood += m.loot.wood; myData.iron += m.loot.iron; myData.food += m.loot.food;
+            myData.wood += (m.loot.wood || 0); myData.iron += (m.loot.iron || 0); myData.food += (m.loot.food || 0);
             if (m.loot.speedup) myData.items.speedup += m.loot.speedup;
-            let lootStr = `木:${m.loot.wood} 鐵:${m.loot.iron} 糧:${m.loot.food}`;
-            if (m.loot.speedup) lootStr += ` | ⏳加速x${m.loot.speedup}`;
+            if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
+            let lootStr = `木:${m.loot.wood||0} 鐵:${m.loot.iron||0} 糧:${m.loot.food||0}`;
+            if (m.loot.speedup) lootStr += ` | ⏳x${m.loot.speedup}`;
+            if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
             myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
             setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
           } 
@@ -624,14 +642,13 @@
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
       if (m.entity.type === 'relic') { 
         res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-      } else if (m.entity.type === 'npc_capital') {
+      } else if (m.entity.type.startsWith('npc_')) {
         res.loot = m.entity.loot; 
-        if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 20 + 10);
-        if (res.troops.archer > 0) res.troops.archer -= Math.floor(Math.random() * 10 + 5);
-        if (res.troops.cavalry > 0) res.troops.cavalry -= Math.floor(Math.random() * 5 + 2);
-        myData.logs.unshift(`[史詩大捷] 成功摧毀 ${m.entity.name}！獲取海量戰利品與榮耀。`);
-      } else if (m.entity.type === 'npc_fortress' || m.entity.type === 'npc_castle') { 
-        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+        let loss = Math.floor(Math.random() * 5 + 2); 
+        if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
+        else if (m.entity.type === 'npc_fortress') loss = Math.floor(Math.random() * 15 + 5);
+        if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
+        myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
       } else { 
         res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
       }
@@ -643,7 +660,7 @@
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0, speedup:0} };
       try {
         await runTransaction(db, async (transaction) => {
-          const bRef = doc(db, "world_map", "WORLD_BOSS"); const bDoc = await transaction.get(bRef);
+          const bRef = doc(db, "world_map", m.targetUid); const bDoc = await transaction.get(bRef);
           if (!bDoc.exists()) throw new Error("Boss dead");
           const boss = bDoc.data();
           const pwr = getPwrByTech(m.troops, m.techs);
@@ -652,7 +669,8 @@
           boss.hp -= dmg; if (boss.hp <= 0) boss.hp = 0;
           transaction.set(bRef, boss);
           
-          res.loot.wood = dmg * 2; res.loot.iron = dmg * 2; res.loot.food = dmg * 2; res.loot.speedup = Math.floor(dmg / 200); 
+          res.loot.wood = dmg * boss.mult; res.loot.iron = dmg * boss.mult; res.loot.food = dmg * boss.mult; 
+          res.loot.speedup = Math.floor(dmg / (2000/boss.mult)); 
           myData.logs.unshift(`[世界首領] 對首領造成 ${dmg} 傷害！獲取 ${res.loot.speedup} 個加速道具。`);
         });
       } catch (e) { myData.logs.unshift(`[世界首領] 抵達時首領已消失。`); }
@@ -784,15 +802,17 @@
         }
       }
 
-      if (worldBoss && worldBoss.hp > 0 && exploredTiles[worldBoss.x][worldBoss.y]) {
-        const bx = worldBoss.x*TILE_SIZE, by = worldBoss.y*TILE_SIZE;
-        if (godModeFog || Math.hypot(worldBoss.x-myData.x, worldBoss.y-myData.y) <= radius) {
-          const bounce = Math.sin(t/200)*5;
-          ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
-          ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(worldBoss.hp/worldBoss.maxHp), 6);
-          ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
-        }
-      }
+      worldBosses.forEach(boss => {
+         if (boss.hp > 0 && exploredTiles[boss.x][boss.y]) {
+            const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
+            if (godModeFog || Math.hypot(boss.x-myData.x, boss.y-myData.y) <= radius) {
+               const bounce = Math.sin(t/200)*5;
+               ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText(boss.name.split(' ')[0], bx+TILE_SIZE/2, by+40+bounce);
+               ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
+               ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
+            }
+         }
+      });
 
       allCastles.forEach(p => {
         const isMe = (p.id === myUid);
@@ -910,7 +930,7 @@
     canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
 
     // ==========================================
-    // 點擊事件與出征/遷城
+    // 點擊事件與出征/遷城/戰利品預覽
     // ==========================================
     let targetAction = null;
     window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
@@ -924,6 +944,7 @@
       const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
       
       const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
+      const wBoss = worldBosses.find(b => b.hp > 0 && b.x === tX && b.y === tY);
 
       if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
 
@@ -933,10 +954,10 @@
         document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       } 
-      else if (worldBoss && worldBoss.hp > 0 && worldBoss.x===tX && worldBoss.y===tY) {
-        targetAction = { type: 'attack_boss', name: worldBoss.name, x: tX, y: tY, dist, techs: myData.research };
+      else if (wBoss) {
+        targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; 
-        document.getElementById("modal-desc").innerHTML = `目標：【${worldBoss.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 最高可得: 萬級資源 + ⏳加速卡</span>`;
+        document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 傷害越高，獲取海量資源與道具！</span>`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
@@ -949,7 +970,12 @@
         else if (ent.type === 'npc_outpost') actionTitle = '🏚️ 拔除前哨';
 
         let lootStr = '';
-        if (ent.loot) lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${ent.loot.wood||0} ⛏️${ent.loot.iron||0} 🌾${ent.loot.food||0}</span>`;
+        if (ent.loot) {
+           lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${ent.loot.wood||0} ⛏️${ent.loot.iron||0} 🌾${ent.loot.food||0}`;
+           if (ent.loot.speedup) lootStr += ` | ⏳加速x${ent.loot.speedup}`;
+           if (ent.loot.resourceCard) lootStr += ` | 📦物資卡x${ent.loot.resourceCard}`;
+           lootStr += `</span>`;
+        }
 
         targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = actionTitle;
@@ -1021,7 +1047,7 @@
       myData.marches.push({
         id: 'M'+Date.now(), type: targetAction.type==='attack_capital'?'attack_npc':targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
         startTime: Date.now(), finishesAt: Date.now()+timeMs, troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav },
-        targetUid: targetAction.id, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower, techs: myData.research
+        targetUid: targetAction.id || targetAction.targetUid, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower, techs: myData.research
       });
 
       myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
