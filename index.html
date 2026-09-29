@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 天眼雷達與深度內政版</title>
+  <title>多人領地戰 - K/M 單位格式與極致優化版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -27,6 +27,7 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* 🌍 巨型地圖框 */
     .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; width: 100%; height: 68vh; min-height: 480px; }
     canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
     canvas:active { cursor: grabbing; }
@@ -47,6 +48,7 @@
     .troop-input-row input, .rename-input { width: 70px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; }
     .rename-input { width: 100%; text-align: left; margin-bottom: 15px; }
 
+    /* 🎨 卡片與進度列表 */
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;}
     .item-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #3b82f6; }
@@ -146,7 +148,7 @@
           </div>
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
 
-          <!-- 軍事行動彈窗 (輸入框自動清零優化) -->
+          <!-- 軍事行動彈窗 -->
           <div id="action-modal" class="modal-overlay">
             <div class="action-modal">
               <h3 id="modal-title">⚔️ 軍事行動</h3>
@@ -185,7 +187,7 @@
       </div>
 
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
         <div class="grid" id="research-container"></div>
       </div>
 
@@ -244,9 +246,9 @@
       <div class="card" style="border-color: #f87171;">
         <h3 style="color:#f87171;">🛠️ 開發者控制台 (GM)</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-          <button onclick="gmAddRes('wood', 100000)" style="background:#059669;">+10萬 木材</button>
-          <button onclick="gmAddRes('iron', 100000)" style="background:#059669;">+10萬 鐵礦</button>
-          <button onclick="gmAddRes('food', 100000)" style="background:#059669;">+10萬 糧草</button>
+          <button onclick="gmAddRes('wood', 1000000)" style="background:#059669;">+1M 木材</button>
+          <button onclick="gmAddRes('iron', 1000000)" style="background:#059669;">+1M 鐵礦</button>
+          <button onclick="gmAddRes('food', 1000000)" style="background:#059669;">+1M 糧草</button>
           <button onclick="gmAddRes('speedup', 100)" style="background:#d97706;">+100 加速卡</button>
           <button onclick="gmAddRes('shield', 10)" style="background:#06b6d4;">+10 護盾</button>
           <button onclick="gmAddTroop('infantry', 5000)" style="background:#2563eb;">+5k 步兵</button>
@@ -289,7 +291,6 @@
     let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
     let godModeFog = false, isAdmin = false; 
 
-    // 💡 巨型地圖 100x100
     const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
     const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
@@ -324,7 +325,14 @@
       }
     };
 
-    // 💡 指數時間與成本優化 (改為 1.45 倍)
+    // 💡 數字壓縮顯示函數 (K/M)
+    function formatCompact(num) {
+      if (isNaN(num)) return 0;
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+      return Math.floor(num).toString();
+    }
+
     function getUpgradeCost(key, level, isTech=false) { 
         const base = isTech ? CFG.techs[key] : CFG.buildings[key]; 
         if(!base) return {w:0,i:0};
@@ -378,7 +386,7 @@
     }
     initMapCache();
 
-    // 💡 強制資料淨化：防範任何舊版欄位缺失導致渲染崩潰
+    // 💡 強制資料淨化
     function sanitizeData() {
       if (!myData) return;
       if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
@@ -628,7 +636,7 @@
       if (isAdmin && document.getElementById('tab-gm').classList.contains('active')) renderGMPlayers();
     };
 
-    // 💡 只顯示最近的 5 位
+    // 💡 只有最近的 5 位
     function renderRadar() {
       if (!myData) return;
       const bContainer = document.getElementById('radar-boss-container');
@@ -787,7 +795,7 @@
             myData.wood += (m.loot.wood || 0); myData.iron += (m.loot.iron || 0); myData.food += (m.loot.food || 0);
             if (m.loot.speedup) myData.items.speedup += m.loot.speedup;
             if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
-            let lootStr = `木:${m.loot.wood||0} 鐵:${m.loot.iron||0} 糧:${m.loot.food||0}`;
+            let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
             if (m.loot.speedup) lootStr += ` | ⏳x${m.loot.speedup}`;
             if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
             myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
@@ -1071,7 +1079,7 @@
 
         if (zoom>0.5) {
           ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-          ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${p.troops||0}`, px+TILE_SIZE/2, py+8);
+          ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
         }
         ctx.textAlign='start';
       });
@@ -1200,7 +1208,7 @@
 
         let lootStr = '';
         if (ent.loot) {
-           lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${ent.loot.wood||0} ⛏️${ent.loot.iron||0} 🌾${ent.loot.food||0}`;
+           lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${formatCompact(ent.loot.wood||0)} ⛏️${formatCompact(ent.loot.iron||0)} 🌾${formatCompact(ent.loot.food||0)}`;
            if (ent.loot.speedup) lootStr += ` | ⏳加速x${ent.loot.speedup}`;
            if (ent.loot.resourceCard) lootStr += ` | 📦物資卡x${ent.loot.resourceCard}`;
            lootStr += `</span>`;
@@ -1224,7 +1232,7 @@
         } else {
             targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
             document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
-            document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${moveCost}木, ${moveCost}鐵, ${moveCost}糧`;
+            document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${formatCompact(moveCost)}木, ${formatCompact(moveCost)}鐵, ${formatCompact(moveCost)}糧`;
             document.getElementById("btn-confirm-action").style.display = 'block';
             document.getElementById("btn-confirm-action").innerText = "確認遷城"; 
             document.getElementById("btn-confirm-action").style.background = '#0ea5e9';
@@ -1237,7 +1245,9 @@
         const full = t==='inf'?'infantry':(t==='arc'?'archer':'cavalry');
         if (bLvl >= CFG.troops[full].reqLvl) {
           document.getElementById(`row-${t}`).style.display = 'flex';
-          document.getElementById(`avail-${t}`).innerText = myData.troops[full]; document.getElementById(`send-${t}`).max = myData.troops[full]; document.getElementById(`send-${t}`).value = '';
+          document.getElementById(`avail-${t}`).innerText = formatCompact(myData.troops[full]); 
+          document.getElementById(`send-${t}`).max = myData.troops[full]; 
+          document.getElementById(`send-${t}`).value = ''; 
           unlockCount++;
         } else { document.getElementById(`row-${t}`).style.display = 'none'; }
       });
@@ -1285,7 +1295,7 @@
     });
 
     // ==========================================
-    // 渲染 UI (完全防崩潰保護)
+    // 渲染 UI (防崩潰保護 + 數字壓縮)
     // ==========================================
     function renderSelf() {
       try {
@@ -1303,20 +1313,21 @@
           const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
           const netFood = farmProdPerSec - upkeepPerHr;
 
-          if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = Math.floor(myData.wood); 
-          if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${Math.floor(woodProdPerHr)}/h`;
-          if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = Math.floor(myData.iron); 
-          if(document.getElementById('rate-iron')) document.getElementById('rate-iron').innerText = `+${Math.floor(ironProdPerHr)}/h`;
-          if(document.getElementById('res-food')) document.getElementById('res-food').innerText = Math.floor(myData.food); 
+          // 使用 formatCompact 壓縮顯示數字
+          if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = formatCompact(myData.wood); 
+          if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${formatCompact(woodProdPerHr)}/h`;
+          if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = formatCompact(myData.iron); 
+          if(document.getElementById('rate-iron')) document.getElementById('rate-iron').innerText = `+${formatCompact(ironProdPerHr)}/h`;
+          if(document.getElementById('res-food')) document.getElementById('res-food').innerText = formatCompact(myData.food); 
           if(document.getElementById('rate-food')) {
-              document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${Math.floor(netFood)}/h`;
+              document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${formatCompact(Math.abs(netFood))}/h`;
               document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
           }
 
-          if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = myData.troops.infantry; 
-          if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = myData.troops.archer; 
-          if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = myData.troops.cavalry;
-          if(document.getElementById('res-speedup')) document.getElementById('res-speedup').innerText = myData.items.speedup || 0;
+          if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = formatCompact(myData.troops.infantry); 
+          if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = formatCompact(myData.troops.archer); 
+          if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = formatCompact(myData.troops.cavalry);
+          if(document.getElementById('res-speedup')) document.getElementById('res-speedup').innerText = formatCompact(myData.items.speedup);
 
           const maxQueues = 1 + (myData.buildings.builder || 0);
           const bqText = document.getElementById('build-queue-text');
@@ -1361,8 +1372,7 @@
               if (myData.trainQueue && myData.trainQueue.type && CFG.troops[myData.trainQueue.type]) {
                  const q = myData.trainQueue;
                  const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
-                 const trainCount = (myData.buildings.barracks || 1) * 5;
-                 const totalSec = CFG.troops[q.type].time * trainCount;
+                 const totalSec = CFG.troops[q.type].time * q.count;
                  const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
                  tasksHtml += `
                     <div class="task-row">
@@ -1384,7 +1394,7 @@
           if(document.getElementById('inv-speed')) document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
           if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
 
-          // 🎨 設施清單 
+          // 🎨 設施清單
           const bContainer = document.getElementById('building-container');
           if (bContainer) {
               bContainer.innerHTML = Object.keys(CFG.buildings).map(key => {
@@ -1409,7 +1419,7 @@
                 <div class="item-card">
                     <div>
                     <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                    <div class="item-cost"><span>🌲${cost.w}</span><span>⛏️${cost.i}</span></div>
+                    <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
                     </div>
                     ${progressHtml}
                     ${btnHtml}
@@ -1446,7 +1456,7 @@
                           <div>
                           <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span>
                           <div class="item-info">附加戰力: +${lvl}</div>
-                          <div class="item-cost"><span>🌲${cost.w}</span><span>⛏️${cost.i}</span></div>
+                          <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
                           </div>
                           ${progressHtml}
                           ${btnHtml}
@@ -1455,7 +1465,7 @@
               }
           }
 
-          // 🎨 招募清單 (動態擴容)
+          // 🎨 招募清單 (動態擴容與壓縮)
           const tContainer = document.getElementById('train-container');
           if (tContainer) {
               const bLvl = myData.buildings.barracks || 1;
@@ -1477,7 +1487,7 @@
                       btnHtml = `<button class="btn-speed" style="display:block;" onclick="useSpeedUp('train')">⚡ 加速 (${formatTime(remainSec)})</button>`;
                       progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
                   } else {
-                      btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${trainCount}名 (${formatTime(totalTime)})</button>`;
+                      btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
                   }
 
                   return `
@@ -1485,7 +1495,7 @@
                       <div>
                       <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong>
                       <div class="item-info">戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h</div>
-                      <div class="item-cost"><span>🌲${d.w * trainCount}</span><span>⛏️${d.i * trainCount}</span><span>🌾${d.f * trainCount}</span></div>
+                      <div class="item-cost"><span>🌲${formatCompact(d.w * trainCount)}</span><span>⛏️${formatCompact(d.i * trainCount)}</span><span>🌾${formatCompact(d.f * trainCount)}</span></div>
                       </div>
                       ${progressHtml}
                       ${btnHtml}
