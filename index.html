@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - K/M 單位格式與極致優化版</title>
+  <title>多人領地戰 - 史詩貼圖材質版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -187,7 +187,7 @@
       </div>
 
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
         <div class="grid" id="research-container"></div>
       </div>
 
@@ -257,7 +257,6 @@
           <button onclick="gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
         </div>
 
-        <!-- GM 全服天眼 -->
         <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px;">🌐 全服領主監控 (GM專屬)</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
@@ -291,6 +290,7 @@
     let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
     let godModeFog = false, isAdmin = false; 
 
+    // 💡 巨型地圖 100x100
     const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
     const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
@@ -300,7 +300,12 @@
     let MAP_CACHE = [];
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
-    // 💡 建築配置擴充城牆與倉庫
+    // 🖼️ 載入外部地圖圖片
+    const bgImage = new Image();
+    bgImage.src = 'map_bg.png'; // 💡 請將您上傳的圖片儲存為同資料夾下的 map_bg.png (或 map_bg.jpg，請對應修改附檔名)
+    let isBgLoaded = false;
+    bgImage.onload = () => { isBgLoaded = true; };
+
     const CFG = {
       buildings: { 
         castle:    { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 300, maxLevel: 99 },
@@ -325,7 +330,6 @@
       }
     };
 
-    // 💡 數字壓縮顯示函數 (K/M)
     function formatCompact(num) {
       if (isNaN(num)) return 0;
       if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -349,14 +353,11 @@
       return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
     }
 
-    function getTileTypeRaw(x, y) {
-      const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
-      if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
-    }
+    // 💡 為了配合圖片地圖，所有地形統一視為平原，取消空氣牆
+    function getTileTypeRaw(x, y) { return 'plains'; }
 
     function getStaticEntity(x, y, type) {
       if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10, resourceCard: 2 } };
-      if (type === 'water') return null;
       
       const dist = Math.hypot(x - 50, y - 50);
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
@@ -386,7 +387,6 @@
     }
     initMapCache();
 
-    // 💡 強制資料淨化
     function sanitizeData() {
       if (!myData) return;
       if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
@@ -438,7 +438,6 @@
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
-    // 💡 擴充為 41 隻世界 Boss (1 Core, 10 Mid, 30 Outer)
     async function spawnWorldBoss(id) {
       let bx, by, bName, bHp, mult;
       if (id === 'BOSS_CORE') {
@@ -527,7 +526,6 @@
           }
         });
 
-        // 💡 監聽 41 隻世界 Boss
         const bossIds = ['BOSS_CORE'];
         for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
         for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
@@ -553,7 +551,7 @@
     window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
     // ==========================================
-    // 👑 GM 專屬功能 (Admin API)
+    // 👑 GM 專屬功能
     // ==========================================
     window.gmAddRes = async (type, amount) => {
       if (!isAdmin) return;
@@ -636,7 +634,6 @@
       if (isAdmin && document.getElementById('tab-gm').classList.contains('active')) renderGMPlayers();
     };
 
-    // 💡 只有最近的 5 位
     function renderRadar() {
       if (!myData) return;
       const bContainer = document.getElementById('radar-boss-container');
@@ -676,7 +673,6 @@
       }
     }
 
-    // 👑 GM 全服監控
     function renderGMPlayers() {
       if(!isAdmin) return;
       const container = document.getElementById('gm-players-container');
@@ -761,7 +757,6 @@
          if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
       });
 
-      // 💡 NPC 入侵邏輯
       if (Math.random() < 0.005) {
         if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
           let nearestNPC = null, minDist = 15;
@@ -942,7 +937,7 @@
     }
 
     // ==========================================
-    // 🎨 渲染世界地圖
+    // 🎨 渲染世界地圖 (使用貼圖技術)
     // ==========================================
     function renderLoop() {
       if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -961,6 +956,14 @@
       
       const t = Date.now();
 
+      // 1. 繪製全境背景圖 (若載入完成)
+      if (isBgLoaded) {
+          ctx.drawImage(bgImage, 0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
+      } else {
+          ctx.fillStyle = '#423724'; // Fallback
+          ctx.fillRect(0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
+      }
+
       for (let x = sC; x < eC; x++) {
         for (let y = sR; y < eR; y++) {
           if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
@@ -968,31 +971,9 @@
           if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
           const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
-          const dist = Math.hypot(x-50, y-50);
-          const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
+          ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
-          if (cell.type === 'plains') { 
-            ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle = isCore ? '#4c1d95' : (isMid ? '#78350f' : '#2d5a2d'); ctx.fillRect(px+10,py+15,3,6); ctx.fillRect(px+35,py+30,4,8);
-            ctx.fillStyle = isCore ? '#3b0764' : (isMid ? '#451a03' : '#142914'); ctx.fillRect(px+20,py+40,6,3);
-          }
-          else if (cell.type === 'forest') { 
-            ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#142914'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle = isCore ? '#312e81' : (isMid ? '#431407' : '#065f46'); ctx.beginPath(); ctx.arc(px+25,py+25,14,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle = isCore ? '#4338ca' : (isMid ? '#7c2d12' : '#10b981'); ctx.beginPath(); ctx.arc(px+20,py+22,10,0,Math.PI*2); ctx.arc(px+36,py+30,8,0,Math.PI*2); ctx.fill(); 
-          }
-          else if (cell.type === 'mountain') { 
-            ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#262626'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle = '#52525b'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+5,py+48); ctx.lineTo(px+50,py+48); ctx.fill(); 
-            ctx.fillStyle = '#d4d4d8'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+18,py+25); ctx.lineTo(px+36,py+25); ctx.fill(); 
-          }
-          else { 
-            ctx.fillStyle='#1e3a8a'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-            ctx.fillStyle='#3b82f6'; const wave = Math.sin(t/500 + x + y) * 3; ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
-          }
-          ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
-
-          if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
+          if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
             const clrInfo = getClearedPOI(x, y);
             const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
             
@@ -1000,19 +981,19 @@
               ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
             } else {
               if (cell.entity.type === 'npc_capital') {
-                ctx.fillStyle = '#4c1d95'; ctx.fillRect(px+2, py+2, TILE_SIZE-4, TILE_SIZE-4);
+                ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+2, py+2, TILE_SIZE-4, TILE_SIZE-4);
                 ctx.font = '32px sans-serif'; ctx.textAlign='center'; ctx.fillText('😈', px+TILE_SIZE/2, py+35+floatY);
                 ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('黑暗王城', px+TILE_SIZE/2, py+50);
               } else if (cell.entity.type === 'npc_fortress') {
-                ctx.fillStyle = '#3f000f'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                ctx.fillStyle = 'rgba(63, 0, 15, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+32+floatY);
                 ctx.fillStyle = '#f43f5e'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+45);
               } else if (cell.entity.type === 'npc_castle') {
-                ctx.fillStyle = '#3b0764'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
+                ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
                 ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
                 ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
               } else if (cell.entity.type === 'npc_outpost') {
-                ctx.fillStyle = '#171717'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
+                ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
                 ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏚️', px+TILE_SIZE/2, py+32+floatY);
                 ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
               } else if (cell.entity.type === 'barbarian') {
@@ -1027,7 +1008,7 @@
               }
             }
           }
-          if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.75)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
+          if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.7)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
         }
       }
 
@@ -1394,7 +1375,7 @@
           if(document.getElementById('inv-speed')) document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
           if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
 
-          // 🎨 設施清單
+          // 🎨 設施清單 
           const bContainer = document.getElementById('building-container');
           if (bContainer) {
               bContainer.innerHTML = Object.keys(CFG.buildings).map(key => {
@@ -1465,7 +1446,7 @@
               }
           }
 
-          // 🎨 招募清單 (動態擴容與壓縮)
+          // 🎨 招募清單 (動態擴容)
           const tContainer = document.getElementById('train-container');
           if (tContainer) {
               const bLvl = myData.buildings.barracks || 1;
