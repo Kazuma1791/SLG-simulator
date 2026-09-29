@@ -28,7 +28,7 @@ let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
 // ==========================================
-// 🖼️ 載入外部材質圖片
+// 🖼️ 載入外部材質圖片 
 // ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
@@ -167,40 +167,25 @@ function sanitizeData() {
   if (typeof myData.isBanned !== 'boolean') myData.isBanned = false;
 }
 
-// 🛡️ 終極防外掛稽核系統 (Memory Watchdog)
+// 🛡️ 終極防外掛看門狗 (Memory Watchdog)
 function runAntiCheat() {
     if (isAdmin || myData.isBanned) return false;
-
-    let cheatDetected = false;
-    let reason = "";
+    let cheatDetected = false; let reason = "";
     
-    // 設定遊戲容許的最大數值極限 (超過即判定為修改記憶體)
-    const MAX_RESOURCE = 2000000000; 
-    const MAX_TROOPS = 2000000000;
-    const MAX_ITEMS = 100000;
+    const MAX_RESOURCE = 2000000000; const MAX_TROOPS = 2000000000; const MAX_ITEMS = 100000;
 
-    if (myData.wood > MAX_RESOURCE || myData.iron > MAX_RESOURCE || myData.food > MAX_RESOURCE) { 
-        cheatDetected = true; reason = "修改資源數量異常"; 
-    }
-    if (myData.troops.infantry > MAX_TROOPS || myData.troops.archer > MAX_TROOPS || myData.troops.cavalry > MAX_TROOPS) { 
-        cheatDetected = true; reason = "修改兵力數量異常"; 
-    }
-    if (myData.items.speedup > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { 
-        cheatDetected = true; reason = "修改道具數量異常"; 
-    }
-    if (myData.buildings.castle > 100 || myData.buildings.builder > 10) { 
-        cheatDetected = true; reason = "修改建築等級異常"; 
-    }
-    // 防護 XSS 竄改名稱
+    if (myData.wood > MAX_RESOURCE || myData.iron > MAX_RESOURCE || myData.food > MAX_RESOURCE) { cheatDetected = true; reason = "修改資源數量異常"; }
+    if (myData.troops.infantry > MAX_TROOPS || myData.troops.archer > MAX_TROOPS || myData.troops.cavalry > MAX_TROOPS) { cheatDetected = true; reason = "修改兵力數量異常"; }
+    if (myData.items.speedup > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { cheatDetected = true; reason = "修改道具數量異常"; }
+    if (myData.buildings.castle > 100 || myData.buildings.builder > 10) { cheatDetected = true; reason = "修改建築等級異常"; }
     if (myData.name) myData.name = myData.name.replace(/[<>]/g, "").substring(0, 15);
 
     if (cheatDetected) {
-        myData.isBanned = true;
-        myData.banReason = reason;
+        myData.isBanned = true; myData.banReason = reason;
         setDoc(doc(db, "players", myUid), { isBanned: true, banReason: reason }, { merge: true });
         document.getElementById('ban-screen').style.display = 'flex';
         document.getElementById('ban-reason').innerText = reason;
-        return true; // 代表已被查獲外掛
+        return true; 
     }
     return false;
 }
@@ -306,7 +291,6 @@ onAuthStateChanged(auth, async (user) => {
         myData = docSnap.data();
         sanitizeData();
         
-        // 🔒 即時查殺連線
         if (myData.isBanned) {
             document.getElementById('ban-screen').style.display = 'flex';
             document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章";
@@ -355,6 +339,18 @@ window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivate
 // ==========================================
 // 👑 遊戲管理員 (GM) 終極操作面板
 // ==========================================
+
+// 💡 點擊玩家列表時，自動將他設為 GM 的目標
+window.selectGMTarget = (uid, name) => {
+    const uidInput = document.getElementById('gm-target-uid');
+    const nameLabel = document.getElementById('gm-selected-name');
+    if (uidInput && nameLabel) {
+        uidInput.value = uid;
+        nameLabel.innerText = `${name} (UID: ${uid.slice(0,6)}...)`;
+        nameLabel.style.color = '#10b981'; // 變成綠色代表選取成功
+    }
+};
+
 window.gmAddRes = async (type, amount) => {
   if (!isAdmin) return;
   if (type === 'wood') myData.wood += amount;
@@ -391,15 +387,14 @@ window.gmClearQueues = async () => {
   await savePrivateData(); try { window.renderSelf(); } catch(e){}
 };
 
-// 🎯 GM 對指定玩家操作 (含解封/封鎖/修改資源)
 window.gmTargetAction = async (action) => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
-    if (!targetUid) return alert("請輸入目標玩家的 UID！");
+    if (!targetUid) return alert("請先從下方的「全服領主監控」列表中，點擊選取一名玩家！");
     
     const targetRef = doc(db, "players", targetUid);
     const targetSnap = await getDoc(targetRef);
-    if (!targetSnap.exists()) return alert("找不到該名玩家，請確認 UID 是否正確。");
+    if (!targetSnap.exists()) return alert("找不到該名玩家！");
     
     let tData = targetSnap.data();
     
@@ -411,11 +406,10 @@ window.gmTargetAction = async (action) => {
     if (action === 'clear') { tData.wood = 0; tData.iron = 0; tData.food = 0; tData.troops = {infantry:0, archer:0, cavalry:0}; }
     
     if (!Array.isArray(tData.logs)) tData.logs = [];
-    tData.logs.unshift(`[系統警告] 管理員 (GM) 介入了您的帳號，執行操作：${action}`);
+    tData.logs.unshift(`[系統警告] 管理員介入了您的帳號。`);
     
     await setDoc(targetRef, tData, {merge: true});
     
-    // 更新世界地圖上的兵力與城鎮資訊
     if (action === 'addTroops' || action === 'clear') {
         const totalT = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
         await setDoc(doc(db, "world_map", targetUid), { troops: totalT }, {merge: true});
@@ -423,10 +417,6 @@ window.gmTargetAction = async (action) => {
     
     alert(`✅ 成功對玩家 ${tData.name} 執行操作！`);
     window.refreshMap();
-};
-
-window.copyUid = (uid) => {
-    navigator.clipboard.writeText(uid).then(() => { alert(`✅ 已成功複製 UID:\n${uid}\n請貼上到上方的輸入框中操作。`); });
 };
 
 // ==========================================
@@ -465,7 +455,7 @@ function centerCameraOn(tx, ty) {
 
 async function savePrivateData() { 
     if (!myData || myData.isBanned) return;
-    if (runAntiCheat()) return; // 存檔前進行外掛查驗
+    if (runAntiCheat()) return; 
     myData.lastTick = Date.now(); 
     await setDoc(doc(db, "players", myUid), myData, { merge: true }); 
 }
@@ -516,6 +506,7 @@ function renderRadar() {
   }
 }
 
+// 💡 更新全服監控：點擊卡片任何位置，即可鎖定為 GM 目標
 function renderGMPlayers() {
   if(!isAdmin) return;
   const container = document.getElementById('gm-players-container');
@@ -524,13 +515,12 @@ function renderGMPlayers() {
   container.innerHTML = sorted.map(p => {
      const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
      return `
-      <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="window.selectGMTarget('${p.id}', '${p.name}')">
+          <div style="pointer-events:none;">
               <strong style="color:#fff; font-size:0.95rem;">${p.name}</strong> <span style="color:#fbbf24; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.75rem;">[🛡️]</span>':''}<br>
-              <span style="font-size:0.8rem; color:#38bdf8; cursor:pointer;" onclick="window.copyUid('${p.id}')">📋 點我複製 ID: ${p.id.slice(0,8)}...</span><br>
-              <span style="font-size:0.7rem; color:#94a3b8;">座標: (${p.x}, ${p.y})</span>
+              <span style="font-size:0.75rem; color:#94a3b8;">ID: ${p.id.slice(0,6)}... | 座標: (${p.x}, ${p.y})</span>
           </div>
-          <button onclick="window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:4px 8px; font-size:0.75rem;">📍 鎖定</button>
+          <button onclick="event.stopPropagation(); window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem;">📍 尋找</button>
       </div>
     `}).join('');
 }
@@ -557,7 +547,6 @@ async function localTick() {
 
   let needSave = false;
   
-  // 💡 所有地圖實體 15 分鐘後自動重生
   let newCleared = [];
   for (let poi of myData.clearedPOI) {
     const parts = poi.split(',');
@@ -783,7 +772,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (使用貼圖)
+// 🎨 渲染世界地圖
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -791,7 +780,7 @@ function renderLoop() {
 }
 
 function drawWorldMap() {
-  if (!myData || myData.isBanned) return; // 鎖帳號即停止渲染
+  if (!myData || myData.isBanned) return; 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save(); ctx.scale(zoom, zoom); ctx.translate(-camX, -camY);
 
@@ -878,7 +867,7 @@ function drawWorldMap() {
             } else {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
             }
-            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人部落', px+TILE_SIZE/2, py+50);
+            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'bandit') {
             ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
             ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
@@ -945,7 +934,7 @@ function drawWorldMap() {
 
     if (zoom>0.5) {
       ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
+      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
     }
     ctx.textAlign='start';
   });
@@ -1064,7 +1053,7 @@ canvas.addEventListener("click", (e) => {
     else if (ent.type === 'npc_capital') actionTitle = '😈 攻略王城';
     else if (ent.type === 'npc_fortress') actionTitle = '🏯 攻堅要塞';
     else if (ent.type === 'npc_castle') actionTitle = '🏰 攻打城堡';
-    else if (ent.type === 'npc_outpost') actionTitle = '🏚️ 拔除前哨';
+    else if (ent.type === 'npc_outpost') actionTitle = '🏚️️ 拔除前哨';
 
     let lootStr = '';
     if (ent.loot) {
@@ -1154,9 +1143,6 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
   window.closeActionModal(); try{window.renderSelf();}catch(e){}
 });
 
-// ==========================================
-// 渲染 UI
-// ==========================================
 window.renderSelf = function() {
   if (myData.isBanned) return;
   try {
