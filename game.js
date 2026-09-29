@@ -1,0 +1,1347 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, onSnapshot, collection, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
+  authDomain: "slg-game-617b3.firebaseapp.com",
+  projectId: "slg-game-617b3",
+  storageBucket: "slg-game-617b3.firebasestorage.app",
+  messagingSenderId: "418102371703",
+  appId: "1:418102371703:web:d872ccee572039b65d2d72"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
+let godModeFog = false, isAdmin = false; 
+
+const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
+const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
+let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
+const MIN_ZOOM = 0.05, MAX_ZOOM = 2.0;
+
+const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
+let MAP_CACHE = [];
+const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
+
+// ==========================================
+// 🖼️ 載入外部材質圖片 (支援 7 階段城堡升級)
+// ==========================================
+const castleImgs = [];
+for (let i = 1; i <= 7; i++) {
+    const img = new Image();
+    img.src = `ico_buildings_haven_cityHall_0${i}.png`; // 讀取 01 到 07
+    castleImgs.push(img);
+}
+
+// 保留未來的擴充圖片位址，若無圖片會自動降級為色塊
+const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
+const imgBoss = new Image(); imgBoss.src = 'boss.png';
+
+const CFG = {
+  buildings: { 
+    castle:    { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 300, maxLevel: 99 },
+    academy:   { name: '學院',     rate: 0,   baseW: 400, baseI: 400, baseTime: 300, maxLevel: 99 },
+    builder:   { name: '工匠小屋', rate: 0,   baseW: 2000, baseI: 2000, baseTime: 500, maxLevel: 3 }, 
+    wall:      { name: '城牆',     rate: 0,   baseW: 800, baseI: 800, baseTime: 180, maxLevel: 99 },
+    warehouse: { name: '地下倉庫', rate: 0,   baseW: 500, baseI: 500, baseTime: 150, maxLevel: 99 },
+    lumber:    { name: '伐木場',   rate: 1.0, baseW: 100, baseI: 50,  baseTime: 60, maxLevel: 99 }, 
+    mine:      { name: '鐵礦場',   rate: 0.8, baseW: 50,  baseI: 100, baseTime: 60, maxLevel: 99 }, 
+    farm:      { name: '農田',     rate: 1.2, baseW: 80,  baseI: 80,  baseTime: 60, maxLevel: 99 }, 
+    barracks:  { name: '兵營',     rate: 0,   baseW: 200, baseI: 200, baseTime: 120, maxLevel: 99 } 
+  },
+  techs: {
+    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 300 },
+    archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 300 },
+    cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 300 }
+  },
+  troops: {
+    infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
+    archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 8, reqLvl: 3, upkeep: 25 },
+    cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 12, reqLvl: 5, upkeep: 45 }
+  }
+};
+
+function formatCompact(num) {
+  if (isNaN(num)) return 0;
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return Math.floor(num).toString();
+}
+
+function getUpgradeCost(key, level, isTech=false) { 
+    const base = isTech ? CFG.techs[key] : CFG.buildings[key]; 
+    if(!base) return {w:0,i:0};
+    const m = Math.pow(1.45, level||0); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; 
+}
+function getUpgradeTime(key, level, isTech=false) { 
+    const baseCfg = isTech ? CFG.techs[key] : CFG.buildings[key]; 
+    if(!baseCfg) return 60;
+    const base = baseCfg.baseTime || 60; return Math.floor(base * Math.pow(1.45, Math.max(0, (level||0) - 1))); 
+}
+function formatTime(sec) {
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) return Math.floor(sec/60) + 'm' + (sec%60 > 0 ? ' '+(sec%60)+'s' : '');
+  return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
+}
+
+function getTileTypeRaw(x, y) {
+  const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
+  if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
+}
+
+function getStaticEntity(x, y, type) {
+  if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10, resourceCard: 2 } };
+  if (type === 'water') return null;
+  
+  const dist = Math.hypot(x - 50, y - 50);
+  const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
+  
+  if (dist <= 14) {
+    if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 3, resourceCard: 1 } };
+    if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000, food: 1500 } };
+    if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
+    return null;
+  }
+  if (dist <= 32) {
+    if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 200, loot: { wood: 4000, iron: 4000, food: 4000, speedup: 1 } };
+    if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400, food: 600 } };
+    if (rand < 0.070) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
+    if (rand < 0.110) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300, iron: 150 } };
+    return null;
+  }
+  if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 80, loot: { wood: 1500, iron: 1500, food: 1500 } };
+  if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100, food: 200 } };
+  if (rand < 0.055) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80, iron: 50 } };
+  if (rand < 0.075) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
+  return null;
+}
+
+function initMapCache() {
+  for(let x=0; x<WORLD_COLS; x++) { MAP_CACHE[x] = []; for(let y=0; y<WORLD_ROWS; y++) { let t = getTileTypeRaw(x,y); if (x===50 && y===50) t = 'plains'; MAP_CACHE[x][y] = { type: t, entity: getStaticEntity(x,y,t) }; } }
+}
+initMapCache();
+
+function sanitizeData() {
+  if (!myData) return;
+  if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
+  ['infantry', 'archer', 'cavalry'].forEach(k => { if(isNaN(myData.troops[k]) || myData.troops[k]===null) myData.troops[k] = 0; });
+  
+  if (!myData.buildings || typeof myData.buildings !== 'object') myData.buildings = {};
+  Object.keys(CFG.buildings).forEach(k => { if(isNaN(myData.buildings[k]) || myData.buildings[k]===null) myData.buildings[k] = (k==='builder'||k==='academy'||k==='wall'||k==='warehouse') ? 0 : 1; });
+  
+  if (!myData.research || typeof myData.research !== 'object') myData.research = {};
+  Object.keys(CFG.techs).forEach(k => { if(isNaN(myData.research[k]) || myData.research[k]===null) myData.research[k] = 0; });
+
+  if (!myData.items || typeof myData.items !== 'object') myData.items = { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 };
+  ['speedup', 'renameCard', 'resourceCard', 'shieldCard'].forEach(k => { if(isNaN(myData.items[k]) || myData.items[k]===null) myData.items[k] = 0; });
+
+  if (!Array.isArray(myData.buildQueues)) {
+    myData.buildQueues = [];
+    if (myData.buildQueue) { myData.buildQueues.push(myData.buildQueue); delete myData.buildQueue; }
+  }
+  myData.buildQueues = myData.buildQueues.filter(q => q && q.target && CFG.buildings[q.target]); 
+
+  if (myData.researchQueue && (!myData.researchQueue.target || !CFG.techs[myData.researchQueue.target])) myData.researchQueue = null;
+  if (myData.trainQueue && (!myData.trainQueue.type || !CFG.troops[myData.trainQueue.type])) myData.trainQueue = null;
+
+  if (!Array.isArray(myData.marches)) myData.marches = [];
+  myData.marches = myData.marches.filter(m => m !== null && m !== undefined); 
+
+  if (!Array.isArray(myData.clearedPOI)) myData.clearedPOI = [];
+  myData.clearedPOI = myData.clearedPOI.filter(p => p !== null && p !== undefined);
+
+  if (!Array.isArray(myData.logs)) myData.logs = ['歡迎來到領地戰！'];
+  
+  if (isNaN(myData.wood) || myData.wood === null) myData.wood = 200;
+  if (isNaN(myData.iron) || myData.iron === null) myData.iron = 200;
+  if (isNaN(myData.food) || myData.food === null) myData.food = 200;
+  if (isNaN(myData.shieldEndsAt) || myData.shieldEndsAt === null) myData.shieldEndsAt = 0;
+  if (isNaN(myData.lastRelocateTime) || myData.lastRelocateTime === null) myData.lastRelocateTime = 0;
+}
+
+function getTileEntity(x, y) {
+  if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
+  if (allCastles.some(p => p.x === x && p.y === y)) return null;
+  if (worldBosses.some(b => b.hp > 0 && b.x === x && b.y === y)) return null;
+  return MAP_CACHE[x][y].entity;
+}
+
+function getClearedPOI(x, y) {
+  if (!myData || !myData.clearedPOI) return null;
+  const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
+  if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
+}
+
+async function spawnWorldBoss(id) {
+  let bx, by, bName, bHp, mult;
+  if (id === 'BOSS_CORE') {
+    do { bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6); } while(bx===50&&by===50);
+    bName = '🐉 滅世魔龍'; bHp = 200000; mult = 10;
+  } else if (id.startsWith('BOSS_MID')) {
+    do { bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20); } while(Math.hypot(bx-50, by-50) < 15);
+    bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 80000; mult = 5;
+  } else {
+    do { bx=Math.floor(Math.random()*90+5); by=Math.floor(Math.random()*90+5); } while(Math.hypot(bx-50, by-50) <= 35);
+    bName = '🗿 大地岩魔'; bHp = 30000; mult = 2;
+  }
+  await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, despawnAt: Date.now() + 6 * 3600 * 1000 });
+}
+
+window.viewFullMap = () => {
+    zoom = Math.max(MIN_ZOOM, Math.min(canvas.width / (WORLD_COLS * TILE_SIZE), canvas.height / (WORLD_ROWS * TILE_SIZE)));
+    camX = (WORLD_COLS * TILE_SIZE) / 2 - (canvas.width / zoom) / 2;
+    camY = (WORLD_ROWS * TILE_SIZE) / 2 - (canvas.height / zoom) / 2;
+    clampCamera();
+    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
+    
+    godModeFog = true; 
+    document.getElementById('btn-toggle-fog').innerText = "👁️ 開啟迷霧";
+    document.getElementById('btn-toggle-fog').style.background = "#ef4444";
+    updateFogOfWar();
+};
+
+window.toggleFogMode = () => {
+  godModeFog = !godModeFog; document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
+  document.getElementById('btn-toggle-fog').style.background = godModeFog ? "#ef4444" : "#7c3aed"; updateFogOfWar();
+};
+
+window.switchTab = (tabName) => {
+  document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tabName).classList.add('active'); document.getElementById('btn-tab-' + tabName).classList.add('active');
+  if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
+  if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
+};
+
+window.registerUser = () => {
+  const e = document.getElementById("email-input").value, p = document.getElementById("password-input").value;
+  if (!e || p.length < 6) return alert("信箱無效或密碼過短(6碼)！");
+  createUserWithEmailAndPassword(auth, e, p).then(() => alert("✅ 註冊成功！")).catch(err => alert("❌ " + err.message));
+};
+window.loginUser = () => {
+  const e = document.getElementById("email-input").value, p = document.getElementById("password-input").value;
+  signInWithEmailAndPassword(auth, e, p).catch(() => alert("❌ 登入失敗"));
+};
+window.logoutUser = () => { if (confirm("確定登出？")) signOut(auth).then(() => location.reload()); };
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    document.getElementById("login-panel").style.display = "none";
+    myUid = user.uid;
+    const playerRef = doc(db, "players", myUid), worldRef = doc(db, "world_map", myUid);
+    const pSnap = await getDoc(playerRef), wSnap = await getDoc(worldRef);
+    
+    if (!pSnap.exists()) {
+      let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
+      const d = {
+        name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
+        wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
+        buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
+        research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
+        items: { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 },
+        freeRenameUsed: false, lastRelocateTime: 0, shieldEndsAt: 0,
+        buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。獲得護盾1個！']
+      };
+      await setDoc(playerRef, d);
+      myData = d;
+    } else {
+      myData = pSnap.data();
+      sanitizeData();
+      await setDoc(playerRef, myData, {merge:true});
+    }
+
+    isAdmin = (user.email === 'topacoau@gmail.com');
+
+    if (!wSnap.exists()) { 
+      await setDoc(worldRef, { name: myData.name, x: myData.x, y: myData.y, troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry, castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }); 
+    } else { await setDoc(worldRef, { castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); }
+
+    onSnapshot(playerRef, (docSnap) => {
+      if (docSnap.exists()) {
+        myData = docSnap.data();
+        sanitizeData();
+        isAdmin = (user.email === 'topacoau@gmail.com');
+        document.getElementById('btn-tab-gm').style.display = isAdmin ? 'block' : 'none';
+
+        updateFogOfWar();
+        if (!hasCentered) { resizeCanvas(); centerCameraOn(myData.x, myData.y); hasCentered = true; }
+        
+        const isUnderAttack = myData.marches.some(m => m.type === 'defend_npc');
+        document.getElementById('danger-overlay').style.display = isUnderAttack ? 'block' : 'none';
+        
+        try { renderSelf(); } catch(e) { console.error("Render Error:", e); document.getElementById('log-list').innerHTML = `<p style="color:red">渲染錯誤: ${e.message}</p>`; }
+      }
+    });
+
+    const bossIds = ['BOSS_CORE'];
+    for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
+    for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
+
+    bossIds.forEach(id => {
+       onSnapshot(doc(db, "world_map", id), (snap) => {
+          if (snap.exists()) {
+             const idx = worldBosses.findIndex(b => b.id === id);
+             if (idx >= 0) worldBosses[idx] = {id, ...snap.data()};
+             else worldBosses.push({id, ...snap.data()});
+          } else { spawnWorldBoss(id); }
+       });
+    });
+
+    await window.refreshMap();
+    setInterval(localTick, 1000); requestAnimationFrame(renderLoop); setInterval(window.refreshMap, 60000);
+  } else {
+    document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null; isAdmin = false;
+    document.getElementById('btn-tab-gm').style.display = 'none';
+  }
+});
+
+window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
+
+// ==========================================
+// 👑 GM 專屬功能 (Admin API)
+// ==========================================
+window.gmAddRes = async (type, amount) => {
+  if (!isAdmin) return;
+  if (type === 'wood') myData.wood += amount;
+  if (type === 'iron') myData.iron += amount;
+  if (type === 'food') myData.food += amount;
+  if (type === 'speedup') myData.items.speedup += amount;
+  if (type === 'shield') myData.items.shieldCard += amount;
+  myData.logs.unshift(`[GM系統] 成功生成 ${amount} 單位物資！`);
+  await savePrivateData(); try { renderSelf(); } catch(e){}
+};
+
+window.gmAddTroop = async (type, amount) => {
+  if (!isAdmin) return;
+  myData.troops[type] += amount;
+  myData.logs.unshift(`[GM系統] 憑空徵召了 ${amount} 名部隊！`);
+  await savePrivateData();
+  setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+  try { renderSelf(); } catch(e){}
+};
+
+window.gmRespawnBosses = () => {
+  if (!isAdmin) return;
+  const bossIds = ['BOSS_CORE'];
+  for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
+  for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
+  bossIds.forEach(id => spawnWorldBoss(id));
+  alert("已強制重生所有 世界 Boss！");
+};
+
+window.gmClearQueues = async () => {
+  if (!isAdmin) return;
+  myData.buildQueues.forEach(q => q.finishesAt = Date.now());
+  if(myData.researchQueue) myData.researchQueue.finishesAt = Date.now();
+  if(myData.trainQueue) myData.trainQueue.finishesAt = Date.now();
+  myData.logs.unshift(`[GM系統] 已動用時間魔法，所有隊列瞬間完成！`);
+  await savePrivateData(); try { renderSelf(); } catch(e){}
+};
+
+// ==========================================
+// 底層視圖與地圖邏輯
+// ==========================================
+function resizeCanvas() {
+  const frame = document.getElementById('map-frame');
+  if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); }
+}
+window.addEventListener('resize', resizeCanvas);
+
+function updateFogOfWar() {
+  if (!myData) return;
+  if (godModeFog) { for (let x=0; x<WORLD_COLS; x++) for(let y=0; y<WORLD_ROWS; y++) exploredTiles[x][y] = true; return; }
+  
+  const r = BASE_VISION_RADIUS + currentVisionBonus;
+  const minX = Math.max(0, myData.x - r), maxX = Math.min(WORLD_COLS - 1, myData.x + r);
+  const minY = Math.max(0, myData.y - r), maxY = Math.min(WORLD_ROWS - 1, myData.y + r);
+
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      if (Math.hypot(x - myData.x, y - myData.y) <= r) exploredTiles[x][y] = true;
+    }
+  }
+}
+
+function clampCamera() {
+  camX = Math.max(0, Math.min(camX, WORLD_COLS * TILE_SIZE - canvas.width / zoom)); 
+  camY = Math.max(0, Math.min(camY, WORLD_ROWS * TILE_SIZE - canvas.height / zoom));
+}
+function centerCameraOn(tx, ty) {
+  camX = (tx * TILE_SIZE + TILE_SIZE / 2) - (canvas.width / zoom) / 2;
+  camY = (ty * TILE_SIZE + TILE_SIZE / 2) - (canvas.height / zoom) / 2;
+  clampCamera();
+}
+
+async function savePrivateData() { myData.lastTick = Date.now(); await setDoc(doc(db, "players", myUid), myData, { merge: true }); }
+
+window.refreshMap = async function() {
+  const snap = await getDocs(collection(db, "world_map"));
+  allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) });
+  if (document.getElementById('tab-radar').classList.contains('active')) renderRadar();
+  if (isAdmin && document.getElementById('tab-gm').classList.contains('active')) renderGMPlayers();
+};
+
+function renderRadar() {
+  if (!myData) return;
+  const bContainer = document.getElementById('radar-boss-container');
+  if (bContainer) {
+      const bSorted = [...worldBosses].map(b => { b.dist = Math.hypot(b.x - myData.x, b.y - myData.y); return b; }).filter(b => b.hp > 0).sort((a,b) => a.dist - b.dist).slice(0, 5);
+      if (bSorted.length === 0) { bContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">目前世界和平，無首領肆虐。</p>'; }
+      else {
+        bContainer.innerHTML = bSorted.map(b => `
+          <div style="background:#2e1065; border:1px solid #7c3aed; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                  <strong style="color:#d946ef; font-size:1.05rem;">${b.name}</strong> <span style="color:#f87171; font-size:0.8rem;">(HP: ${Math.floor((b.hp/b.maxHp)*100)}%)</span><br>
+                  <span style="font-size:0.8rem; color:#cbd5e1;">座標: (${b.x}, ${b.y}) | 距離: ${Math.ceil(b.dist)} 格</span>
+              </div>
+              <button onclick="window.locatePlayer(${b.x}, ${b.y})" style="background:#dc2626; padding:6px 12px; font-size:0.8rem;">📍 鎖定</button>
+          </div>
+        `).join('');
+      }
+  }
+
+  const pContainer = document.getElementById('radar-players-container');
+  if (pContainer) {
+      const pSorted = [...allCastles].map(p => { p.dist = Math.hypot(p.x - myData.x, p.y - myData.y); return p; }).filter(p => p.id !== myUid).sort((a,b) => a.dist - b.dist).slice(0, 5);
+      if (pSorted.length === 0) { pContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">附近暫無其他勢力。</p>'; }
+      else {
+        pContainer.innerHTML = pSorted.map(p => {
+          const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
+          return `
+          <div style="background:#0a0f1d; border:1px solid #1e2c40; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                  <strong style="color:#fff; font-size:1.05rem;">${p.name}</strong> <span style="color:#94a3b8; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.8rem;">[🛡️護盾中]</span>':''}<br>
+                  <span style="font-size:0.8rem; color:#94a3b8;">座標: (${p.x}, ${p.y}) | 距離: ${Math.ceil(p.dist)} 格</span>
+              </div>
+              <button onclick="window.locatePlayer(${p.x}, ${p.y})" style="background:#0ea5e9; padding:6px 12px; font-size:0.8rem;">📍 偵查</button>
+          </div>
+        `}).join('');
+      }
+  }
+}
+
+function renderGMPlayers() {
+  if(!isAdmin) return;
+  const container = document.getElementById('gm-players-container');
+  if (!container) return;
+  const sorted = [...allCastles].filter(p => p.id !== myUid).sort((a,b) => (b.castleLevel||1) - (a.castleLevel||1));
+  container.innerHTML = sorted.map(p => {
+     const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
+     return `
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+              <strong style="color:#fff; font-size:0.95rem;">${p.name}</strong> <span style="color:#fbbf24; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.75rem;">[🛡️]</span>':''}<br>
+              <span style="font-size:0.75rem; color:#94a3b8;">ID: ${p.id.slice(0,6)}... | 座標: (${p.x}, ${p.y})</span>
+          </div>
+          <button onclick="window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:4px 8px; font-size:0.75rem;">📍 鎖定</button>
+      </div>
+    `}).join('');
+}
+
+window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
+
+// ==========================================
+// 遊戲心跳
+// ==========================================
+async function localTick() {
+  if (!myData) return;
+  sanitizeData(); 
+  
+  const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
+
+  const hrToSec = 3600;
+  const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / hrToSec;
+  const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
+  
+  myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
+  myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
+  myData.food += dt * farmProdPerSec - dt * upkeepPerSec;
+  if (myData.food < 0) myData.food = 0;
+
+  let needSave = false;
+  let newCleared = [];
+  for (let poi of myData.clearedPOI) {
+    const parts = poi.split(',');
+    if (parts.length >= 4) {
+      const cTime = parseInt(parts[2]), cType = parts[3];
+      if ((cType.startsWith('npc_')) && now - cTime > 15 * 60 * 1000) continue; 
+    }
+    newCleared.push(poi);
+  }
+  if (newCleared.length !== myData.clearedPOI.length) { myData.clearedPOI = newCleared; needSave = true; }
+
+  let newBuildQueues = [];
+  for (let q of myData.buildQueues) {
+    if (now >= q.finishesAt) {
+      if(CFG.buildings[q.target]) {
+         myData.buildings[q.target]++;
+         myData.logs.unshift(`[建造就緒] ${CFG.buildings[q.target].name} 升級至 Lv.${myData.buildings[q.target]}`);
+         if (q.target === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
+      }
+      needSave = true;
+    } else { newBuildQueues.push(q); }
+  }
+  if (myData.buildQueues.length !== newBuildQueues.length) { myData.buildQueues = newBuildQueues; needSave = true; }
+
+  if (myData.researchQueue && now >= myData.researchQueue.finishesAt) {
+    if(CFG.techs[myData.researchQueue.target]) {
+       myData.research[myData.researchQueue.target]++;
+       myData.logs.unshift(`[科技突破] ${CFG.techs[myData.researchQueue.target].name} 升級至 Lv.${myData.research[myData.researchQueue.target]}`);
+    }
+    myData.researchQueue = null; needSave = true;
+  }
+
+  if (myData.trainQueue && now >= myData.trainQueue.finishesAt) {
+    if(CFG.troops[myData.trainQueue.type]) {
+       myData.troops[myData.trainQueue.type] += myData.trainQueue.count;
+       myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名${CFG.troops[myData.trainQueue.type].name}入列`);
+    }
+    myData.trainQueue = null; needSave = true; 
+    setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+  }
+
+  worldBosses.forEach(boss => {
+     if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
+  });
+
+  // 💡 NPC 入侵邏輯
+  if (Math.random() < 0.005) {
+    if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
+      let nearestNPC = null, minDist = 15;
+      for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
+        for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
+          const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+          if (cell && cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
+            const dist = Math.hypot(tx - myData.x, ty - myData.y);
+            if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
+          }
+        }
+      }
+      if (nearestNPC && !myData.marches.some(m => m.type === 'defend_npc' && m.startX === nearestNPC.x && m.startY === nearestNPC.y)) {
+        const timeMs = Math.ceil(minDist * 4 * 1000); 
+        const enemyPwr = Math.floor(10 + myData.buildings.castle * 15);
+        myData.marches.push({
+          id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
+          startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
+        });
+        myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
+        needSave = true;
+      }
+    }
+  }
+
+  let newMarches = [];
+  for (let m of myData.marches) {
+    if (now >= m.finishesAt) {
+      if (m.type === 'return') {
+        myData.troops.infantry += m.troops.infantry; myData.troops.archer += m.troops.archer; myData.troops.cavalry += m.troops.cavalry;
+        myData.wood += (m.loot.wood || 0); myData.iron += (m.loot.iron || 0); myData.food += (m.loot.food || 0);
+        if (m.loot.speedup) myData.items.speedup += m.loot.speedup;
+        if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
+        let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
+        if (m.loot.speedup) lootStr += ` | ⏳x${m.loot.speedup}`;
+        if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
+        myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
+        setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+      } 
+      else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
+      else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
+      else { const res = await resolveInteractNPC(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      needSave = true;
+    } else { newMarches.push(m); }
+  }
+  
+  if (needSave) { myData.marches = newMarches; await savePrivateData(); }
+  try { renderSelf(); } catch(e){}
+}
+
+function createReturnMarch(oldMarch, survivedTroops, loot) {
+  return { id: 'R'+Date.now(), type: 'return', startX: oldMarch.targetX, startY: oldMarch.targetY, targetX: oldMarch.startX, targetY: oldMarch.startY, startTime: Date.now(), finishesAt: Date.now() + (oldMarch.finishesAt - oldMarch.startTime), troops: survivedTroops, loot: loot };
+}
+
+function getPwrByTech(troops, tech) {
+  return (troops.infantry||0) * (CFG.troops.infantry.pwr + (tech.infantry_atk||0)) +
+         (troops.archer||0) * (CFG.troops.archer.pwr + (tech.archer_atk||0)) +
+         (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
+}
+
+async function resolveDefendNPC(m) {
+  const wallBuff = 1 + (myData.buildings.wall || 0) * 0.05;
+  const defPwr = getPwrByTech(myData.troops, myData.research) * wallBuff;
+  
+  if (defPwr >= m.npcPower) {
+    const lossRatio = m.npcPower / (defPwr + 1);
+    myData.troops.infantry -= Math.floor(myData.troops.infantry * lossRatio * 0.3); myData.troops.archer -= Math.floor(myData.troops.archer * lossRatio * 0.3); myData.troops.cavalry -= Math.floor(myData.troops.cavalry * lossRatio * 0.3);
+    myData.wood += 200; myData.iron += 200; myData.food += 200;
+    myData.logs.unshift(`[守城大捷] 成功擊退 ${m.npcName}！繳獲後勤物資。`);
+  } else {
+    myData.troops.infantry = 0; myData.troops.archer = 0; myData.troops.cavalry = 0;
+    
+    const protectAmt = (myData.buildings.warehouse || 0) * 2000;
+    const lW = Math.max(0, Math.floor((myData.wood - protectAmt) * 0.3));
+    const lI = Math.max(0, Math.floor((myData.iron - protectAmt) * 0.3));
+    const lF = Math.max(0, Math.floor((myData.food - protectAmt) * 0.3));
+    myData.wood -= lW; myData.iron -= lI; myData.food -= lF;
+    
+    const bKeys = Object.keys(myData.buildings).filter(k => myData.buildings[k] > 1);
+    let dLog = "";
+    if (bKeys.length > 0) {
+      const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; myData.buildings[rKey]--;
+      dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
+      if (rKey === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
+    }
+    myData.logs.unshift(`[城防潰敗] ${m.npcName} 攻破防線！被掠奪資源${dLog}`);
+  }
+  setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+}
+
+async function resolveInteractNPC(m) {
+  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  if (m.entity.type === 'relic') { 
+    res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
+  } else if (m.entity.type.startsWith('npc_')) {
+    res.loot = m.entity.loot; 
+    let loss = Math.floor(Math.random() * 5 + 2); 
+    if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
+    else if (m.entity.type === 'npc_fortress') loss = Math.floor(Math.random() * 15 + 5);
+    if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
+    myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+  } else { 
+    res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
+  }
+  myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
+  return res;
+}
+
+async function resolveAttackBoss(m) {
+  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0, speedup:0} };
+  try {
+    await runTransaction(db, async (transaction) => {
+      const bRef = doc(db, "world_map", m.targetUid); const bDoc = await transaction.get(bRef);
+      if (!bDoc.exists()) throw new Error("Boss dead");
+      const boss = bDoc.data();
+      const pwr = getPwrByTech(m.troops, m.techs);
+      const dmg = Math.min(boss.hp, pwr * 10 + Math.floor(Math.random()*50));
+      
+      boss.hp -= dmg; if (boss.hp <= 0) boss.hp = 0;
+      transaction.set(bRef, boss);
+      
+      res.loot.wood = dmg * boss.mult; res.loot.iron = dmg * boss.mult; res.loot.food = dmg * boss.mult; 
+      res.loot.speedup = Math.floor(dmg / (2000/boss.mult)); 
+      myData.logs.unshift(`[世界首領] 對首領造成 ${dmg} 傷害！獲取 ${res.loot.speedup} 個加速道具。`);
+    });
+  } catch (e) { myData.logs.unshift(`[世界首領] 抵達時首領已消失。`); }
+  return res;
+}
+
+async function resolveAttackPlayer(m) {
+  let res = { survived: false, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  try {
+    await runTransaction(db, async (transaction) => {
+      const tPrivRef = doc(db, "players", m.targetUid), tPubRef = doc(db, "world_map", m.targetUid);
+      const tDoc = await transaction.get(tPrivRef);
+      if (!tDoc.exists()) throw new Error("城池空");
+      const target = tDoc.data();
+
+      if (target.shieldEndsAt && target.shieldEndsAt > Date.now()) { throw new Error("Shielded"); }
+      
+      const attPwr = getPwrByTech(m.troops, m.techs);
+      const defTroops = target.troops || {infantry:0, archer:0, cavalry:0};
+      
+      const targetWall = target.buildings.wall || 0;
+      const targetWH = target.buildings.warehouse || 0;
+      const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + targetWall * 0.05);
+
+      if (attPwr > defPwr) {
+        const protectAmt = targetWH * 2000;
+        const lW = Math.max(0, Math.floor((target.wood - protectAmt) * 0.3));
+        const lI = Math.max(0, Math.floor((target.iron - protectAmt) * 0.3));
+        const lF = Math.max(0, Math.floor((target.food - protectAmt) * 0.3));
+
+        const bKeys = Object.keys(target.buildings).filter(k => target.buildings[k] > 1);
+        let dLog = ""; let pLevel = target.buildings.castle;
+        if (bKeys.length > 0) {
+          const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; target.buildings[rKey]--;
+          dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
+          if (rKey === 'castle') pLevel = target.buildings.castle;
+        }
+        transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, buildings: target.buildings, logs: [`[城破] 遭到突襲！損失物資${dLog}`, ...(target.logs || [])] }, { merge: true });
+        transaction.set(tPubRef, { troops: 0, castleLevel: pLevel }, { merge: true });
+        res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
+        myData.logs.unshift(`[大捷] 攻破 ${m.targetName}！滿載戰利品返航中。`);
+      } else {
+        transaction.set(tPrivRef, { logs: [`[堅壁清野] 擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
+        myData.logs.unshift(`[戰敗] 突擊 ${m.targetName} 遭遇重創，部隊全數陣亡！`);
+      }
+    });
+    window.refreshMap();
+  } catch (err) { 
+    res.survived = true; 
+    if (err.message === "Shielded") myData.logs.unshift(`[撤軍] 目標 ${m.targetName} 已開啟和平護盾，部隊折返。`);
+    else myData.logs.unshift(`[撲空] 敵方已遷城，部隊折返。`); 
+  }
+  return res;
+}
+
+// ==========================================
+// 🎨 渲染世界地圖 (動態多階城堡系統)
+// ==========================================
+function renderLoop() {
+  if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
+  requestAnimationFrame(renderLoop);
+}
+
+function drawWorldMap() {
+  if (!myData) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save(); ctx.scale(zoom, zoom); ctx.translate(-camX, -camY);
+
+  const vW = canvas.width/zoom, vH = canvas.height/zoom;
+  const radius = BASE_VISION_RADIUS + currentVisionBonus;
+  const sC = Math.max(0, Math.floor(camX/TILE_SIZE)-1), eC = Math.min(WORLD_COLS, Math.ceil((camX+vW)/TILE_SIZE)+1);
+  const sR = Math.max(0, Math.floor(camY/TILE_SIZE)-1), eR = Math.min(WORLD_ROWS, Math.ceil((camY+vH)/TILE_SIZE)+1);
+  
+  const t = Date.now();
+
+  for (let x = sC; x < eC; x++) {
+    for (let y = sR; y < eR; y++) {
+      if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
+      const px = x*TILE_SIZE, py = y*TILE_SIZE;
+      if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
+
+      const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
+      const dist = Math.hypot(x-50, y-50);
+      const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
+
+      if (cell.type === 'plains') { 
+        ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+        ctx.fillStyle = isCore ? '#4c1d95' : (isMid ? '#78350f' : '#2d5a2d'); ctx.fillRect(px+10,py+15,3,6); ctx.fillRect(px+35,py+30,4,8);
+        ctx.fillStyle = isCore ? '#3b0764' : (isMid ? '#451a03' : '#142914'); ctx.fillRect(px+20,py+40,6,3);
+      }
+      else if (cell.type === 'forest') { 
+        ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#142914'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+        ctx.fillStyle = isCore ? '#312e81' : (isMid ? '#431407' : '#065f46'); ctx.beginPath(); ctx.arc(px+25,py+25,14,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = isCore ? '#4338ca' : (isMid ? '#7c2d12' : '#10b981'); ctx.beginPath(); ctx.arc(px+20,py+22,10,0,Math.PI*2); ctx.arc(px+36,py+30,8,0,Math.PI*2); ctx.fill(); 
+      }
+      else if (cell.type === 'mountain') { 
+        ctx.fillStyle = isCore ? '#1e1b4b' : (isMid ? '#291404' : '#262626'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+        ctx.fillStyle = '#52525b'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+5,py+48); ctx.lineTo(px+50,py+48); ctx.fill(); 
+        ctx.fillStyle = '#d4d4d8'; ctx.beginPath(); ctx.moveTo(px+27,py+10); ctx.lineTo(px+18,py+25); ctx.lineTo(px+36,py+25); ctx.fill(); 
+      }
+      else { 
+        ctx.fillStyle='#1e3a8a'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+        ctx.fillStyle='#3b82f6'; const wave = Math.sin(t/500 + x + y) * 3; ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
+      }
+      ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+
+      if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
+        const clrInfo = getClearedPOI(x, y);
+        const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
+        
+        if (clrInfo) {
+          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+        } else {
+          if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_fortress' || cell.entity.type === 'npc_castle' || cell.entity.type === 'npc_outpost') {
+              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkCastle, px, py + floatY, TILE_SIZE, TILE_SIZE);
+              } else {
+                  ctx.fillStyle = cell.entity.type === 'npc_capital' ? 'rgba(76, 29, 149, 0.6)' : 'rgba(59, 7, 100, 0.6)';
+                  ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+35+floatY);
+              }
+              ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'barbarian') {
+            ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
+            ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'bandit') {
+            ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
+            ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'relic') {
+            ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+          }
+        }
+      }
+      if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.7)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
+    }
+  }
+
+  worldBosses.forEach(boss => {
+     const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
+     if (boss.hp > 0 && (isExplored || godModeFog)) {
+        const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
+        const bounce = Math.sin(t/200)*5;
+        if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
+            ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
+        } else {
+            ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
+        }
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
+        ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
+     }
+  });
+
+  allCastles.forEach(p => {
+    const isMe = (p.id === myUid);
+    const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
+    if (!godModeFog && !isMe && !isExplored) return;
+    
+    const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
+    if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
+
+    const isShielded = p.shieldEndsAt && p.shieldEndsAt > t;
+    if (isShielded) {
+        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
+    
+    // 💡 城堡動態等級判斷系統
+    let cLv = p.castleLevel || 1;
+    let imgIdx = 0;
+    if (cLv >= 20) imgIdx = 6;
+    else if (cLv >= 17) imgIdx = 5;
+    else if (cLv >= 13) imgIdx = 4;
+    else if (cLv >= 9)  imgIdx = 3;
+    else if (cLv >= 6)  imgIdx = 2;
+    else if (cLv >= 3)  imgIdx = 1;
+    
+    let currentCastleImg = castleImgs[imgIdx];
+    
+    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+        // 浮空立體微調: 將圖片放大一點，並往上偏移，製造出浮空島嶼的霸氣感
+        ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+    } else {
+        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
+        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
+    }
+
+    if (zoom>0.5) {
+      ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
+    }
+    ctx.textAlign='start';
+  });
+
+  if (myData.marches && myData.marches.length > 0) {
+    myData.marches.forEach(m => {
+      let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
+      const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
+      const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
+      const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
+
+      ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
+      ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+      ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+
+      ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
+      ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
+
+      const left = Math.ceil((m.finishesAt-t)/1000);
+      if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
+      ctx.textAlign = 'start';
+    });
+  }
+  ctx.restore();
+}
+
+// ==========================================
+// 實體按鈕縮放與觸控
+// ==========================================
+window.zoomMapBtn = (factor) => {
+  const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+  if (nZ !== zoom) {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const wX = cx / zoom + camX, wY = cy / zoom + camY;
+    zoom = nZ; camX = wX - cx / zoom; camY = wY - cy / zoom; clampCamera();
+    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
+  }
+};
+
+let isDragging = false, dragSX = 0, dragSY = 0, dragDist = 0;
+let initialPinchDist = null, initialZoom = 1, pinchCenter = null;
+
+function handleDown(e) {
+  if (e.touches && e.touches.length === 2) {
+    isDragging = false;
+    initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    initialZoom = zoom;
+    const r = canvas.getBoundingClientRect();
+    const px = (e.touches[0].clientX + e.touches[1].clientX)/2 - r.left, py = (e.touches[0].clientY + e.touches[1].clientY)/2 - r.top;
+    pinchCenter = { x: px, y: py, wX: px / zoom + camX, wY: py / zoom + camY };
+    return;
+  }
+  isDragging=true; dragDist=0; canvas.style.cursor='grabbing'; document.getElementById("hover-hud").style.display='none';
+  const cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
+  dragSX = cx; dragSY = cy;
+}
+
+function handleMove(e) {
+  if (e.touches && e.touches.length === 2 && initialPinchDist) {
+    e.preventDefault();
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, initialZoom * (dist / initialPinchDist)));
+    if (nZ !== zoom) {
+      zoom = nZ; camX = pinchCenter.wX - pinchCenter.x / zoom; camY = pinchCenter.wY - pinchCenter.y / zoom;
+      clampCamera(); document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
+    }
+    return;
+  }
+  if (!isDragging) return;
+  e.preventDefault();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
+  const dx = cx - dragSX, dy = cy - dragSY; dragDist += Math.hypot(dx,dy);
+  dragSX = cx; dragSY = cy; camX -= dx/zoom; camY -= dy/zoom; clampCamera(); 
+}
+
+function handleUp(e) { 
+  if (e.touches && e.touches.length < 2) initialPinchDist = null;
+  isDragging = false; canvas.style.cursor='grab'; 
+}
+
+canvas.addEventListener("mousedown", handleDown); canvas.addEventListener("mousemove", handleMove); window.addEventListener("mouseup", handleUp);
+canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
+
+// ==========================================
+// 點擊事件與出征/遷城
+// ==========================================
+let targetAction = null;
+window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
+
+canvas.addEventListener("click", (e) => {
+  if (dragDist > 10) return;
+  const r = canvas.getBoundingClientRect();
+  const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0);
+  const cy = e.clientY || (e.changedTouches ? e.changedTouches[0].clientY : 0);
+  const sX = (cx - r.left) * (canvas.width / r.width), sY = (cy - r.top) * (canvas.height / r.height);
+  const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
+  
+  const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
+  const wBoss = worldBosses.find(b => b.hp > 0 && b.x === tX && b.y === tY);
+
+  if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
+
+  if (tC && tC.id!==myUid) {
+    if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
+    targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
+    document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 (Lv.${tC.castleLevel||1})`; 
+    document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
+    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+  } 
+  else if (wBoss) {
+    targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
+    document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; 
+    document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 傷害越高，獲取海量資源與道具！</span>`;
+    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+  }
+  else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
+    const ent = cell.entity;
+    let actionTitle = '⚔️ 討伐敵陣';
+    if (ent.type === 'relic') actionTitle = '🏛️ 奇蹟探險';
+    else if (ent.type === 'npc_capital') actionTitle = '😈 攻略王城';
+    else if (ent.type === 'npc_fortress') actionTitle = '🏯 攻堅要塞';
+    else if (ent.type === 'npc_castle') actionTitle = '🏰 攻打城堡';
+    else if (ent.type === 'npc_outpost') actionTitle = '🏚️ 拔除前哨';
+
+    let lootStr = '';
+    if (ent.loot) {
+       lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${formatCompact(ent.loot.wood||0)} ⛏️${formatCompact(ent.loot.iron||0)} 🌾${formatCompact(ent.loot.food||0)}`;
+       if (ent.loot.speedup) lootStr += ` | ⏳加速x${ent.loot.speedup}`;
+       if (ent.loot.resourceCard) lootStr += ` | 📦物資卡x${ent.loot.resourceCard}`;
+       lootStr += `</span>`;
+    }
+
+    targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist, techs: myData.research };
+    document.getElementById("modal-title").innerHTML = actionTitle;
+    document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。${lootStr}`:`距離：${Math.ceil(dist)} 格<br>建議兵力戰力：${ent.reqPwr}${lootStr}`;
+    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+  }
+  else if (!tC && cell && cell.type !== 'water') {
+    const timeSince = Date.now() - (myData.lastRelocateTime || 0);
+    const remainMs = isAdmin ? 0 : RELOCATE_COOLDOWN - timeSince;
+    const moveCost = Math.max(100, Math.ceil(dist * 50));
+    
+    if (remainMs > 0) {
+        targetAction = null;
+        document.getElementById("modal-title").innerHTML = `📍 領地搬遷 (冷卻中)`;
+        document.getElementById("modal-desc").innerHTML = `傳送矩陣冷卻中，需等待 <span style="color:#ef4444; font-weight:bold;">${formatTime(Math.ceil(remainMs/1000))}</span> 後方可再次搬遷。`;
+        document.getElementById("btn-confirm-action").style.display = 'none';
+    } else {
+        targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
+        document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
+        document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${formatCompact(moveCost)}木, ${formatCompact(moveCost)}鐵, ${formatCompact(moveCost)}糧`;
+        document.getElementById("btn-confirm-action").style.display = 'block';
+        document.getElementById("btn-confirm-action").innerText = "確認遷城"; 
+        document.getElementById("btn-confirm-action").style.background = '#0ea5e9';
+    }
+    document.getElementById("troop-selector").style.display = 'none'; 
+  } else return;
+
+  const bLvl = myData.buildings.barracks || 1; let unlockCount = 0;
+  ['inf','arc','cav'].forEach(t => { 
+    const full = t==='inf'?'infantry':(t==='arc'?'archer':'cavalry');
+    if (bLvl >= CFG.troops[full].reqLvl) {
+      document.getElementById(`row-${t}`).style.display = 'flex';
+      document.getElementById(`avail-${t}`).innerText = formatCompact(myData.troops[full]); 
+      document.getElementById(`send-${t}`).max = myData.troops[full]; 
+      document.getElementById(`send-${t}`).value = ''; 
+      unlockCount++;
+    } else { document.getElementById(`row-${t}`).style.display = 'none'; }
+  });
+  document.getElementById('troop-lock-msg').style.display = unlockCount < 3 ? 'block' : 'none';
+  document.getElementById("action-modal").style.display='flex';
+});
+
+document.getElementById("btn-confirm-action").addEventListener('click', () => {
+  if (!targetAction) return;
+
+  if (targetAction.type === 'relocate') {
+    if (myData.wood < targetAction.cost || myData.iron < targetAction.cost || myData.food < targetAction.cost) return alert(`資源不足！需要各 ${targetAction.cost} 資源。`);
+    myData.wood -= targetAction.cost; myData.iron -= targetAction.cost; myData.food -= targetAction.cost;
+    myData.x = targetAction.x; myData.y = targetAction.y;
+    myData.lastRelocateTime = Date.now();
+    myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
+    savePrivateData(); setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });
+    window.closeActionModal(); updateFogOfWar(); centerCameraOn(myData.x, myData.y); try{window.renderSelf();}catch(e){} window.refreshMap(); return;
+  }
+
+  const sendInf = document.getElementById('row-inf').style.display==='none' ? 0 : (parseInt(document.getElementById('send-inf').value)||0);
+  const sendArc = document.getElementById('row-arc').style.display==='none' ? 0 : (parseInt(document.getElementById('send-arc').value)||0);
+  const sendCav = document.getElementById('row-cav').style.display==='none' ? 0 : (parseInt(document.getElementById('send-cav').value)||0);
+  
+  if (sendInf===0 && sendArc===0 && sendCav===0) return alert("請派遣部隊！");
+  if (sendInf > myData.troops.infantry || sendArc > myData.troops.archer || sendCav > myData.troops.cavalry) return alert("兵力不足！");
+  if (myData.marches && myData.marches.length >= 3) return alert("最多同時維持 3 條行軍線路。");
+  
+  let spd = 2; 
+  if (sendInf > 0) spd = Math.max(spd, CFG.troops.infantry.speed);
+  if (sendArc > 0) spd = Math.max(spd, CFG.troops.archer.speed);
+  
+  const timeMs = Math.ceil(targetAction.dist * spd * 1000);
+  myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
+
+  myData.marches.push({
+    id: 'M'+Date.now(), type: targetAction.type==='attack_capital'?'attack_npc':targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
+    startTime: Date.now(), finishesAt: Date.now()+timeMs, troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav },
+    targetUid: targetAction.id || targetAction.targetUid, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower, techs: myData.research
+  });
+
+  myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
+  savePrivateData(); setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+  window.closeActionModal(); try{window.renderSelf();}catch(e){}
+});
+
+// ==========================================
+// 渲染 UI 
+// ==========================================
+window.renderSelf = function() {
+  try {
+      const now = Date.now();
+      const isShielded = myData.shieldEndsAt && myData.shieldEndsAt > now;
+      const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
+      
+      const titleEl = document.getElementById('player-title');
+      if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
+      
+      const hrToSec = 3600;
+      const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
+      const woodProdPerHr = CFG.buildings.lumber.rate * myData.buildings.lumber * hrToSec;
+      const ironProdPerHr = CFG.buildings.mine.rate * myData.buildings.mine * hrToSec;
+      const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
+      const netFood = farmProdPerSec - upkeepPerHr;
+
+      if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = formatCompact(myData.wood); 
+      if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${formatCompact(woodProdPerHr)}/h`;
+      if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = formatCompact(myData.iron); 
+      if(document.getElementById('rate-iron')) document.getElementById('rate-iron').innerText = `+${formatCompact(ironProdPerHr)}/h`;
+      if(document.getElementById('res-food')) document.getElementById('res-food').innerText = formatCompact(myData.food); 
+      if(document.getElementById('rate-food')) {
+          document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${formatCompact(Math.abs(netFood))}/h`;
+          document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
+      }
+
+      if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = formatCompact(myData.troops.infantry); 
+      if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = formatCompact(myData.troops.archer); 
+      if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = formatCompact(myData.troops.cavalry);
+
+      const maxQueues = 1 + (myData.buildings.builder || 0);
+      const bqText = document.getElementById('build-queue-text');
+      if(bqText) bqText.innerText = `(${myData.buildQueues.length}/${maxQueues})`;
+
+      const tasksContainer = document.getElementById('active-tasks-container');
+      if (tasksContainer) {
+          let tasksHtml = '';
+          myData.buildQueues.forEach((q, idx) => {
+             if (!q || !CFG.buildings[q.target]) return;
+             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
+             const totalSec = getUpgradeTime(q.target, myData.buildings[q.target]);
+             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
+             tasksHtml += `
+                <div class="task-row">
+                   <div class="task-info">
+                     <span class="task-title">🏗️ 升級: ${CFG.buildings[q.target].name}</span>
+                     <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
+                     <span class="task-time">倒數: ${formatTime(remainSec)}</span>
+                   </div>
+                   <button onclick="window.useSpeedUp('build', ${idx})" style="background:#10b981; padding:6px; font-size:0.75rem;">⚡加速</button>
+                </div>
+             `;
+          });
+          if (myData.researchQueue && myData.researchQueue.target && CFG.techs[myData.researchQueue.target]) {
+             const q = myData.researchQueue;
+             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
+             const totalSec = getUpgradeTime(q.target, myData.research[q.target] || 0, true);
+             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
+             tasksHtml += `
+                <div class="task-row">
+                   <div class="task-info">
+                     <span class="task-title">🧪 研發: ${CFG.techs[q.target].name}</span>
+                     <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
+                     <span class="task-time">倒數: ${formatTime(remainSec)}</span>
+                   </div>
+                   <button onclick="window.useSpeedUp('research')" style="background:#10b981; padding:6px; font-size:0.75rem;">⚡加速</button>
+                </div>
+             `;
+          }
+          if (myData.trainQueue && myData.trainQueue.type && CFG.troops[myData.trainQueue.type]) {
+             const q = myData.trainQueue;
+             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
+             const totalSec = CFG.troops[q.type].time * q.count;
+             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
+             tasksHtml += `
+                <div class="task-row">
+                   <div class="task-info">
+                     <span class="task-title">⚔️ 招募: ${CFG.troops[q.type].name}</span>
+                     <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
+                     <span class="task-time">倒數: ${formatTime(remainSec)}</span>
+                   </div>
+                   <button onclick="window.useSpeedUp('train')" style="background:#10b981; padding:6px; font-size:0.75rem;">⚡加速</button>
+                </div>
+             `;
+          }
+          if (tasksHtml === '') tasksHtml = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無進行中的任務</p>';
+          tasksContainer.innerHTML = tasksHtml;
+      }
+
+      if(document.getElementById('inv-shield')) document.getElementById('inv-shield').innerText = myData.items.shieldCard || 0;
+      if(document.getElementById('inv-speed')) document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
+      if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
+
+      const bContainer = document.getElementById('building-container');
+      if (bContainer) {
+          bContainer.innerHTML = Object.keys(CFG.buildings).map(key => {
+            const lvl = myData.buildings[key] || 0;
+            const cost = getUpgradeCost(key, lvl);
+            const timeSec = getUpgradeTime(key, lvl);
+            const queueObj = myData.buildQueues.find(q => q && q.target === key);
+            const isMax = (key === 'builder' && lvl >= CFG.buildings.builder.maxLevel);
+            const disabled = isMax || queueObj || myData.buildQueues.length >= maxQueues;
+            
+            let btnHtml = ''; let progressHtml = '';
+            if (queueObj) {
+                const remainSec = Math.max(0, Math.ceil((queueObj.finishesAt - now) / 1000));
+                const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
+                btnHtml = `<button class="btn-speed" style="display:block;" onclick="window.useSpeedUp('build', ${myData.buildQueues.indexOf(queueObj)})">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+            } else {
+                btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
+            }
+
+            return `
+            <div class="item-card">
+                <div>
+                <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
+                </div>
+                ${progressHtml}
+                ${btnHtml}
+            </div>`;
+          }).join('');
+      }
+
+      const rContainer = document.getElementById('research-container');
+      if (rContainer) {
+          if (myData.buildings.academy < 1) {
+              rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先建造並升級【學院】來解鎖科技研發。</p>';
+          } else {
+              rContainer.innerHTML = Object.keys(CFG.techs).map(key => {
+                  const d = CFG.techs[key];
+                  const lvl = myData.research[key] || 0;
+                  const cost = getUpgradeCost(key, lvl, true);
+                  const timeSec = getUpgradeTime(key, lvl, true);
+                  const isResearching = myData.researchQueue && myData.researchQueue.target === key;
+                  const isMax = lvl >= myData.buildings.academy * 2;
+                  
+                  let btnHtml = ''; let progressHtml = '';
+                  if (isResearching) {
+                      const remainSec = Math.max(0, Math.ceil((myData.researchQueue.finishesAt - now) / 1000));
+                      const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
+                      btnHtml = `<button class="btn-speed" style="display:block;" onclick="window.useSpeedUp('research')">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                      progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+                  } else {
+                      btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
+                  }
+
+                  return `
+                  <div class="item-card">
+                      <div>
+                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span>
+                      <div class="item-info">附加戰力: +${lvl}</div>
+                      <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
+                      </div>
+                      ${progressHtml}
+                      ${btnHtml}
+                  </div>`;
+              }).join('');
+          }
+      }
+
+      const tContainer = document.getElementById('train-container');
+      if (tContainer) {
+          const bLvl = myData.buildings.barracks || 1;
+          tContainer.innerHTML = Object.keys(CFG.troops).map(key => {
+              const d = CFG.troops[key];
+              if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div class="item-info">需 兵營 Lv.${d.reqLvl}</div></div><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div>`;
+              
+              const buff = myData.research[`${key}_atk`] || 0;
+              const isTraining = myData.trainQueue && myData.trainQueue.type === key;
+              
+              const trainCount = bLvl * 5; 
+              const totalTime = d.time * trainCount;
+              
+              let btnHtml = ''; let progressHtml = '';
+              
+              if (isTraining) {
+                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
+                  const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
+                  btnHtml = `<button class="btn-speed" style="display:block;" onclick="window.useSpeedUp('train')">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                  progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+              } else {
+                  btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
+              }
+
+              return `
+              <div class="item-card" style="justify-content:flex-start;">
+                  <div>
+                  <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong>
+                  <div class="item-info">戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h</div>
+                  <div class="item-cost"><span>🌲${formatCompact(d.w * trainCount)}</span><span>⛏️${formatCompact(d.i * trainCount)}</span><span>🌾${formatCompact(d.f * trainCount)}</span></div>
+                  </div>
+                  ${progressHtml}
+                  ${btnHtml}
+              </div>`;
+          }).join('');
+      }
+
+      const logList = document.getElementById('log-list');
+      if (logList && myData.logs) logList.innerHTML = myData.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
+
+  } catch (e) {
+      console.error("UI 渲染嚴重錯誤:", e);
+  }
+}
+
+// ==========================================
+// 綁定所有操作至 window (供 HTML 呼叫)
+// ==========================================
+window.useShield = async () => {
+  if (myData.items.shieldCard <= 0) return alert('背包中沒有和平護盾！');
+  const now = Date.now();
+  if (myData.shieldEndsAt && myData.shieldEndsAt > now) {
+     if(!confirm('目前護盾依然有效，確定要覆蓋並重新計算 6 小時嗎？')) return;
+  }
+  myData.items.shieldCard--;
+  myData.shieldEndsAt = now + 6 * 3600 * 1000;
+  myData.logs.unshift(`[防禦系統] 啟動和平護盾，領地 6 小時內將免受攻擊！`);
+  await savePrivateData();
+  await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true });
+  alert('🛡️ 護盾已啟動！');
+  try{ window.renderSelf(); }catch(e){} window.refreshMap();
+};
+
+window.openRenameModal = () => { document.getElementById("rename-modal").style.display='flex'; };
+window.closeRenameModal = () => { document.getElementById("rename-modal").style.display='none'; };
+window.confirmRename = async () => {
+  const newName = document.getElementById('rename-input').value.trim();
+  if(newName.length < 2 || newName.length > 8) return alert('名字長度需為 2~8 字元！');
+  if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
+  else if (myData.items.renameCard > 0) myData.items.renameCard--; else return alert('需要改名卡！');
+  myData.name = newName; await savePrivateData(); await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
+  alert("✅ 名稱已更改！"); window.closeRenameModal(); try{ window.renderSelf(); }catch(e){} window.refreshMap();
+};
+
+window.locateHome = () => { if (myData) { centerCameraOn(myData.x, myData.y); window.switchTab('world'); }};
+window.dispatchScout = () => {
+  if (!myData) return; if (myData.food < 30) return alert('糧食不足 30！');
+  myData.food -= 30; currentVisionBonus += 3; updateFogOfWar(); savePrivateData();
+  setTimeout(() => { currentVisionBonus = Math.max(0, currentVisionBonus-3); }, 30000);
+};
+
+window.upgradeBuilding = async (key) => {
+  const maxQueues = 1 + (myData.buildings.builder || 0);
+  if (myData.buildQueues.some(q => q && q.target === key)) return alert('該設施正在升級中！');
+  if (myData.buildQueues.length >= maxQueues) return alert('建築隊列已滿！請升級工匠小屋。');
+  
+  const lvl = myData.buildings[key], cost = getUpgradeCost(key, lvl);
+  if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
+  const timeSec = getUpgradeTime(key, lvl);
+  myData.wood -= cost.w; myData.iron -= cost.i; 
+  myData.buildQueues.push({ target: key, finishesAt: Date.now() + timeSec * 1000 }); 
+  await savePrivateData();
+};
+
+window.startResearch = async (key) => {
+  if (myData.researchQueue) return alert('已有科技正在研發！');
+  const lvl = myData.research[key] || 0;
+  const cost = getUpgradeCost(key, lvl, true);
+  if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
+  const timeSec = getUpgradeTime(key, lvl, true);
+  myData.wood -= cost.w; myData.iron -= cost.i;
+  myData.researchQueue = { target: key, finishesAt: Date.now() + timeSec * 1000 };
+  await savePrivateData();
+};
+
+window.trainTroopType = async (typeKey) => {
+  if (myData.trainQueue) return alert('已有部隊正在招募！');
+  const req = CFG.troops[typeKey];
+  const bLvl = myData.buildings.barracks || 1;
+  const trainCount = bLvl * 5;
+  const costW = req.w * trainCount, costI = req.i * trainCount, costF = req.f * trainCount;
+
+  if (myData.buildings.barracks < req.reqLvl) return alert('兵營等級不足！');
+  if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
+  myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
+  myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
+  await savePrivateData();
+};
+
+window.useSpeedUp = async (type, idx = 0) => {
+  if (!myData || myData.items.speedup <= 0) return alert("沒有足夠的加速道具！");
+  if (type === 'build') {
+    if (myData.buildQueues.length === 0) return alert("沒有進行中的建築隊列！");
+    if (!myData.buildQueues[idx]) return;
+    myData.items.speedup--;
+    myData.buildQueues[idx].finishesAt -= 5 * 60 * 1000; 
+    if (myData.buildQueues[idx].finishesAt < Date.now()) myData.buildQueues[idx].finishesAt = Date.now();
+  } else if (type === 'research') {
+    if (!myData.researchQueue) return alert("沒有進行中的研發隊列！");
+    myData.items.speedup--;
+    myData.researchQueue.finishesAt -= 5 * 60 * 1000; 
+    if (myData.researchQueue.finishesAt < Date.now()) myData.researchQueue.finishesAt = Date.now();
+  } else {
+    if (!myData.trainQueue) return alert("該項目沒有進行中的隊列！");
+    myData.items.speedup--;
+    myData.trainQueue.finishesAt -= 5 * 60 * 1000; 
+    if (myData.trainQueue.finishesAt < Date.now()) myData.trainQueue.finishesAt = Date.now();
+  }
+  await savePrivateData();
+};
