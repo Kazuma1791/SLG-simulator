@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 終極防外掛與直覺GM版</title>
+  <title>多人領地戰 - 終極營運版 (防外掛+自訂GM)</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* 微調三階加速按鈕的排版 */
+    .speed-btn-group { display: flex; gap: 4px; margin-top: 8px; }
+    .speed-btn-group button { flex: 1; padding: 6px 2px; font-size: 0.75rem; border-radius: 4px; }
+  </style>
 </head>
 <body>
   <div id="danger-overlay" class="danger-border"></div>
@@ -65,7 +70,7 @@
       <button class="tab-btn" id="btn-tab-city" onclick="window.switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="window.switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="window.switchTab('inv')">🎒 背包</button>
-      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 管理員</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 營運面板</button>
       <button onclick="window.logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
     </div>
 
@@ -153,69 +158,89 @@
     <!-- ==================== 🎒 背包分頁 ==================== -->
     <div id="tab-inv" class="tab-content">
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主背包</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主戰略背包</h3>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2.5rem; margin-bottom:4px;">🛡️</div>
-            <strong style="font-size:1.05rem;">和平護盾 (6h)</strong>
+            <div style="font-size:2rem; margin-bottom:4px;">🛡️</div>
+            <strong style="font-size:0.95rem;">護盾 (6h)</strong>
             <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">開啟護盾</button>
+            <button onclick="window.useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">使用</button>
           </div>
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2.5rem; margin-bottom:4px;">⏳</div>
-            <strong style="font-size:1.05rem;">加速卡 (5m)</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed" style="color:#fff; font-weight:bold;">0</span></span>
-            <span style="font-size:0.75rem; color:#94a3b8; margin-top:auto;">請於排程中點擊使用</span>
+            <div style="font-size:2rem; margin-bottom:4px;">⚡</div>
+            <strong style="font-size:0.95rem;">5分加速卡</strong>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed5m" style="color:#fff; font-weight:bold;">0</span></span>
           </div>
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2.5rem; margin-bottom:4px;">✏️</div>
-            <strong style="font-size:1.05rem;">改名卡</strong>
+            <div style="font-size:2rem; margin-bottom:4px;">🚀</div>
+            <strong style="font-size:0.95rem;">30分加速卡</strong>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed30m" style="color:#fff; font-weight:bold;">0</span></span>
+          </div>
+          <div class="item-card" style="justify-content:center; text-align:center;">
+            <div style="font-size:2rem; margin-bottom:4px;">⏱️</div>
+            <strong style="font-size:0.95rem;">1小時加速卡</strong>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed1h" style="color:#fff; font-weight:bold;">0</span></span>
+          </div>
+          <div class="item-card" style="justify-content:center; text-align:center;">
+            <div style="font-size:2rem; margin-bottom:4px;">✏️</div>
+            <strong style="font-size:0.95rem;">改名卡</strong>
             <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-rename" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.openRenameModal()" style="background:#3b82f6; margin-top:auto; width:100%;">前往改名</button>
+            <button onclick="window.openRenameModal()" style="background:#3b82f6; margin-top:auto; width:100%;">改名</button>
           </div>
         </div>
+        <p style="font-size:0.75rem; color:#94a3b8; margin-top:12px; text-align:center;">*加速卡請直接於「內政」排程看板中點擊使用</p>
       </div>
     </div>
 
-    <!-- ==================== 👑 GM 面板 ==================== -->
+    <!-- ==================== 👑 GM 營運面板 ==================== -->
     <div id="tab-gm" class="tab-content">
       <div class="card" style="border-color: #facc15;">
-        <h3 style="color:#facc15;">👑 最高管理員控制台</h3>
-        
-        <!-- 自己的操作 -->
-        <h4 style="margin-top:10px; color:#cbd5e1; font-size:0.9rem;">➤ 對自己操作 (快速測試)</h4>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
-          <button onclick="window.gmAddRes('wood', 1000000)" style="background:#059669;">+1M 木材</button>
-          <button onclick="window.gmAddRes('iron', 1000000)" style="background:#059669;">+1M 鐵礦</button>
-          <button onclick="window.gmAddRes('food', 1000000)" style="background:#059669;">+1M 糧草</button>
-          <button onclick="window.gmAddTroop('infantry', 50000)" style="background:#2563eb;">+5萬 步兵</button>
-          <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置所有 Boss</button>
-          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
-        </div>
-
-        <!-- 針對指定玩家操作 (優化點擊選擇) -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🎯 指定玩家操作 <span style="font-size:0.75rem; color:#ef4444;">(請先從下方名單點擊選取)</span></h4>
+        <h3 style="color:#facc15; margin-bottom: 10px;">👑 伺服器營運控制台</h3>
         
         <!-- 顯示當前鎖定的目標 -->
-        <div style="background:#0a0f1d; padding:10px; border-radius:4px; margin-top:6px; margin-bottom:10px; border: 1px dashed #facc15; display:flex; align-items:center;">
-          <span style="color:#94a3b8; font-size:0.85rem; margin-right:8px;">目前鎖定：</span>
+        <div style="background:#0a0f1d; padding:10px; border-radius:4px; margin-bottom:10px; border: 1px dashed #facc15; display:flex; align-items:center;">
+          <span style="color:#94a3b8; font-size:0.85rem; margin-right:8px;">🎯 當前鎖定目標：</span>
           <strong id="gm-selected-name" style="color:#f87171; font-size:1.1rem;">未選擇任何人</strong>
           <input type="hidden" id="gm-target-uid" value="">
         </div>
 
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解除封鎖帳號</button>
-          <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 手動永久封鎖</button>
+        <!-- 🛡️ 帳號查緝與封鎖 -->
+        <h4 style="color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">👁️ 帳號查緝與安全操作</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+          <button onclick="window.gmAuditPlayer()" style="background:#d946ef; flex:2;">📊 審計該玩家 (檢查外掛/修改紀錄)</button>
+          <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解封</button>
+          <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 封鎖</button>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-          <button onclick="window.gmTargetAction('addRes')" style="background:#0ea5e9;">給予100萬資源</button>
-          <button onclick="window.gmTargetAction('addTroops')" style="background:#8b5cf6;">給予10萬大軍</button>
-          <button onclick="window.gmTargetAction('addItems')" style="background:#f59e0b;">給予百張護盾/加速</button>
-          <button onclick="window.gmTargetAction('clear')" style="background:#475569;">清空物資與兵力</button>
+
+        <!-- ✏️ 自訂數值修改器 -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚙️ 自訂數據寫入器 (任意修改)</h4>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <select id="gm-custom-field" style="background:#1e2c40; color:white; padding:8px; border-radius:4px; flex:1;">
+             <option value="wood">資源 - 木材</option>
+             <option value="iron">資源 - 鐵礦</option>
+             <option value="food">資源 - 糧草</option>
+             <option value="infantry">兵力 - 步兵</option>
+             <option value="archer">兵力 - 弓兵</option>
+             <option value="cavalry">兵力 - 騎兵</option>
+             <option value="speedup5m">道具 - 5分加速卡</option>
+             <option value="speedup30m">道具 - 30分加速卡</option>
+             <option value="speedup1h">道具 - 1小時加速卡</option>
+             <option value="shieldCard">道具 - 和平護盾</option>
+             <option value="castleLevel">建築 - 主城等級(慎用)</option>
+          </select>
+          <input type="number" id="gm-custom-amount" placeholder="輸入數量" style="width:100px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
+          <button onclick="window.gmExecuteCustom()" style="background:#8b5cf6; padding:8px 12px;">確認寫入</button>
+        </div>
+
+        <!-- 快速功能 -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚡ 伺服器快速操作</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+          <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置地圖所有 Boss</button>
+          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成全伺服器隊列</button>
         </div>
 
         <!-- GM 全服天眼 -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊玩家即可鎖定目標)</h4>
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊玩家即可鎖定為目標)</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
