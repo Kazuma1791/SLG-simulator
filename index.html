@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 終極介面與護盾雷達版</title>
+  <title>多人領地戰 - Boss群聚與UI修復版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -24,6 +24,8 @@
     .tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 2px solid #1e2c40; padding-bottom: 6px; flex-wrap: wrap; }
     .tab-btn { background: transparent; color: #94a3b8; border: 1px solid transparent; font-size: 0.9rem; padding: 6px 4px; flex: 1; text-align: center; min-width: 65px; }
     .tab-btn.active { background: #1e2c40; color: #38bdf8; border: 1px solid #38bdf8; border-radius: 6px; }
+    
+    /* 修正分頁顯示邏輯 */
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
@@ -56,7 +58,6 @@
     .item-cost { display: flex; gap: 8px; margin-top: 4px; font-size: 0.8rem; }
     .item-cost span { background: #0a0f1d; padding: 2px 6px; border-radius: 4px; border: 1px solid #1e2c40; }
     
-    /* 排程看板樣式 */
     .task-row { display: flex; justify-content: space-between; align-items: center; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40; margin-bottom: 6px; }
     .task-info { display: flex; flex-direction: column; width: 65%; text-align: left; }
     .task-title { font-size: 0.9rem; font-weight: bold; color: #f8fafc; }
@@ -69,7 +70,7 @@
     .btn-upgrade { width: 100%; background: #2563eb; margin-top: 8px; }
     .btn-speed { width: 100%; background: #10b981; margin-top: 8px; display: none; }
     
-    .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.8rem; border: 1px solid #182333; }
+    .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 150px; overflow-y: auto; font-size: 0.8rem; border: 1px solid #182333; }
     .log-box p { margin-bottom: 6px; border-bottom: 1px solid #0d1522; padding-bottom: 4px; line-height: 1.3; }
     
     .danger-border { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 9999; box-shadow: inset 0 0 25px 8px rgba(239, 68, 68, 0.8); animation: flashRed 1.2s infinite alternate; display: none; border: 2px solid #ef4444; }
@@ -103,7 +104,7 @@
       </div>
     </div>
 
-    <!-- 資源面板 -->
+    <!-- 資源面板 (固定顯示) -->
     <div class="card" style="padding-bottom: 8px;">
       <h2 id="player-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
         <span style="font-size:1.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏰 連線中...</span>
@@ -119,17 +120,17 @@
       </div>
     </div>
 
-    <!-- 導覽分頁 -->
+    <!-- 導覽分頁按鈕 -->
     <div class="tabs">
       <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 地圖</button>
       <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="switchTab('inv')">🎒 背包</button>
-      <button class="tab-btn" id="btn-tab-gm" onclick="switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM面板</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM</button>
       <button onclick="logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
     </div>
 
-    <!-- ==================== 世界沙盤 ==================== -->
+    <!-- ==================== 世界沙盤分頁 ==================== -->
     <div id="tab-world" class="tab-content active">
       <div class="card" style="padding: 10px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -149,6 +150,7 @@
           </div>
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
 
+          <!-- 軍事行動彈窗 -->
           <div id="action-modal" class="modal-overlay">
             <div class="action-modal">
               <h3 id="modal-title">⚔️ 軍事行動</h3>
@@ -169,7 +171,7 @@
       </div>
     </div>
 
-    <!-- ==================== 城內政務 ==================== -->
+    <!-- ==================== 城內政務分頁 ==================== -->
     <div id="tab-city" class="tab-content">
       
       <!-- 📋 進行中的排程區塊 -->
@@ -198,12 +200,12 @@
       </div>
     </div>
 
-    <!-- ==================== 📡 情報雷達 ==================== -->
+    <!-- ==================== 📡 情報雷達分頁 ==================== -->
     <div id="tab-radar" class="tab-content">
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px;">
-          <h3 style="margin:0;">📡 情報雷達</h3>
-          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 掃描</button>
+          <h3 style="margin:0;">📡 周遭情報雷達</h3>
+          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button>
         </div>
         
         <h4 style="margin-top: 12px; color:#facc15; font-size:0.95rem;">🐲 附近的世界首領</h4>
@@ -214,11 +216,11 @@
       </div>
     </div>
 
-    <!-- ==================== 🎒 領主背包 ==================== -->
+    <!-- ==================== 🎒 背包分頁 ==================== -->
     <div id="tab-inv" class="tab-content">
       <div class="card">
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主背包</h3>
-        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">管理您的戰略物資。</p>
+        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">管理與使用您的戰略物資道具。</p>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
             <div style="font-size:2.5rem; margin-bottom:4px;">🛡️</div>
@@ -242,7 +244,7 @@
       </div>
     </div>
 
-    <!-- ==================== 🛠️ GM 面板 ==================== -->
+    <!-- ==================== 🛠️ GM 面板分頁 ==================== -->
     <div id="tab-gm" class="tab-content">
       <div class="card" style="border-color: #f87171;">
         <h3 style="color:#f87171;">🛠️ 開發者控制台 (GM)</h3>
@@ -254,12 +256,13 @@
           <button onclick="gmAddRes('shield', 10)" style="background:#06b6d4;">+10 護盾</button>
           <button onclick="gmAddTroop('infantry', 5000)" style="background:#2563eb;">+5k 步兵</button>
           <button onclick="gmAddTroop('cavalry', 5000)" style="background:#2563eb;">+5k 騎兵</button>
-          <button onclick="gmRespawnBosses()" style="background:#9333ea;">🔄 重置Boss</button>
+          <button onclick="gmRespawnBosses()" style="background:#9333ea;">🔄 重置所有Boss</button>
           <button onclick="gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
         </div>
       </div>
     </div>
 
+    <!-- 王國日誌 (全域顯示) -->
     <div class="card">
       <h3 style="margin-bottom: 6px;">📜 王國日誌</h3>
       <div class="log-box" id="log-list"></div>
@@ -316,11 +319,7 @@
         infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
         archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 8, reqLvl: 3, upkeep: 25 },
         cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 12, reqLvl: 5, upkeep: 45 }
-      },
-      bosses: [
-        { name: '🐉 滅世魔龍', hp: 200000 }, { name: '🦅 風暴巨鷹', hp: 80000 },
-        { name: '🦑 深海巨妖', hp: 80000 }, { name: '🗿 大地岩魔', hp: 30000 }
-      ]
+      }
     };
 
     function getUpgradeCost(key, level, isTech=false) { const base = isTech ? CFG.techs[key] : CFG.buildings[key]; const m = Math.pow(1.6, level); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; }
@@ -381,14 +380,15 @@
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
+    // 💡 擴充世界首領為 15 隻
     async function spawnWorldBoss(id) {
       let bx, by, bName, bHp, mult;
       if (id === 'BOSS_CORE') {
         do { bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6); } while(bx===50&&by===50);
         bName = '🐉 滅世魔龍'; bHp = 200000; mult = 10;
-      } else if (id === 'BOSS_MID') {
+      } else if (id.startsWith('BOSS_MID')) {
         do { bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20); } while(Math.hypot(bx-50, by-50) < 15);
-        bName = '🦑 深海巨妖'; bHp = 80000; mult = 5;
+        bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 80000; mult = 5;
       } else {
         do { bx=Math.floor(Math.random()*80+10); by=Math.floor(Math.random()*80+10); } while(Math.hypot(bx-50, by-50) <= 35);
         bName = '🗿 大地岩魔'; bHp = 30000; mult = 2;
@@ -480,7 +480,12 @@
           }
         });
 
-        ['BOSS_CORE', 'BOSS_MID', 'BOSS_OUTER'].forEach(id => {
+        // 💡 監聽 15 隻世界 Boss (1 Core, 4 Mid, 10 Outer)
+        const bossIds = ['BOSS_CORE'];
+        for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
+        for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
+
+        bossIds.forEach(id => {
            onSnapshot(doc(db, "world_map", id), (snap) => {
               if (snap.exists()) {
                  const idx = worldBosses.findIndex(b => b.id === id);
@@ -525,8 +530,11 @@
 
     window.gmRespawnBosses = () => {
       if (!isAdmin) return;
-      spawnWorldBoss('BOSS_CORE'); spawnWorldBoss('BOSS_MID'); spawnWorldBoss('BOSS_OUTER');
-      alert("已強制重生所有世界 Boss！");
+      const bossIds = ['BOSS_CORE'];
+      for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
+      for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
+      bossIds.forEach(id => spawnWorldBoss(id));
+      alert("已強制重生所有 15 隻世界 Boss！");
     };
 
     window.gmClearQueues = async () => {
@@ -574,7 +582,6 @@
 
     async function savePrivateData() { myData.lastTick = Date.now(); await setDoc(doc(db, "players", myUid), myData, { merge: true }); }
     
-    // 💡 渲染雷達 (Boss 與 Player)
     window.refreshMap = async function() {
       const snap = await getDocs(collection(db, "world_map"));
       allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) });
@@ -1342,7 +1349,7 @@
                   return `
                   <div class="item-card">
                       <div>
-                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
+                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span>
                       <div class="item-info">附加戰力: +${lvl}</div>
                       <div class="item-cost"><span>🌲${cost.w}</span><span>⛏️${cost.i}</span></div>
                       </div>
