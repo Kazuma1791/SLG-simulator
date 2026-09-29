@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 </title>
+  <title>多人領地戰 - 介面修復與海量首領版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -188,7 +188,7 @@
       </div>
 
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
         <div class="grid" id="research-container"></div>
       </div>
 
@@ -373,39 +373,43 @@
     }
     initMapCache();
 
-    // 💡 強制資料淨化：防範任何舊版欄位缺失導致渲染崩潰
+    // 💡 最強大的資料淨化器：防止任何舊欄位遺失導致渲染崩潰
     function sanitizeData() {
       if (!myData) return;
-      if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
-      ['infantry', 'archer', 'cavalry'].forEach(k => { if(isNaN(myData.troops[k])) myData.troops[k] = 0; });
+      if (!myData.troops || typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
+      ['infantry', 'archer', 'cavalry'].forEach(k => { if(isNaN(myData.troops[k]) || myData.troops[k]===null) myData.troops[k] = 0; });
       
       if (!myData.buildings || typeof myData.buildings !== 'object') myData.buildings = {};
-      Object.keys(CFG.buildings).forEach(k => {
-         if(isNaN(myData.buildings[k])) myData.buildings[k] = (k==='builder'||k==='academy') ? 0 : 1;
-      });
+      Object.keys(CFG.buildings).forEach(k => { if(isNaN(myData.buildings[k]) || myData.buildings[k]===null) myData.buildings[k] = (k==='builder'||k==='academy') ? 0 : 1; });
       
       if (!myData.research || typeof myData.research !== 'object') myData.research = {};
-      Object.keys(CFG.techs).forEach(k => { if(isNaN(myData.research[k])) myData.research[k] = 0; });
+      Object.keys(CFG.techs).forEach(k => { if(isNaN(myData.research[k]) || myData.research[k]===null) myData.research[k] = 0; });
 
       if (!myData.items || typeof myData.items !== 'object') myData.items = { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 };
-      ['speedup', 'renameCard', 'resourceCard', 'shieldCard'].forEach(k => { if(isNaN(myData.items[k])) myData.items[k] = 0; });
+      ['speedup', 'renameCard', 'resourceCard', 'shieldCard'].forEach(k => { if(isNaN(myData.items[k]) || myData.items[k]===null) myData.items[k] = 0; });
 
       if (!Array.isArray(myData.buildQueues)) {
         myData.buildQueues = [];
         if (myData.buildQueue) { myData.buildQueues.push(myData.buildQueue); delete myData.buildQueue; }
       }
-      myData.buildQueues = myData.buildQueues.filter(q => CFG.buildings[q.target]); // 過濾損壞目標
-      if (myData.researchQueue && !CFG.techs[myData.researchQueue.target]) myData.researchQueue = null;
+      myData.buildQueues = myData.buildQueues.filter(q => q && q.target && CFG.buildings[q.target]); 
+
+      if (myData.researchQueue && (!myData.researchQueue.target || !CFG.techs[myData.researchQueue.target])) myData.researchQueue = null;
+      if (myData.trainQueue && (!myData.trainQueue.type || !CFG.troops[myData.trainQueue.type])) myData.trainQueue = null;
 
       if (!Array.isArray(myData.marches)) myData.marches = [];
-      if (!Array.isArray(myData.clearedPOI)) myData.clearedPOI = [];
-      if (!Array.isArray(myData.logs)) myData.logs = ['歡迎來到領地戰！'];
+      myData.marches = myData.marches.filter(m => m !== null && m !== undefined); 
 
+      if (!Array.isArray(myData.clearedPOI)) myData.clearedPOI = [];
+      myData.clearedPOI = myData.clearedPOI.filter(p => p !== null && p !== undefined);
+
+      if (!Array.isArray(myData.logs)) myData.logs = ['歡迎來到領地戰！'];
+      
       if (isNaN(myData.wood) || myData.wood === null) myData.wood = 200;
       if (isNaN(myData.iron) || myData.iron === null) myData.iron = 200;
       if (isNaN(myData.food) || myData.food === null) myData.food = 200;
-      if (isNaN(myData.shieldEndsAt)) myData.shieldEndsAt = 0;
-      if (isNaN(myData.lastRelocateTime)) myData.lastRelocateTime = 0;
+      if (isNaN(myData.shieldEndsAt) || myData.shieldEndsAt === null) myData.shieldEndsAt = 0;
+      if (isNaN(myData.lastRelocateTime) || myData.lastRelocateTime === null) myData.lastRelocateTime = 0;
     }
 
     function getTileEntity(x, y) {
@@ -421,7 +425,7 @@
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
-    // 💡 大幅增加低階與中階 Boss 數量
+    // 💡 擴充為 41 隻世界 Boss (1 Core, 10 Mid, 30 Outer)
     async function spawnWorldBoss(id) {
       let bx, by, bName, bHp, mult;
       if (id === 'BOSS_CORE') {
@@ -510,10 +514,10 @@
           }
         });
 
-        // 💡 生成 21 隻世界 Boss
+        // 💡 監聽 41 隻世界 Boss
         const bossIds = ['BOSS_CORE'];
-        for(let i=1; i<=6; i++) bossIds.push(`BOSS_MID_${i}`);
-        for(let i=1; i<=15; i++) bossIds.push(`BOSS_OUTER_${i}`);
+        for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
+        for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
 
         bossIds.forEach(id => {
            onSnapshot(doc(db, "world_map", id), (snap) => {
@@ -536,7 +540,7 @@
     window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
     // ==========================================
-    // 👑 GM 專屬功能
+    // 👑 GM 專屬功能 (Admin API)
     // ==========================================
     window.gmAddRes = async (type, amount) => {
       if (!isAdmin) return;
@@ -561,8 +565,8 @@
     window.gmRespawnBosses = () => {
       if (!isAdmin) return;
       const bossIds = ['BOSS_CORE'];
-      for(let i=1; i<=6; i++) bossIds.push(`BOSS_MID_${i}`);
-      for(let i=1; i<=15; i++) bossIds.push(`BOSS_OUTER_${i}`);
+      for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
+      for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
       bossIds.forEach(id => spawnWorldBoss(id));
       alert("已強制重生所有 世界 Boss！");
     };
@@ -771,7 +775,7 @@
       }
       
       if (needSave) { myData.marches = newMarches; await savePrivateData(); }
-      try{ renderSelf(); }catch(e){}
+      try { renderSelf(); } catch(e){}
     }
 
     function createReturnMarch(oldMarch, survivedTroops, loot) {
@@ -800,7 +804,7 @@
         let dLog = "";
         if (bKeys.length > 0) {
           const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; myData.buildings[rKey]--;
-          dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
+          dLog = `，【${CFG.buildings[rKey].name}】遭破壞降級！`;
           if (rKey === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
         }
         myData.logs.unshift(`[城防潰敗] ${m.npcName} 攻破防線！被掠奪資源${dLog}`);
@@ -1241,7 +1245,7 @@
     });
 
     // ==========================================
-    // 渲染 UI (完全防崩潰保護)
+    // 渲染 UI (防崩潰架構)
     // ==========================================
     function renderSelf() {
       try {
@@ -1249,7 +1253,8 @@
           const isShielded = myData.shieldEndsAt && myData.shieldEndsAt > now;
           const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
           
-          document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
+          const titleEl = document.getElementById('player-title');
+          if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
           
           const hrToSec = 3600;
           const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
@@ -1258,13 +1263,20 @@
           const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
           const netFood = farmProdPerSec - upkeepPerHr;
 
-          document.getElementById('res-wood').innerText = Math.floor(myData.wood); document.getElementById('rate-wood').innerText = `+${Math.floor(woodProdPerHr)}/h`;
-          document.getElementById('res-iron').innerText = Math.floor(myData.iron); document.getElementById('rate-iron').innerText = `+${Math.floor(ironProdPerHr)}/h`;
-          document.getElementById('res-food').innerText = Math.floor(myData.food); document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${Math.floor(netFood)}/h`;
-          document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
+          if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = Math.floor(myData.wood); 
+          if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${Math.floor(woodProdPerHr)}/h`;
+          if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = Math.floor(myData.iron); 
+          if(document.getElementById('rate-iron')) document.getElementById('rate-iron').innerText = `+${Math.floor(ironProdPerHr)}/h`;
+          if(document.getElementById('res-food')) document.getElementById('res-food').innerText = Math.floor(myData.food); 
+          if(document.getElementById('rate-food')) {
+              document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${Math.floor(netFood)}/h`;
+              document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
+          }
 
-          document.getElementById('res-inf').innerText = myData.troops.infantry; document.getElementById('res-arc').innerText = myData.troops.archer; document.getElementById('res-cav').innerText = myData.troops.cavalry;
-          document.getElementById('res-speedup').innerText = myData.items.speedup || 0;
+          if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = myData.troops.infantry; 
+          if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = myData.troops.archer; 
+          if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = myData.troops.cavalry;
+          if(document.getElementById('res-speedup')) document.getElementById('res-speedup').innerText = myData.items.speedup || 0;
 
           const maxQueues = 1 + (myData.buildings.builder || 0);
           const bqText = document.getElementById('build-queue-text');
@@ -1275,7 +1287,7 @@
           if (tasksContainer) {
               let tasksHtml = '';
               myData.buildQueues.forEach((q, idx) => {
-                 if (!CFG.buildings[q.target]) return;
+                 if (!q || !CFG.buildings[q.target]) return;
                  const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
                  const totalSec = getUpgradeTime(q.target, myData.buildings[q.target]);
                  const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
@@ -1290,7 +1302,7 @@
                     </div>
                  `;
               });
-              if (myData.researchQueue && CFG.techs[myData.researchQueue.target]) {
+              if (myData.researchQueue && myData.researchQueue.target && CFG.techs[myData.researchQueue.target]) {
                  const q = myData.researchQueue;
                  const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
                  const totalSec = getUpgradeTime(q.target, myData.research[q.target] || 0, true);
@@ -1306,7 +1318,7 @@
                     </div>
                  `;
               }
-              if (myData.trainQueue && CFG.troops[myData.trainQueue.type]) {
+              if (myData.trainQueue && myData.trainQueue.type && CFG.troops[myData.trainQueue.type]) {
                  const q = myData.trainQueue;
                  const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
                  const totalSec = CFG.troops[q.type].time;
@@ -1331,14 +1343,14 @@
           if(document.getElementById('inv-speed')) document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
           if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
 
-          // 🎨 設施清單 (強制只讀取合法的 CFG keys)
+          // 🎨 設施清單
           const bContainer = document.getElementById('building-container');
           if (bContainer) {
               bContainer.innerHTML = Object.keys(CFG.buildings).map(key => {
                 const lvl = myData.buildings[key] || 0;
                 const cost = getUpgradeCost(key, lvl);
                 const timeSec = getUpgradeTime(key, lvl);
-                const queueObj = myData.buildQueues.find(q => q.target === key);
+                const queueObj = myData.buildQueues.find(q => q && q.target === key);
                 const isMax = (key === 'builder' && lvl >= CFG.buildings.builder.maxLevel);
                 const disabled = isMax || queueObj || myData.buildQueues.length >= maxQueues;
                 
@@ -1446,8 +1458,6 @@
 
       } catch (e) {
           console.error("UI 渲染嚴重錯誤:", e);
-          const logList = document.getElementById('log-list');
-          if (logList) logList.innerHTML = `<p style="color:#ef4444; font-weight:bold;">[系統警告] 介面渲染發生錯誤，已啟動自我修復機制。請重新整理網頁。</p>`;
       }
     }
 
@@ -1487,7 +1497,7 @@
     
     window.upgradeBuilding = async (key) => {
       const maxQueues = 1 + (myData.buildings.builder || 0);
-      if (myData.buildQueues.some(q => q.target === key)) return alert('該設施正在升級中！');
+      if (myData.buildQueues.some(q => q && q.target === key)) return alert('該設施正在升級中！');
       if (myData.buildQueues.length >= maxQueues) return alert('建築隊列已滿！請升級工匠小屋。');
       
       const lvl = myData.buildings[key], cost = getUpgradeCost(key, lvl);
