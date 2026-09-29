@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 工匠隊列與雷達升級版</title>
+  <title>多人領地戰 - 學院科技與戰略遷城版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -102,15 +102,13 @@
       <div id="queue-status" style="color: #f59e0b; font-size: 0.8rem; min-height: 18px; margin-top:2px;"></div>
     </div>
 
-    <!-- 💡 分頁導覽新增「附近領主」 -->
     <div class="tabs">
-      <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 地圖</button>
-      <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 內政</button>
-      <button class="tab-btn" id="btn-tab-players" onclick="switchTab('players')">👥 領主</button>
-      <button onclick="logoutUser()" style="background:#dc2626; margin-left:auto; padding:6px 8px; font-size:0.8rem;">登出</button>
+      <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 世界沙盤</button>
+      <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 城內政務</button>
+      <button class="tab-btn" id="btn-tab-players" onclick="switchTab('players')">👥 領主雷達</button>
+      <button onclick="logoutUser()" style="background:#dc2626; margin-left:auto; padding:6px 10px; font-size:0.8rem;">🚪 登出</button>
     </div>
 
-    <!-- ==================== 世界沙盤 ==================== -->
     <div id="tab-world" class="tab-content active">
       <div class="card" style="padding: 10px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -156,7 +154,7 @@
       </div>
     </div>
 
-    <!-- ==================== 城內政務 ==================== -->
+    <!-- 城內政務 -->
     <div id="tab-city" class="tab-content">
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
@@ -168,6 +166,14 @@
 
       <div class="card">
         <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
+          <span>🧪 軍事學院 (科技研發)</span>
+          <button onclick="useSpeedUp('research')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
+        </h3>
+        <div class="grid" id="research-container"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
           <span>⚔️ 軍事招募所</span>
           <button onclick="useSpeedUp('train')" style="background:#10b981; font-size:0.8rem; padding:6px 10px;">⏳ 加速(5m)</button>
         </h3>
@@ -175,15 +181,14 @@
       </div>
     </div>
 
-    <!-- ==================== 附近領主 (新功能) ==================== -->
+    <!-- 附近領主 -->
     <div id="tab-players" class="tab-content">
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px;">
           <h3 style="margin:0;">👥 附近勢力雷達</h3>
-          <button onclick="renderPlayers()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 掃描</button>
+          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button>
         </div>
         <div id="players-list-container" style="display:flex; flex-direction:column; gap:8px; margin-top:12px; max-height: 50vh; overflow-y: auto;">
-          <!-- 玩家列表生成區 -->
         </div>
       </div>
     </div>
@@ -216,6 +221,7 @@
     let godModeFog = false; 
 
     const TILE_SIZE = 55, WORLD_COLS = 50, WORLD_ROWS = 50, BASE_VISION_RADIUS = 5;
+    const RELOCATE_COOLDOWN = 15 * 60 * 1000; // 15 分鐘冷卻
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
     const MIN_ZOOM = 0.25, MAX_ZOOM = 2.0;
 
@@ -223,15 +229,21 @@
     let MAP_CACHE = [];
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
-    // 💡 建築配置 (新增 builder 工匠小屋)
+    // 💡 建築配置與科技研發樹
     const CFG = {
       buildings: { 
         castle:   { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 120, maxLevel: 99 },
-        builder:  { name: '工匠小屋', rate: 0,   baseW: 2000, baseI: 2000, baseTime: 300, maxLevel: 3 }, // 提升可同時建造數量
+        academy:  { name: '學院',     rate: 0,   baseW: 400, baseI: 400, baseTime: 180, maxLevel: 99 },
+        builder:  { name: '工匠小屋', rate: 0,   baseW: 2000, baseI: 2000, baseTime: 300, maxLevel: 3 }, 
         lumber:   { name: '伐木場',   rate: 1.0, baseW: 100, baseI: 50,  baseTime: 60, maxLevel: 99 }, 
         mine:     { name: '鐵礦場',   rate: 0.8, baseW: 50,  baseI: 100, baseTime: 60, maxLevel: 99 }, 
         farm:     { name: '農田',     rate: 1.2, baseW: 80,  baseI: 80,  baseTime: 60, maxLevel: 99 }, 
         barracks: { name: '兵營',     rate: 0,   baseW: 200, baseI: 200, baseTime: 90, maxLevel: 99 } 
+      },
+      techs: {
+        infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 300 },
+        archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 300 },
+        cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 300 }
       },
       troops: {
         infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
@@ -244,17 +256,14 @@
       ]
     };
 
-    function getUpgradeCost(key, level) { const m = Math.pow(1.6, level); return { w: Math.floor(CFG.buildings[key].baseW * m), i: Math.floor(CFG.buildings[key].baseI * m) }; }
-    function getUpgradeTime(key, level) { const b = CFG.buildings[key].baseTime || 60; return Math.floor(b * Math.pow(1.6, Math.max(0, level - 1))); }
+    function getUpgradeCost(key, level, isTech=false) { const base = isTech ? CFG.techs[key] : CFG.buildings[key]; const m = Math.pow(1.6, level); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; }
+    function getUpgradeTime(key, level, isTech=false) { const base = isTech ? CFG.techs[key].baseTime : (CFG.buildings[key].baseTime || 60); return Math.floor(base * Math.pow(1.6, Math.max(0, level - 1))); }
     function formatTime(sec) {
       if (sec < 60) return sec + 's';
       if (sec < 3600) return Math.floor(sec/60) + 'm' + (sec%60 > 0 ? ' '+(sec%60)+'s' : '');
       return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
     }
 
-    // ==========================================
-    // 地圖生成與快取
-    // ==========================================
     function getTileTypeRaw(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
@@ -299,13 +308,6 @@
     }
     initMapCache();
 
-    function getTileEntity(x, y) {
-      if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
-      if (allCastles.some(p => p.x === x && p.y === y)) return null;
-      if (worldBoss && worldBoss.hp > 0 && worldBoss.x === x && worldBoss.y === y) return null;
-      return MAP_CACHE[x][y].entity;
-    }
-
     function getClearedPOI(x, y) {
       if (!myData || !myData.clearedPOI) return null;
       const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
@@ -327,7 +329,7 @@
       document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
       document.getElementById('tab-' + tabName).classList.add('active'); document.getElementById('btn-tab-' + tabName).classList.add('active');
       if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
-      if (tabName === 'players') { renderPlayers(); }
+      if (tabName === 'players') { window.refreshMap(); }
     };
 
     window.registerUser = () => {
@@ -354,9 +356,10 @@
           d = {
             name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
             wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
-            buildings: { castle: 1, builder: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
-            items: { speedup: 3, renameCard: 0, resourceCard: 0 }, freeRenameUsed: false,
-            buildQueues: [], trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。']
+            buildings: { castle: 1, builder: 0, academy: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
+            research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
+            items: { speedup: 3, renameCard: 0, resourceCard: 0 }, freeRenameUsed: false, lastRelocateTime: 0,
+            buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。']
           };
           await setDoc(playerRef, d);
         } else {
@@ -364,12 +367,12 @@
           if (typeof d.troops === 'number') d.troops = { infantry: d.troops, archer: 0, cavalry: 0 };
           if (!d.items) d.items = { speedup: 3, renameCard: 0, resourceCard: 0 }; 
           if (d.freeRenameUsed === undefined) d.freeRenameUsed = false;
+          if (d.lastRelocateTime === undefined) d.lastRelocateTime = 0;
           if (!d.buildings.castle) d.buildings.castle = 1; if (!d.buildings.barracks) d.buildings.barracks = 1; 
-          if (d.buildings.builder === undefined) d.buildings.builder = 0; // 💡 補齊工匠小屋
-          
-          // 💡 隊列向後兼容轉換
+          if (d.buildings.builder === undefined) d.buildings.builder = 0; 
+          if (d.buildings.academy === undefined) d.buildings.academy = 0; 
+          if (!d.research) d.research = { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 };
           if (!d.buildQueues) { d.buildQueues = []; if (d.buildQueue) { d.buildQueues.push(d.buildQueue); delete d.buildQueue; } }
-          
           if (!d.marches) d.marches = []; if (!d.clearedPOI) d.clearedPOI = [];
           await setDoc(playerRef, d, {merge:true});
         }
@@ -431,11 +434,30 @@
     }
 
     async function savePrivateData() { myData.lastTick = Date.now(); await setDoc(doc(db, "players", myUid), myData, { merge: true }); }
+    
     window.refreshMap = async function() {
       const snap = await getDocs(collection(db, "world_map"));
       allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) });
-      if (document.getElementById('tab-players').classList.contains('active')) renderPlayers();
+      if (document.getElementById('tab-players').classList.contains('active')) renderPlayersList();
     };
+
+    // 💡 領主雷達列表
+    function renderPlayersList() {
+      const container = document.getElementById('players-list-container');
+      if (!container || !myData) return;
+      const sorted = [...allCastles].map(p => { p.dist = Math.hypot(p.x - myData.x, p.y - myData.y); return p; }).filter(p => p.id !== myUid).sort((a,b) => a.dist - b.dist);
+      if (sorted.length === 0) { container.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem;">附近暫無其他領主。</p>'; return; }
+      container.innerHTML = sorted.map(p => `
+          <div style="background:#0a0f1d; border:1px solid #1e2c40; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                  <strong style="color:#fff; font-size:1.05rem;">${p.name}</strong> <span style="color:#94a3b8; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span><br>
+                  <span style="font-size:0.8rem; color:#94a3b8;">座標: (${p.x}, ${p.y}) | 距離: ${Math.ceil(p.dist)} 格</span>
+              </div>
+              <button onclick="locatePlayer(${p.x}, ${p.y})" style="background:#0ea5e9; padding:6px 12px; font-size:0.8rem;">📍 尋找</button>
+          </div>
+      `).join('');
+    }
+    window.locatePlayer = (x, y) => { switchTab('world'); centerCameraOn(x, y); };
 
     // ==========================================
     // 遊戲心跳
@@ -465,7 +487,6 @@
       }
       if (newCleared.length !== myData.clearedPOI.length) { myData.clearedPOI = newCleared; needSave = true; }
 
-      // 💡 處理多工建築隊列
       let newBuildQueues = [];
       for (let q of myData.buildQueues) {
         if (now >= q.finishesAt) {
@@ -473,15 +494,20 @@
           myData.logs.unshift(`[建造就緒] ${CFG.buildings[q.target].name} 升級至 Lv.${myData.buildings[q.target]}`);
           if (q.target === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
           needSave = true;
-        } else {
-          newBuildQueues.push(q);
-        }
+        } else { newBuildQueues.push(q); }
       }
       if (myData.buildQueues.length !== newBuildQueues.length) { myData.buildQueues = newBuildQueues; needSave = true; }
 
+      // 💡 科技研發隊列
+      if (myData.researchQueue && now >= myData.researchQueue.finishesAt) {
+        myData.research[myData.researchQueue.target]++;
+        myData.logs.unshift(`[科技突破] ${CFG.techs[myData.researchQueue.target].name} 升級至 Lv.${myData.research[myData.researchQueue.target]}`);
+        myData.researchQueue = null; needSave = true;
+      }
+
       if (myData.trainQueue && now >= myData.trainQueue.finishesAt) {
         myData.troops[myData.trainQueue.type] += myData.trainQueue.count;
-        myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名${CFG.troops[myData.trainQueue.type].name}入列待命`);
+        myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名${CFG.troops[myData.trainQueue.type].name}入列`);
         myData.trainQueue = null; needSave = true; 
         setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
       }
@@ -492,8 +518,8 @@
         let nearestNPC = null, minDist = 15;
         for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
           for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
-            const cell = MAP_CACHE[tx][ty];
-            if (cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
+            const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+            if (cell && cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
               const dist = Math.hypot(tx - myData.x, ty - myData.y);
               if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
             }
@@ -539,8 +565,21 @@
       return { id: 'R'+Date.now(), type: 'return', startX: oldMarch.targetX, startY: oldMarch.targetY, targetX: oldMarch.startX, targetY: oldMarch.startY, startTime: Date.now(), finishesAt: Date.now() + (oldMarch.finishesAt - oldMarch.startTime), troops: survivedTroops, loot: loot };
     }
 
+    // 💡 戰鬥計算導入科技 Buff
+    function getMyPower(troops) {
+      const t = myData.research || {infantry_atk:0, archer_atk:0, cavalry_atk:0};
+      return troops.infantry * (CFG.troops.infantry.pwr + (t.infantry_atk||0)) +
+             troops.archer * (CFG.troops.archer.pwr + (t.archer_atk||0)) +
+             troops.cavalry * (CFG.troops.cavalry.pwr + (t.cavalry_atk||0));
+    }
+    function getPwrByTech(troops, tech) {
+      return (troops.infantry||0) * (CFG.troops.infantry.pwr + (tech.infantry_atk||0)) +
+             (troops.archer||0) * (CFG.troops.archer.pwr + (tech.archer_atk||0)) +
+             (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
+    }
+
     async function resolveDefendNPC(m) {
-      const defPwr = myData.troops.infantry*CFG.troops.infantry.pwr + myData.troops.archer*CFG.troops.archer.pwr + myData.troops.cavalry*CFG.troops.cavalry.pwr;
+      const defPwr = getMyPower(myData.troops);
       if (defPwr >= m.npcPower) {
         const lossRatio = m.npcPower / (defPwr + 1);
         myData.troops.infantry -= Math.floor(myData.troops.infantry * lossRatio * 0.3); myData.troops.archer -= Math.floor(myData.troops.archer * lossRatio * 0.3); myData.troops.cavalry -= Math.floor(myData.troops.cavalry * lossRatio * 0.3);
@@ -567,14 +606,13 @@
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
       if (m.entity.type === 'relic') { 
         res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-      } else if (m.entity.type === 'npc_capital') {
+      } else if (m.entity.type.startsWith('npc_')) {
         res.loot = m.entity.loot; 
-        if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 20 + 10);
-        if (res.troops.archer > 0) res.troops.archer -= Math.floor(Math.random() * 10 + 5);
-        if (res.troops.cavalry > 0) res.troops.cavalry -= Math.floor(Math.random() * 5 + 2);
-        myData.logs.unshift(`[史詩大捷] 成功摧毀 ${m.entity.name}！獲取海量戰利品與榮耀。`);
-      } else if (m.entity.type === 'npc_fortress' || m.entity.type === 'npc_castle') { 
-        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+        let loss = Math.floor(Math.random() * 5 + 2); 
+        if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
+        else if (m.entity.type === 'npc_fortress') loss = Math.floor(Math.random() * 15 + 5);
+        if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
+        myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
       } else { 
         res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
       }
@@ -589,11 +627,10 @@
           const bRef = doc(db, "world_map", "WORLD_BOSS"); const bDoc = await transaction.get(bRef);
           if (!bDoc.exists()) throw new Error("Boss dead");
           const boss = bDoc.data();
-          const pwr = m.troops.infantry*CFG.troops.infantry.pwr + m.troops.archer*CFG.troops.archer.pwr + m.troops.cavalry*CFG.troops.cavalry.pwr;
+          const pwr = getPwrByTech(m.troops, m.techs);
           const dmg = Math.min(boss.hp, pwr * 10 + Math.floor(Math.random()*50));
           
-          boss.hp -= dmg;
-          if (boss.hp <= 0) boss.hp = 0;
+          boss.hp -= dmg; if (boss.hp <= 0) boss.hp = 0;
           transaction.set(bRef, boss);
           
           res.loot.wood = dmg * 2; res.loot.iron = dmg * 2; res.loot.food = dmg * 2; res.loot.speedup = Math.floor(dmg / 200); 
@@ -612,9 +649,9 @@
           if (!tDoc.exists()) throw new Error("城池空");
           const target = tDoc.data();
           
-          const attPwr = m.troops.infantry*CFG.troops.infantry.pwr + m.troops.archer*CFG.troops.archer.pwr + m.troops.cavalry*CFG.troops.cavalry.pwr;
+          const attPwr = getPwrByTech(m.troops, m.techs);
           const defTroops = target.troops || {infantry:0, archer:0, cavalry:0};
-          const defPwr = (defTroops.infantry||0)*CFG.troops.infantry.pwr + (defTroops.archer||0)*CFG.troops.archer.pwr + (defTroops.cavalry||0)*CFG.troops.cavalry.pwr;
+          const defPwr = getPwrByTech(defTroops, target.research || {});
 
           if (attPwr > defPwr) {
             const lW = Math.floor(target.wood * 0.3), lI = Math.floor(target.iron * 0.3);
@@ -640,12 +677,10 @@
     }
 
     // ==========================================
-    // 🎨 渲染世界地圖 (全息動態畫布版)
+    // 渲染循環與操作
     // ==========================================
     function renderLoop() {
-      if (document.getElementById('tab-world').classList.contains('active')) {
-        drawWorldMap();
-      }
+      if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
       requestAnimationFrame(renderLoop);
     }
 
@@ -667,7 +702,7 @@
           const px = x*TILE_SIZE, py = y*TILE_SIZE;
           if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
-          const cell = MAP_CACHE[x][y];
+          const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
           const dist = Math.hypot(x-25, y-25);
           const isCore = dist <= 7, isMid = dist > 7 && dist <= 16;
 
@@ -856,7 +891,7 @@
     canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
 
     // ==========================================
-    // 點擊事件與出征/遷城/戰利品預覽
+    // 點擊事件與出征/遷城 (新增戰利品預覽 & 冷卻)
     // ==========================================
     let targetAction = null;
     window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
@@ -874,16 +909,16 @@
       if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
 
       if (tC && tC.id!==myUid) {
-        targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist };
+        targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 (Lv.${tC.castleLevel||1})`; 
-        document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預計戰利品: 掠奪敵方 30% 庫存物資</span>`;
-        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+        document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
+        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       } 
       else if (worldBoss && worldBoss.hp > 0 && worldBoss.x===tX && worldBoss.y===tY) {
-        targetAction = { type: 'attack_boss', name: worldBoss.name, x: tX, y: tY, dist };
+        targetAction = { type: 'attack_boss', name: worldBoss.name, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; 
         document.getElementById("modal-desc").innerHTML = `目標：【${worldBoss.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 最高可得: 萬級資源 + ⏳加速卡</span>`;
-        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
         const ent = cell.entity;
@@ -897,17 +932,30 @@
         let lootStr = '';
         if (ent.loot) lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${ent.loot.wood||0} ⛏️${ent.loot.iron||0} 🌾${ent.loot.food||0}</span>`;
 
-        targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist };
+        targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = actionTitle;
         document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。${lootStr}`:`距離：${Math.ceil(dist)} 格<br>建議兵力戰力：${ent.reqPwr}${lootStr}`;
-        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
+        document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (!tC && cell && cell.type !== 'water') {
+        const timeSince = Date.now() - (myData.lastRelocateTime || 0);
+        const remainMs = RELOCATE_COOLDOWN - timeSince;
         const moveCost = Math.max(100, Math.ceil(dist * 50));
-        targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
-        document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
-        document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${moveCost}木, ${moveCost}鐵, ${moveCost}糧`;
-        document.getElementById("troop-selector").style.display = 'none'; document.getElementById("btn-confirm-action").innerText = "確認遷城"; document.getElementById("btn-confirm-action").style.background = '#0ea5e9';
+        
+        if (remainMs > 0) {
+            targetAction = null;
+            document.getElementById("modal-title").innerHTML = `📍 領地搬遷 (冷卻中)`;
+            document.getElementById("modal-desc").innerHTML = `傳送矩陣冷卻中，需等待 <span style="color:#ef4444; font-weight:bold;">${formatTime(Math.ceil(remainMs/1000))}</span> 後方可再次搬遷。`;
+            document.getElementById("btn-confirm-action").style.display = 'none';
+        } else {
+            targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
+            document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
+            document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${moveCost}木, ${moveCost}鐵, ${moveCost}糧`;
+            document.getElementById("btn-confirm-action").style.display = 'block';
+            document.getElementById("btn-confirm-action").innerText = "確認遷城"; 
+            document.getElementById("btn-confirm-action").style.background = '#0ea5e9';
+        }
+        document.getElementById("troop-selector").style.display = 'none'; 
       } else return;
 
       const bLvl = myData.buildings.barracks || 1; let unlockCount = 0;
@@ -930,6 +978,7 @@
         if (myData.wood < targetAction.cost || myData.iron < targetAction.cost || myData.food < targetAction.cost) return alert(`資源不足！需要各 ${targetAction.cost} 資源。`);
         myData.wood -= targetAction.cost; myData.iron -= targetAction.cost; myData.food -= targetAction.cost;
         myData.x = targetAction.x; myData.y = targetAction.y;
+        myData.lastRelocateTime = Date.now();
         myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
         savePrivateData(); setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });
         closeActionModal(); updateFogOfWar(); centerCameraOn(myData.x, myData.y); renderSelf(); window.refreshMap(); return;
@@ -953,7 +1002,7 @@
       myData.marches.push({
         id: 'M'+Date.now(), type: targetAction.type==='attack_capital'?'attack_npc':targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
         startTime: Date.now(), finishesAt: Date.now()+timeMs, troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav },
-        targetUid: targetAction.id, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower
+        targetUid: targetAction.id, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower, techs: myData.research
       });
 
       myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
@@ -964,27 +1013,6 @@
     // ==========================================
     // 渲染 UI
     // ==========================================
-    window.renderPlayers = () => {
-      const container = document.getElementById('players-list-container');
-      if (!container) return;
-      if (allCastles.length === 0) { container.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem;">附近暫無其他領主。</p>'; return; }
-      
-      const sorted = [...allCastles].map(p => { p.dist = Math.hypot(p.x - myData.x, p.y - myData.y); return p; })
-                     .filter(p => p.id !== myUid).sort((a,b) => a.dist - b.dist);
-
-      container.innerHTML = sorted.map(p => `
-          <div style="background:#0a0f1d; border:1px solid #1e2c40; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                  <strong style="color:${p.isVIP?'#facc15':'#fff'}; font-size:1.05rem;">${p.isVIP?'[VIP] ':''}${p.name}</strong> <span style="color:#94a3b8; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span><br>
-                  <span style="font-size:0.8rem; color:#94a3b8;">座標: (${p.x}, ${p.y}) | 距離: ${Math.ceil(p.dist)} 格</span>
-              </div>
-              <button onclick="locatePlayer(${p.x}, ${p.y})" style="background:#0ea5e9; padding:6px 12px; font-size:0.8rem;">📍 尋找</button>
-          </div>
-      `).join('');
-    };
-
-    window.locatePlayer = (x, y) => { switchTab('world'); centerCameraOn(x, y); };
-
     function renderSelf() {
       document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:6px 10px; font-size:0.8rem;">✏️ 改名</button>`;
       
@@ -1016,18 +1044,35 @@
         return `<div class="item-card"><div><strong style="font-size:1.1rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">所需: 🌲${cost.w} ⛏️${cost.i}</div></div><button style="width:100%; background:${isMax?'#475569':''}" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${btnText}</button></div>`;
       }).join('');
 
+      // 💡 渲染科技樹
+      const rContainer = document.getElementById('research-container');
+      if (myData.buildings.academy < 1) {
+        rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先建造並升級【學院】來解鎖科技研發。</p>';
+      } else {
+        rContainer.innerHTML = Object.entries(CFG.techs).map(([key, d]) => {
+            const lvl = myData.research[key] || 0;
+            const cost = getUpgradeCost(key, lvl, true);
+            const timeSec = getUpgradeTime(key, lvl, true);
+            const isResearching = myData.researchQueue && myData.researchQueue.target === key;
+            const isMax = lvl >= myData.buildings.academy * 2;
+            let btnText = isMax ? '學院等級不足' : (isResearching ? '研發中...' : `研發 (${formatTime(timeSec)})`);
+            let disabled = isMax || myData.researchQueue ? 'disabled' : '';
+
+            return `<div class="item-card"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">所需: 🌲${cost.w} ⛏️${cost.i}<br>附加戰力: +${lvl}</div></div><button style="width:100%; background:${isMax?'#475569':''}" onclick="window.startResearch('${key}')" ${disabled}>${btnText}</button></div>`;
+        }).join('');
+      }
+
       const tContainer = document.getElementById('train-container');
       const bLvl = myData.buildings.barracks || 1;
       tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
         if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.1rem;">🔒 未解鎖</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需 兵營 Lv.${d.reqLvl}</div></div><button style="width:100%; background:#475569; margin-top:auto;" disabled>未解鎖</button></div>`;
-        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>行軍: ${d.speed}s/格 | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button></div>`;
+        const buff = myData.research[`${key}_atk`] || 0;
+        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button></div>`;
       }).join('');
 
       let qMsg = []; const now = Date.now();
-      if (myData.buildQueues.length > 0) {
-        const earliest = Math.min(...myData.buildQueues.map(q => q.finishesAt));
-        qMsg.push(`🏗️ ${myData.buildQueues.length}個設施升級中 (${formatTime(Math.max(0, Math.ceil((earliest-now)/1000)))})`);
-      }
+      if (myData.buildQueues.length > 0) { const earliest = Math.min(...myData.buildQueues.map(q => q.finishesAt)); qMsg.push(`🏗️ ${myData.buildQueues.length}個設施升級中 (${formatTime(Math.max(0, Math.ceil((earliest-now)/1000)))})`); }
+      if (myData.researchQueue) qMsg.push(`🧪 研發中... (${formatTime(Math.max(0, Math.ceil((myData.researchQueue.finishesAt-now)/1000)))})`);
       if (myData.trainQueue) qMsg.push(`⚔️ 招募中... (${formatTime(Math.max(0, Math.ceil((myData.trainQueue.finishesAt-now)/1000)))})`);
       if (myData.marches && myData.marches.length > 0) qMsg.push(`🚩 ${myData.marches.length} 支部隊行軍中`);
       document.getElementById('queue-status').innerText = qMsg.join(' | ');
@@ -1064,6 +1109,17 @@
       myData.buildQueues.push({ target: key, finishesAt: Date.now() + timeSec * 1000 }); 
       await savePrivateData();
     };
+
+    window.startResearch = async (key) => {
+      if (myData.researchQueue) return;
+      const lvl = myData.research[key] || 0;
+      const cost = getUpgradeCost(key, lvl, true);
+      if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
+      const timeSec = getUpgradeTime(key, lvl, true);
+      myData.wood -= cost.w; myData.iron -= cost.i;
+      myData.researchQueue = { target: key, finishesAt: Date.now() + timeSec * 1000 };
+      await savePrivateData();
+    };
     
     window.trainTroopType = async (typeKey) => {
       if (myData.trainQueue) return;
@@ -1080,6 +1136,10 @@
         if (myData.buildQueues.length === 0) return alert("沒有進行中的建築隊列！");
         myData.items.speedup--;
         myData.buildQueues.forEach(q => { q.finishesAt -= 5 * 60 * 1000; if (q.finishesAt < Date.now()) q.finishesAt = Date.now(); });
+      } else if (type === 'research') {
+        if (!myData.researchQueue) return alert("沒有進行中的研發隊列！");
+        myData.items.speedup--;
+        myData.researchQueue.finishesAt -= 5 * 60 * 1000; if (myData.researchQueue.finishesAt < Date.now()) myData.researchQueue.finishesAt = Date.now();
       } else {
         if (!myData.trainQueue) return alert("該項目沒有進行中的隊列！");
         myData.items.speedup--;
