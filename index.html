@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 軍需糧草與生態重生版</title>
+  <title>多人領地戰 - 黑暗王城與核心禁區版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 10px; overflow-x: hidden; }
@@ -26,12 +26,10 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* 🌍 地圖框優化：佔用極大螢幕空間 */
     .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; box-shadow: 0 4px 15px rgba(0,0,0,0.6); width: 100%; height: 65vh; min-height: 450px; }
     canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
     canvas:active { cursor: grabbing; }
     
-    /* 縮放按鈕 */
     .zoom-controls { position: absolute; bottom: 15px; right: 15px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
     .zoom-btn { background: rgba(15, 23, 42, 0.85); border: 2px solid #38bdf8; color: #fff; width: 44px; height: 44px; border-radius: 8px; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
     
@@ -116,7 +114,7 @@
             <span style="font-size:0.8rem; color:#94a3b8; font-weight:normal;" id="zoom-indicator">100%</span>
           </h3>
           <div style="display:flex; gap:6px;">
-            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候</button>
+            <button onclick="dispatchScout()" style="background:#059669; padding:6px 10px; font-size:0.8rem;">🦅 斥候(30糧)</button>
             <button onclick="locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
         </div>
@@ -204,7 +202,6 @@
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     
-    // 💡 兵種配置 (新增 upkeep 糧草消耗/小時)
     const CFG = {
       buildings: { 
         castle:   { name: '主城',   rate: 0,   baseW: 600, baseI: 600 },
@@ -233,20 +230,41 @@
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
+    // 💡 同心圓生態系與黑暗王城生成邏輯
     function getTileEntity(x, y) {
       if (allCastles.some(p => p.x === x && p.y === y)) return null;
       if (worldBoss && worldBoss.x === x && worldBoss.y === y) return null;
       if (getTileType(x, y) === 'water') return null;
       
-      const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
-      if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 150, loot: { wood: 1000, iron: 1000, food: 1000 } };
-      if (rand < 0.060) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.120) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
-      if (rand < 0.160) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 50, loot: { wood: 200, iron: 200, food: 200 } };
+      const distToCenter = Math.hypot(x - 25, y - 25);
+      const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; 
+      const rand = v - Math.floor(v); 
+      
+      // 1. 核心禁區 (距離 0~7)：黑暗王城與豪華遺跡
+      if (distToCenter <= 7) {
+        if (rand < 0.06) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
+        if (rand < 0.15) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
+        if (rand < 0.20) return { type: 'barbarian', name: '👹 黑暗禁衛軍', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
+        return null;
+      }
+      
+      // 2. 中間激戰區 (距離 8~16)：高等要塞與野怪
+      if (distToCenter <= 16) {
+        if (rand < 0.02) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
+        if (rand < 0.08) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
+        if (rand < 0.14) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
+        if (rand < 0.22) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
+        return null;
+      }
+      
+      // 3. 外圍安逸區 (距離 17+)：新手野怪
+      if (rand < 0.005) return { type: 'npc_castle', name: '🏰 黑暗軍團前哨', reqPwr: 100, loot: { wood: 800, iron: 800, food: 800 } };
+      if (rand < 0.040) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
+      if (rand < 0.100) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.130) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
       return null;
     }
 
-    // 判斷是否為被清剿過的廢墟
     function getClearedPOI(x, y) {
       const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
       if (!found) return null;
@@ -289,18 +307,26 @@
         
         let d = null;
         if (!pSnap.exists()) {
+          // 💡 強制降生在外圍 (距離中心 > 12)
+          let startX, startY;
+          do {
+            startX = Math.floor(Math.random() * 38) + 6;
+            startY = Math.floor(Math.random() * 38) + 6;
+          } while (Math.hypot(startX - 25, startY - 25) <= 12);
+
           d = {
-            name: `領主_${myUid.slice(0, 4)}`, x: Math.floor(Math.random()*38)+6, y: Math.floor(Math.random()*38)+6,
+            name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
             wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
             buildings: { castle: 1, lumber: 1, mine: 1, farm: 1, barracks: 1 },
             items: { speedup: 3, renameCard: 0, resourceCard: 0 }, freeRenameUsed: false,
-            buildQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['領地建立。']
+            buildQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸外圍。']
           };
           await setDoc(playerRef, d);
         } else {
           d = pSnap.data();
           if (typeof d.troops === 'number') d.troops = { infantry: d.troops, archer: 0, cavalry: 0 };
           if (!d.items) d.items = { speedup: 3, renameCard: 0, resourceCard: 0 }; 
+          if (d.freeRenameUsed === undefined) d.freeRenameUsed = false;
           if (!d.buildings.castle) d.buildings.castle = 1; if (!d.buildings.barracks) d.buildings.barracks = 1; 
           if (!d.marches) d.marches = []; if (!d.clearedPOI) d.clearedPOI = [];
           await setDoc(playerRef, d, {merge:true});
@@ -334,9 +360,6 @@
 
     window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
-    // ==========================================
-    // 響應式畫布自適應
-    // ==========================================
     function resizeCanvas() {
       const frame = document.getElementById('map-frame');
       if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); drawWorldMap(); }
@@ -370,13 +393,12 @@
     };
 
     // ==========================================
-    // 遊戲心跳 (糧草消耗與 NPC 重生)
+    // 遊戲心跳
     // ==========================================
     async function localTick() {
       if (!myData) return;
       const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
 
-      // 💡 糧食消耗計算 (Upkeep)
       const hrToSec = 3600;
       const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / hrToSec;
       const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
@@ -384,17 +406,16 @@
       myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
       myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
       myData.food += dt * farmProdPerSec - dt * upkeepPerSec;
-      if (myData.food < 0) myData.food = 0; // 不會餓死士兵，但糧食卡死
+      if (myData.food < 0) myData.food = 0;
 
       let needSave = false;
 
-      // 💡 NPC 15分鐘重生邏輯
       let newCleared = [];
       for (let poi of myData.clearedPOI) {
         const parts = poi.split(',');
         if (parts.length >= 4) {
           const cTime = parseInt(parts[2]), cType = parts[3];
-          if (cType === 'npc_castle' && now - cTime > 15 * 60 * 1000) continue; // 滿15分鐘，要塞重建！
+          if ((cType === 'npc_castle' || cType === 'npc_capital') && now - cTime > 15 * 60 * 1000) continue; 
         }
         newCleared.push(poi);
       }
@@ -420,7 +441,7 @@
         for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
           for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
             const ent = getTileEntity(tx, ty);
-            if (ent && ent.type === 'npc_castle' && !getClearedPOI(tx, ty)) {
+            if (ent && (ent.type === 'npc_castle' || ent.type === 'npc_capital') && !getClearedPOI(tx, ty)) {
               const dist = Math.hypot(tx - myData.x, ty - myData.y);
               if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent}; }
             }
@@ -492,9 +513,19 @@
 
     async function resolveInteractNPC(m) {
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
-      if (m.entity.type === 'relic') { res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); } 
-      else if (m.entity.type === 'npc_castle') { res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); } 
-      else { res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); }
+      if (m.entity.type === 'relic') { 
+        res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
+      } else if (m.entity.type === 'npc_capital') {
+        res.loot = m.entity.loot; 
+        if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 20 + 10);
+        if (res.troops.archer > 0) res.troops.archer -= Math.floor(Math.random() * 10 + 5);
+        if (res.troops.cavalry > 0) res.troops.cavalry -= Math.floor(Math.random() * 5 + 2);
+        myData.logs.unshift(`[史詩大捷] 成功摧毀 ${m.entity.name}！獲取海量戰利品與榮耀。`);
+      } else if (m.entity.type === 'npc_castle') { 
+        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+      } else { 
+        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
+      }
       myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
       return res;
     }
@@ -584,7 +615,7 @@
           const ent = getTileEntity(x, y);
           if (ent) {
             const clrInfo = getClearedPOI(x, y);
-            ctx.fillStyle = clrInfo ? '#475569' : (ent.type==='relic'?'#0ea5e9':(ent.type==='npc_castle'?'#9333ea':'#f43f5e'));
+            ctx.fillStyle = clrInfo ? '#475569' : (ent.type==='npc_capital' ? '#701a75' : (ent.type==='relic'?'#0ea5e9':(ent.type==='npc_castle'?'#9333ea':'#f43f5e')));
             ctx.font = '22px sans-serif'; ctx.textAlign='center';
             ctx.fillText(clrInfo?'🔥':ent.name.split(' ')[0], px+TILE_SIZE/2, py+35);
           }
@@ -653,7 +684,7 @@
           ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
 
           const left = Math.ceil((m.finishesAt-now)/1000);
-          if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 13px sans-serif'; ctx.fillText(`${left}s`, cX, cY-20); }
+          if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(`${left}s`, cX, cY-20); }
           ctx.textAlign = 'start';
         });
       }
@@ -726,27 +757,29 @@
     canvas.addEventListener("click", (e) => {
       if (dragDist > 10) return;
       const r = canvas.getBoundingClientRect();
-      const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0), cy = e.clientY || (e.changedTouches ? e.changedTouches[0].clientY : 0);
+      const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0);
+      const cy = e.clientY || (e.changedTouches ? e.changedTouches[0].clientY : 0);
       const sX = (cx - r.left) * (canvas.width / r.width), sY = (cy - r.top) * (canvas.height / r.height);
       const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
       
       const tC = allCastles.find(p=>p.x===tX&&p.y===tY), ent = getTileEntity(tX,tY), dist = Math.hypot(tX-myData.x, tY-myData.y);
+
       if (dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！");
 
       if (tC && tC.id!==myUid) {
         targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist };
-        document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 (Lv.${tC.castleLevel||1})`; document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格`;
+        document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 (Lv.${tC.castleLevel||1})`; document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>若兵力壓制將破壞敵方建築！`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       } 
       else if (worldBoss && worldBoss.hp > 0 && worldBoss.x===tX && worldBoss.y===tY) {
         targetAction = { type: 'attack_boss', name: worldBoss.name, x: tX, y: tY, dist };
-        document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; document.getElementById("modal-desc").innerHTML = `目標：【${worldBoss.name}】<br>獲取資源與加速道具！`;
+        document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; document.getElementById("modal-desc").innerHTML = `目標：【${worldBoss.name}】<br>根據造成傷害獲取資源與加速道具！`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (ent && !getClearedPOI(tX,tY)) {
-        targetAction = { type: ent.type==='relic'?'relic':'attack_npc', entity: ent, x: tX, y: tY, dist };
-        document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 遺跡探險`:(ent.type==='npc_castle'?`⚔️ 攻堅要塞`:`⚔️ 討伐敵陣`);
-        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要一定兵力強度。`;
+        targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist };
+        document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 遺跡探險`:(ent.type==='npc_capital'?`😈 攻略王城`:(ent.type==='npc_castle'?`⚔️ 攻堅要塞`:`⚔️ 討伐敵陣`));
+        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要極其龐大的兵力與聯軍。`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
       else if (!tC && getTileType(tX,tY) !== 'water') {
@@ -764,7 +797,7 @@
           document.getElementById(`row-${t}`).style.display = 'flex';
           document.getElementById(`avail-${t}`).innerText = myData.troops[full]; document.getElementById(`send-${t}`).max = myData.troops[full]; document.getElementById(`send-${t}`).value = 0;
           unlockCount++;
-        } else document.getElementById(`row-${t}`).style.display = 'none';
+        } else { document.getElementById(`row-${t}`).style.display = 'none'; }
       });
       document.getElementById('troop-lock-msg').style.display = unlockCount < 3 ? 'block' : 'none';
       document.getElementById("action-modal").style.display='flex';
@@ -798,7 +831,7 @@
       myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
 
       myData.marches.push({
-        id: 'M'+Date.now(), type: targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
+        id: 'M'+Date.now(), type: targetAction.type==='attack_capital'?'attack_npc':targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
         startTime: Date.now(), finishesAt: Date.now()+timeMs, troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav },
         targetUid: targetAction.id, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower
       });
@@ -814,7 +847,6 @@
     function renderSelf() {
       document.getElementById('player-title').innerHTML = `<span>👑 ${myData.name} (${myData.x}, ${myData.y})</span> <button onclick="openRenameModal()" style="background:#334155; padding:6px 10px; font-size:0.8rem;">✏️ 改名</button>`;
       
-      // 計算糧食淨產量
       const hrToSec = 3600;
       const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
       const prodPerHr = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
