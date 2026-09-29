@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 學院科技與戰略遷城版</title>
+  <title>多人領地戰 - 巨型世界與戰略冷卻版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -15,7 +15,7 @@
     .res-box { background: #0a0f1d; padding: 6px; border-radius: 6px; text-align: center; border: 1px solid #1e2c40; position: relative; }
     .res-box span.title { font-size: 0.75rem; color: #94a3b8; }
     .res-box span.val { font-weight: bold; font-size: 1.05rem; color: #38bdf8; display: block; margin-top: 2px; }
-    .res-box span.rate { font-size: 0.65rem; display: block; margin-top: 1px; }
+    .res-box span.rate { font-size: 0.65rem; display: block; margin-top: 1px; color: #10b981; }
     
     button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.1s; font-size: 0.85rem; }
     button:disabled { background: #334155; cursor: not-allowed; }
@@ -91,9 +91,9 @@
         <button onclick="openRenameModal()" style="background:#334155; padding:5px 10px; font-size:0.75rem;">✏️ 改名</button>
       </h2>
       <div class="res-grid">
-        <div class="res-box"><span class="title">🌲 木材</span><span class="val" id="res-wood">0</span></div>
-        <div class="res-box"><span class="title">⛏️ 鐵礦</span><span class="val" id="res-iron">0</span></div>
-        <div class="res-box" style="border-color:#10b981;"><span class="title">🌾 糧草</span><span class="val" id="res-food">0</span><span class="rate" id="rate-food">+0/h</span></div>
+        <div class="res-box"><span class="title">🌲 木材</span><span class="val" id="res-wood">0</span><span class="rate" id="rate-wood">+0/h</span></div>
+        <div class="res-box"><span class="title">⛏️ 鐵礦</span><span class="val" id="res-iron">0</span><span class="rate" id="rate-iron">+0/h</span></div>
+        <div class="res-box" style="border-color:#10b981;"><span class="title">🌾 糧草</span><span class="val" id="res-food">0</span><span class="rate" id="rate-food" style="color:#10b981;">+0/h</span></div>
         <div class="res-box" style="border-color:#3b82f6;"><span class="title">🛡️ 步兵</span><span class="val" id="res-inf">0</span></div>
         <div class="res-box" style="border-color:#8b5cf6;"><span class="title">🏹 弓兵</span><span class="val" id="res-arc">0</span></div>
         <div class="res-box" style="border-color:#f59e0b;"><span class="title">🐎 騎兵</span><span class="val" id="res-cav">0</span></div>
@@ -219,11 +219,13 @@
 
     let myUid = null, myData = null, allCastles = [], worldBoss = null, hasCentered = false;
     let godModeFog = false; 
+    let isAdmin = false; // 管理員特權判定
 
-    const TILE_SIZE = 55, WORLD_COLS = 50, WORLD_ROWS = 50, BASE_VISION_RADIUS = 5;
-    const RELOCATE_COOLDOWN = 15 * 60 * 1000; // 15 分鐘冷卻
+    // 💡 巨型地圖 100x100 (10000格)
+    const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
+    const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; // 💡 12 小時冷卻
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
-    const MIN_ZOOM = 0.25, MAX_ZOOM = 2.0;
+    const MIN_ZOOM = 0.20, MAX_ZOOM = 2.0;
 
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     let MAP_CACHE = [];
@@ -270,19 +272,21 @@
     }
 
     function getStaticEntity(x, y, type) {
-      if (x === 25 && y === 25) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
+      // 💡 絕對中心點更改為 50, 50
+      if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
       if (type === 'water') return null;
       
-      const dist = Math.hypot(x - 25, y - 25);
+      const dist = Math.hypot(x - 50, y - 50);
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
       
-      if (dist <= 7) {
+      // 💡 按比例放大的生態分佈
+      if (dist <= 14) {
         if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 3000, iron: 3000, food: 3000 } };
         if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
         if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         return null;
       }
-      if (dist <= 16) {
+      if (dist <= 32) {
         if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
         if (rand < 0.070) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
@@ -301,12 +305,19 @@
         MAP_CACHE[x] = [];
         for(let y=0; y<WORLD_ROWS; y++) {
           let t = getTileTypeRaw(x,y);
-          if (x===25 && y===25) t = 'plains'; 
+          if (x===50 && y===50) t = 'plains'; 
           MAP_CACHE[x][y] = { type: t, entity: getStaticEntity(x,y,t) };
         }
       }
     }
     initMapCache();
+
+    function getTileEntity(x, y) {
+      if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
+      if (allCastles.some(p => p.x === x && p.y === y)) return null;
+      if (worldBoss && worldBoss.hp > 0 && worldBoss.x === x && worldBoss.y === y) return null;
+      return MAP_CACHE[x][y].entity;
+    }
 
     function getClearedPOI(x, y) {
       if (!myData || !myData.clearedPOI) return null;
@@ -315,7 +326,7 @@
     }
 
     async function spawnWorldBoss() {
-      let bx, by; do { bx = Math.floor(Math.random() * 14) + 18; by = Math.floor(Math.random() * 14) + 18; } while(bx === 25 && by === 25); 
+      let bx, by; do { bx = Math.floor(Math.random() * 30) + 35; by = Math.floor(Math.random() * 30) + 35; } while(bx === 50 && by === 50); 
       const b = CFG.bosses[Math.floor(Math.random() * CFG.bosses.length)];
       await setDoc(doc(db, "world_map", "WORLD_BOSS"), { name: b.name, isBoss: true, x: bx, y: by, hp: b.hp, maxHp: b.hp, despawnAt: Date.now() + 6 * 3600 * 1000 });
     }
@@ -352,7 +363,8 @@
         
         let d = null;
         if (!pSnap.exists()) {
-          let startX, startY; do { startX = Math.floor(Math.random() * 38) + 6; startY = Math.floor(Math.random() * 38) + 6; } while (Math.hypot(startX - 25, startY - 25) <= 16);
+          // 強制降生在外圍 (距離中心 50,50 > 32 格)
+          let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
           d = {
             name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
             wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
@@ -377,6 +389,9 @@
           await setDoc(playerRef, d, {merge:true});
         }
 
+        // 💡 權限判定：信箱是 admin 或者 名字有 GM 都可以免冷卻遷城
+        isAdmin = (user.email === 'admin@gmail.com') || (d.name && d.name.includes('GM'));
+
         if (!wSnap.exists()) { 
           await setDoc(worldRef, { name: d.name, x: d.x, y: d.y, troops: d.troops.infantry+d.troops.archer+d.troops.cavalry, castleLevel: d.buildings.castle }); 
         } else { await setDoc(worldRef, { castleLevel: d.buildings.castle }, {merge:true}); }
@@ -384,6 +399,7 @@
         onSnapshot(playerRef, (docSnap) => {
           if (docSnap.exists()) {
             myData = docSnap.data();
+            isAdmin = (user.email === 'admin@gmail.com') || (myData.name && myData.name.includes('GM'));
             if (!myData.buildQueues) myData.buildQueues = [];
             updateFogOfWar();
             if (!hasCentered) { resizeCanvas(); centerCameraOn(myData.x, myData.y); hasCentered = true; }
@@ -400,7 +416,7 @@
         await window.refreshMap();
         setInterval(localTick, 1000); requestAnimationFrame(renderLoop); setInterval(window.refreshMap, 60000);
       } else {
-        document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null;
+        document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null; isAdmin = false;
       }
     });
 
@@ -412,12 +428,17 @@
     }
     window.addEventListener('resize', resizeCanvas);
 
+    // 💡 Bounding Box 範圍優化演算法，確保 1 萬格地圖依舊極速順暢
     function updateFogOfWar() {
       if (!myData) return;
       if (godModeFog) { for (let x=0; x<WORLD_COLS; x++) for(let y=0; y<WORLD_ROWS; y++) exploredTiles[x][y] = true; return; }
+      
       const r = BASE_VISION_RADIUS + currentVisionBonus;
-      for (let x = 0; x < WORLD_COLS; x++) {
-        for (let y = 0; y < WORLD_ROWS; y++) {
+      const minX = Math.max(0, myData.x - r), maxX = Math.min(WORLD_COLS - 1, myData.x + r);
+      const minY = Math.max(0, myData.y - r), maxY = Math.min(WORLD_ROWS - 1, myData.y + r);
+
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
           if (Math.hypot(x - myData.x, y - myData.y) <= r) exploredTiles[x][y] = true;
         }
       }
@@ -441,7 +462,6 @@
       if (document.getElementById('tab-players').classList.contains('active')) renderPlayersList();
     };
 
-    // 💡 領主雷達列表
     function renderPlayersList() {
       const container = document.getElementById('players-list-container');
       if (!container || !myData) return;
@@ -498,7 +518,6 @@
       }
       if (myData.buildQueues.length !== newBuildQueues.length) { myData.buildQueues = newBuildQueues; needSave = true; }
 
-      // 💡 科技研發隊列
       if (myData.researchQueue && now >= myData.researchQueue.finishesAt) {
         myData.research[myData.researchQueue.target]++;
         myData.logs.unshift(`[科技突破] ${CFG.techs[myData.researchQueue.target].name} 升級至 Lv.${myData.research[myData.researchQueue.target]}`);
@@ -565,7 +584,6 @@
       return { id: 'R'+Date.now(), type: 'return', startX: oldMarch.targetX, startY: oldMarch.targetY, targetX: oldMarch.startX, targetY: oldMarch.startY, startTime: Date.now(), finishesAt: Date.now() + (oldMarch.finishesAt - oldMarch.startTime), troops: survivedTroops, loot: loot };
     }
 
-    // 💡 戰鬥計算導入科技 Buff
     function getMyPower(troops) {
       const t = myData.research || {infantry_atk:0, archer_atk:0, cavalry_atk:0};
       return troops.infantry * (CFG.troops.infantry.pwr + (t.infantry_atk||0)) +
@@ -606,13 +624,14 @@
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
       if (m.entity.type === 'relic') { 
         res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-      } else if (m.entity.type.startsWith('npc_')) {
+      } else if (m.entity.type === 'npc_capital') {
         res.loot = m.entity.loot; 
-        let loss = Math.floor(Math.random() * 5 + 2); 
-        if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
-        else if (m.entity.type === 'npc_fortress') loss = Math.floor(Math.random() * 15 + 5);
-        if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
-        myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+        if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 20 + 10);
+        if (res.troops.archer > 0) res.troops.archer -= Math.floor(Math.random() * 10 + 5);
+        if (res.troops.cavalry > 0) res.troops.cavalry -= Math.floor(Math.random() * 5 + 2);
+        myData.logs.unshift(`[史詩大捷] 成功摧毀 ${m.entity.name}！獲取海量戰利品與榮耀。`);
+      } else if (m.entity.type === 'npc_fortress' || m.entity.type === 'npc_castle') { 
+        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
       } else { 
         res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
       }
@@ -703,8 +722,8 @@
           if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
           const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
-          const dist = Math.hypot(x-25, y-25);
-          const isCore = dist <= 7, isMid = dist > 7 && dist <= 16;
+          const dist = Math.hypot(x-50, y-50);
+          const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
 
           if (cell.type === 'plains') { 
             ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -891,7 +910,7 @@
     canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
 
     // ==========================================
-    // 點擊事件與出征/遷城 (新增戰利品預覽 & 冷卻)
+    // 點擊事件與出征/遷城
     // ==========================================
     let targetAction = null;
     window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
@@ -939,13 +958,13 @@
       }
       else if (!tC && cell && cell.type !== 'water') {
         const timeSince = Date.now() - (myData.lastRelocateTime || 0);
-        const remainMs = RELOCATE_COOLDOWN - timeSince;
+        const remainMs = isAdmin ? 0 : RELOCATE_COOLDOWN - timeSince;
         const moveCost = Math.max(100, Math.ceil(dist * 50));
         
         if (remainMs > 0) {
             targetAction = null;
             document.getElementById("modal-title").innerHTML = `📍 領地搬遷 (冷卻中)`;
-            document.getElementById("modal-desc").innerHTML = `傳送矩陣冷卻中，需等待 <span style="color:#ef4444; font-weight:bold;">${formatTime(Math.ceil(remainMs/1000))}</span> 後方可再次搬遷。`;
+            document.getElementById("modal-desc").innerHTML = `傳送矩陣冷卻中，需等待 <span style="color:#ef4444; font-weight:bold;">${formatTime(Math.ceil(remainMs/1000))}</span> 後方可再次搬遷。<br><span style="font-size:0.75rem; color:#94a3b8;">(管理員不受此限制)</span>`;
             document.getElementById("btn-confirm-action").style.display = 'none';
         } else {
             targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
@@ -1018,10 +1037,18 @@
       
       const hrToSec = 3600;
       const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
-      const prodPerHr = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
-      const netFood = prodPerHr - upkeepPerHr;
+      
+      const woodProdPerHr = CFG.buildings.lumber.rate * myData.buildings.lumber * hrToSec;
+      const ironProdPerHr = CFG.buildings.mine.rate * myData.buildings.mine * hrToSec;
+      const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
+      const netFood = farmProdPerSec - upkeepPerHr;
 
-      document.getElementById('res-wood').innerText = Math.floor(myData.wood); document.getElementById('res-iron').innerText = Math.floor(myData.iron); 
+      document.getElementById('res-wood').innerText = Math.floor(myData.wood); 
+      document.getElementById('rate-wood').innerText = `+${Math.floor(woodProdPerHr)}/h`;
+      
+      document.getElementById('res-iron').innerText = Math.floor(myData.iron); 
+      document.getElementById('rate-iron').innerText = `+${Math.floor(ironProdPerHr)}/h`;
+      
       document.getElementById('res-food').innerText = Math.floor(myData.food);
       document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${Math.floor(netFood)}/h`;
       document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
@@ -1044,7 +1071,6 @@
         return `<div class="item-card"><div><strong style="font-size:1.1rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">所需: 🌲${cost.w} ⛏️${cost.i}</div></div><button style="width:100%; background:${isMax?'#475569':''}" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${btnText}</button></div>`;
       }).join('');
 
-      // 💡 渲染科技樹
       const rContainer = document.getElementById('research-container');
       if (myData.buildings.academy < 1) {
         rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先建造並升級【學院】來解鎖科技研發。</p>';
