@@ -41,6 +41,7 @@ const imgDarkCapital = new Image(); imgDarkCapital.src = 'dark_capital.png';
 const imgDarkFortress = new Image(); imgDarkFortress.src = 'dark_fortress.png';
 const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
 const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
+const imgBarbarian = new Image(); imgBarbarian.src = 'ico_buildings_stronghold_cyclopsMound.png';
 const imgBoss = new Image(); imgBoss.src = 'boss.png';
 
 const CFG = {
@@ -236,9 +237,10 @@ onAuthStateChanged(auth, async (user) => {
     const playerRef = doc(db, "players", myUid), worldRef = doc(db, "world_map", myUid);
     const pSnap = await getDoc(playerRef), wSnap = await getDoc(worldRef);
     
+    let d = null;
     if (!pSnap.exists()) {
       let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
-      const d = {
+      d = {
         name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
         wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
         buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
@@ -303,7 +305,7 @@ onAuthStateChanged(auth, async (user) => {
 window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
 // ==========================================
-// 👑 GM 專屬功能
+// 👑 GM 專屬功能 (Admin API)
 // ==========================================
 window.gmAddRes = async (type, amount) => {
   if (!isAdmin) return;
@@ -446,7 +448,7 @@ function renderGMPlayers() {
 window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
 
 // ==========================================
-// 遊戲心跳
+// 遊戲心跳 (🔄 包含全局重生系統)
 // ==========================================
 async function localTick() {
   if (!myData) return;
@@ -464,12 +466,14 @@ async function localTick() {
   if (myData.food < 0) myData.food = 0;
 
   let needSave = false;
+  
+  // 💡 全局重生系統：所有被清剿的地圖實體，在 15 分鐘後自動重新生成
   let newCleared = [];
   for (let poi of myData.clearedPOI) {
     const parts = poi.split(',');
     if (parts.length >= 4) {
-      const cTime = parseInt(parts[2]), cType = parts[3];
-      if ((cType.startsWith('npc_')) && now - cTime > 15 * 60 * 1000) continue; 
+      const cTime = parseInt(parts[2]);
+      if (now - cTime > 15 * 60 * 1000) continue; 
     }
     newCleared.push(poi);
   }
@@ -509,7 +513,6 @@ async function localTick() {
      if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
   });
 
-  // 💡 NPC 入侵邏輯
   if (Math.random() < 0.005) {
     if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
       let nearestNPC = null, minDist = 15;
@@ -690,7 +693,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (使用貼圖)
+// 🎨 渲染世界地圖
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -713,7 +716,8 @@ function drawWorldMap() {
     for (let y = sR; y < eR; y++) {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
       const px = x*TILE_SIZE, py = y*TILE_SIZE;
-      
+      if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
+
       const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
@@ -739,15 +743,7 @@ function drawWorldMap() {
       }
       ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
-      const isExplored = exploredTiles[x][y] || godModeFog;
-
-      if (!isExplored) { 
-          ctx.fillStyle='rgba(5, 8, 17, 0.55)'; 
-          ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-          continue; 
-      }
-
-      if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
+      if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
         const clrInfo = getClearedPOI(x, y);
         const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
         
@@ -787,19 +783,25 @@ function drawWorldMap() {
               }
               ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
-            ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
-            ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
+            // 💡 野蠻人專屬圖片渲染 (附帶浮動效果微調)
+            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
+                ctx.drawImage(imgBarbarian, px - 10, py + floatY - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
+            }
+            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人部落', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'bandit') {
             ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
-            ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
+            ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'relic') {
             ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
-            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           }
         }
       }
+      if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.7)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
     }
-  } // <--- 💡 在這裡正確關閉 x,y 的雙層迴圈！
+  }
 
   worldBosses.forEach(boss => {
      const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
@@ -883,9 +885,6 @@ function drawWorldMap() {
   ctx.restore();
 }
 
-// ==========================================
-// 實體按鈕縮放與觸控
-// ==========================================
 window.zoomMapBtn = (factor) => {
   const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
   if (nZ !== zoom) {
@@ -940,9 +939,6 @@ function handleUp(e) {
 canvas.addEventListener("mousedown", handleDown); canvas.addEventListener("mousemove", handleMove); window.addEventListener("mouseup", handleUp);
 canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
 
-// ==========================================
-// 點擊事件與出征/遷城
-// ==========================================
 let targetAction = null;
 window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
 
@@ -1069,9 +1065,6 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
   window.closeActionModal(); try{window.renderSelf();}catch(e){}
 });
 
-// ==========================================
-// 渲染 UI (防崩潰保護 + 數字壓縮)
-// ==========================================
 window.renderSelf = function() {
   try {
       const now = Date.now();
