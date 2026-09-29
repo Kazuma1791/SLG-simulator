@@ -28,17 +28,19 @@ let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
 // ==========================================
-// 🖼️ 載入外部材質圖片 (支援 7 階段城堡升級)
+// 🖼️ 載入外部材質圖片 (支援 7 階段城堡 & 4 種暗黑據點)
 // ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
     const img = new Image();
-    img.src = `ico_buildings_haven_cityHall_0${i}.png`; // 讀取 01 到 07
+    img.src = `ico_buildings_haven_cityHall_0${i}.png`; 
     castleImgs.push(img);
 }
 
-// 保留未來的擴充圖片位址，若無圖片會自動降級為色塊
+const imgDarkCapital = new Image(); imgDarkCapital.src = 'dark_capital.png';
+const imgDarkFortress = new Image(); imgDarkFortress.src = 'dark_fortress.png';
 const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
+const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
 const imgBoss = new Image(); imgBoss.src = 'boss.png';
 
 const CFG = {
@@ -234,9 +236,10 @@ onAuthStateChanged(auth, async (user) => {
     const playerRef = doc(db, "players", myUid), worldRef = doc(db, "world_map", myUid);
     const pSnap = await getDoc(playerRef), wSnap = await getDoc(worldRef);
     
+    let d = null;
     if (!pSnap.exists()) {
       let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
-      const d = {
+      d = {
         name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
         wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
         buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
@@ -272,7 +275,7 @@ onAuthStateChanged(auth, async (user) => {
         const isUnderAttack = myData.marches.some(m => m.type === 'defend_npc');
         document.getElementById('danger-overlay').style.display = isUnderAttack ? 'block' : 'none';
         
-        try { renderSelf(); } catch(e) { console.error("Render Error:", e); document.getElementById('log-list').innerHTML = `<p style="color:red">渲染錯誤: ${e.message}</p>`; }
+        try { window.renderSelf(); } catch(e) { console.error("Render Error:", e); document.getElementById('log-list').innerHTML = `<p style="color:red">渲染錯誤: ${e.message}</p>`; }
       }
     });
 
@@ -301,7 +304,7 @@ onAuthStateChanged(auth, async (user) => {
 window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
 // ==========================================
-// 👑 GM 專屬功能 (Admin API)
+// 👑 GM 專屬功能
 // ==========================================
 window.gmAddRes = async (type, amount) => {
   if (!isAdmin) return;
@@ -311,7 +314,7 @@ window.gmAddRes = async (type, amount) => {
   if (type === 'speedup') myData.items.speedup += amount;
   if (type === 'shield') myData.items.shieldCard += amount;
   myData.logs.unshift(`[GM系統] 成功生成 ${amount} 單位物資！`);
-  await savePrivateData(); try { renderSelf(); } catch(e){}
+  await savePrivateData(); try { window.renderSelf(); } catch(e){}
 };
 
 window.gmAddTroop = async (type, amount) => {
@@ -320,7 +323,7 @@ window.gmAddTroop = async (type, amount) => {
   myData.logs.unshift(`[GM系統] 憑空徵召了 ${amount} 名部隊！`);
   await savePrivateData();
   setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
-  try { renderSelf(); } catch(e){}
+  try { window.renderSelf(); } catch(e){}
 };
 
 window.gmRespawnBosses = () => {
@@ -338,7 +341,7 @@ window.gmClearQueues = async () => {
   if(myData.researchQueue) myData.researchQueue.finishesAt = Date.now();
   if(myData.trainQueue) myData.trainQueue.finishesAt = Date.now();
   myData.logs.unshift(`[GM系統] 已動用時間魔法，所有隊列瞬間完成！`);
-  await savePrivateData(); try { renderSelf(); } catch(e){}
+  await savePrivateData(); try { window.renderSelf(); } catch(e){}
 };
 
 // ==========================================
@@ -556,7 +559,7 @@ async function localTick() {
   }
   
   if (needSave) { myData.marches = newMarches; await savePrivateData(); }
-  try { renderSelf(); } catch(e){}
+  try { window.renderSelf(); } catch(e){}
 }
 
 function createReturnMarch(oldMarch, survivedTroops, loot) {
@@ -688,7 +691,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (動態多階城堡系統)
+// 🎨 渲染世界地圖 (使用貼圖)
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -711,8 +714,8 @@ function drawWorldMap() {
     for (let y = sR; y < eR; y++) {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
       const px = x*TILE_SIZE, py = y*TILE_SIZE;
-      if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
-
+      
+      // 💡 繪製原野地形
       const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
@@ -736,24 +739,59 @@ function drawWorldMap() {
         ctx.fillStyle='#1e3a8a'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
         ctx.fillStyle='#3b82f6'; const wave = Math.sin(t/500 + x + y) * 3; ctx.fillRect(px+10, py+20+wave, 15, 2); ctx.fillRect(px+25, py+35-wave, 20, 2);
       }
-      ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+      
+      ctx.strokeStyle='rgba(255,255,255,0.03)'; 
+      ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
-      if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
+      const isExplored = exploredTiles[x][y] || godModeFog;
+
+      // 🌫️ 迷霧：改用半透明陰影，讓地形仍然可見
+      if (!isExplored) { 
+          ctx.fillStyle='rgba(5, 8, 17, 0.55)'; 
+          ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+          continue; 
+      }
+
+      if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
         const clrInfo = getClearedPOI(x, y);
         const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
         
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
-          if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_fortress' || cell.entity.type === 'npc_castle' || cell.entity.type === 'npc_outpost') {
+          // 💡 依照 NPC 據點等級顯示不同圖片
+          if (cell.entity.type === 'npc_capital') {
+              if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkCapital, px, py + floatY - 10, TILE_SIZE, TILE_SIZE + 10);
+              } else {
+                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+35+floatY);
+              }
+              ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗王城', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'npc_fortress') {
+              if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkFortress, px, py + floatY, TILE_SIZE, TILE_SIZE);
+              } else {
+                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+35+floatY);
+              }
+              ctx.fillStyle = '#f43f5e'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'npc_castle') {
               if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
                   ctx.drawImage(imgDarkCastle, px, py + floatY, TILE_SIZE, TILE_SIZE);
               } else {
-                  ctx.fillStyle = cell.entity.type === 'npc_capital' ? 'rgba(76, 29, 149, 0.6)' : 'rgba(59, 7, 100, 0.6)';
-                  ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
-                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+35+floatY);
+                  ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
+                  ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
               }
-              ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
+              ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'npc_outpost') {
+              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkOutpost, px, py + floatY, TILE_SIZE, TILE_SIZE);
+              } else {
+                  ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
+                  ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏚️', px+TILE_SIZE/2, py+32+floatY);
+              }
+              ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
             ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
             ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
@@ -766,93 +804,90 @@ function drawWorldMap() {
           }
         }
       }
-      if (!godModeFog && Math.hypot(x-myData.x, y-myData.y) > radius) { ctx.fillStyle='rgba(5,8,17,0.7)'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); }
-    }
-  }
-
-  worldBosses.forEach(boss => {
-     const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
-     if (boss.hp > 0 && (isExplored || godModeFog)) {
-        const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
-        const bounce = Math.sin(t/200)*5;
-        if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
-            ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
-        } else {
-            ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
-        }
-        ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
-        ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
-     }
-  });
-
-  allCastles.forEach(p => {
-    const isMe = (p.id === myUid);
-    const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
-    if (!godModeFog && !isMe && !isExplored) return;
-    
-    const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
-    if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
-
-    const isShielded = p.shieldEndsAt && p.shieldEndsAt > t;
-    if (isShielded) {
-        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
-        ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
     }
 
-    if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
-    
-    // 💡 城堡動態等級判斷系統
-    let cLv = p.castleLevel || 1;
-    let imgIdx = 0;
-    if (cLv >= 20) imgIdx = 6;
-    else if (cLv >= 17) imgIdx = 5;
-    else if (cLv >= 13) imgIdx = 4;
-    else if (cLv >= 9)  imgIdx = 3;
-    else if (cLv >= 6)  imgIdx = 2;
-    else if (cLv >= 3)  imgIdx = 1;
-    
-    let currentCastleImg = castleImgs[imgIdx];
-    
-    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-        // 浮空立體微調: 將圖片放大一點，並往上偏移，製造出浮空島嶼的霸氣感
-        ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
-    } else {
-        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
-        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
-        ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
-    }
-
-    if (zoom>0.5) {
-      ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
-    }
-    ctx.textAlign='start';
-  });
-
-  if (myData.marches && myData.marches.length > 0) {
-    myData.marches.forEach(m => {
-      let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
-      const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
-      const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
-      const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
-
-      ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
-      ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
-      ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
-
-      ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
-      ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
-
-      const left = Math.ceil((m.finishesAt-t)/1000);
-      if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
-      ctx.textAlign = 'start';
+    worldBosses.forEach(boss => {
+       const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
+       if (boss.hp > 0 && (isExplored || godModeFog)) {
+          const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
+          const bounce = Math.sin(t/200)*5;
+          if (imgBoss.complete && imgBoss.naturalHeight !== 0) {
+              ctx.drawImage(imgBoss, bx, by + bounce, TILE_SIZE, TILE_SIZE);
+          } else {
+              ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
+          }
+          ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
+          ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
+       }
     });
+
+    allCastles.forEach(p => {
+      const isMe = (p.id === myUid);
+      const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
+      if (!godModeFog && !isMe && !isExplored) return;
+      
+      const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
+      if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
+
+      const isShielded = p.shieldEndsAt && p.shieldEndsAt > t;
+      if (isShielded) {
+          ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
+          ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
+      }
+
+      if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24+Math.sin(t/250)*4,0,Math.PI*2); ctx.stroke(); }
+      
+      // 💡 城堡動態 7 階級判斷系統
+      let cLv = p.castleLevel || 1;
+      let imgIdx = 0;
+      if (cLv >= 20) imgIdx = 6;
+      else if (cLv >= 17) imgIdx = 5;
+      else if (cLv >= 13) imgIdx = 4;
+      else if (cLv >= 9)  imgIdx = 3;
+      else if (cLv >= 6)  imgIdx = 2;
+      else if (cLv >= 3)  imgIdx = 1;
+      
+      let currentCastleImg = castleImgs[imgIdx];
+      
+      if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+          ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+      } else {
+          ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
+          ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
+          ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
+      }
+
+      if (zoom>0.5) {
+        ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
+        ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
+      }
+      ctx.textAlign='start';
+    });
+
+    if (myData.marches && myData.marches.length > 0) {
+      myData.marches.forEach(m => {
+        let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
+        const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
+        const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
+        const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
+
+        ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
+        ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+        ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+
+        ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
+        ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
+
+        const left = Math.ceil((m.finishesAt-t)/1000);
+        if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
+        ctx.textAlign = 'start';
+      });
+    }
+    ctx.restore();
   }
-  ctx.restore();
-}
 
 // ==========================================
 // 實體按鈕縮放與觸控
@@ -1041,7 +1076,7 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
 });
 
 // ==========================================
-// 渲染 UI 
+// 渲染 UI (防崩潰保護 + 數字壓縮)
 // ==========================================
 window.renderSelf = function() {
   try {
@@ -1250,9 +1285,6 @@ window.renderSelf = function() {
   }
 }
 
-// ==========================================
-// 綁定所有操作至 window (供 HTML 呼叫)
-// ==========================================
 window.useShield = async () => {
   if (myData.items.shieldCard <= 0) return alert('背包中沒有和平護盾！');
   const now = Date.now();
