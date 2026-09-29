@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 終極防外掛與管理員版</title>
+  <title>多人領地戰 - 終極防外掛與直覺GM版</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="danger-overlay" class="danger-border"></div>
 
-  <!-- 🚫 終極防外掛封鎖畫面 (預設隱藏，觸發時覆蓋全螢幕) -->
+  <!-- 🚫 終極防外掛封鎖畫面 -->
   <div id="ban-screen" class="modal-overlay" style="z-index: 99999; background: rgba(5, 8, 17, 0.98); flex-direction: column; text-align: center;">
       <h1 style="color: #ef4444; font-size: 3rem; margin-bottom: 20px;">🚫 帳號已遭封鎖</h1>
       <p style="color: #cbd5e1; font-size: 1.2rem; margin-bottom: 10px;">系統偵測到您的帳號存在異常數據竄改或違規行為。</p>
@@ -125,7 +125,7 @@
         <div class="grid" id="building-container"></div>
       </div>
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
         <div class="grid" id="research-container"></div>
       </div>
       <div class="card">
@@ -190,12 +190,19 @@
           <button onclick="window.gmAddRes('food', 1000000)" style="background:#059669;">+1M 糧草</button>
           <button onclick="window.gmAddTroop('infantry', 50000)" style="background:#2563eb;">+5萬 步兵</button>
           <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置所有 Boss</button>
-          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成建築隊列</button>
+          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
         </div>
 
-        <!-- 針對指定玩家操作 -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🎯 對指定玩家操作 (含解封)</h4>
-        <input type="text" id="gm-target-uid" placeholder="在此貼上目標玩家的 UID" style="width:100%; padding:10px; margin-top:6px; margin-bottom:10px; background:#0a0f1d; color:white; border:1px solid #475569; border-radius:4px;">
+        <!-- 針對指定玩家操作 (優化點擊選擇) -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🎯 指定玩家操作 <span style="font-size:0.75rem; color:#ef4444;">(請先從下方名單點擊選取)</span></h4>
+        
+        <!-- 顯示當前鎖定的目標 -->
+        <div style="background:#0a0f1d; padding:10px; border-radius:4px; margin-top:6px; margin-bottom:10px; border: 1px dashed #facc15; display:flex; align-items:center;">
+          <span style="color:#94a3b8; font-size:0.85rem; margin-right:8px;">目前鎖定：</span>
+          <strong id="gm-selected-name" style="color:#f87171; font-size:1.1rem;">未選擇任何人</strong>
+          <input type="hidden" id="gm-target-uid" value="">
+        </div>
+
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解除封鎖帳號</button>
           <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 手動永久封鎖</button>
@@ -204,11 +211,11 @@
           <button onclick="window.gmTargetAction('addRes')" style="background:#0ea5e9;">給予100萬資源</button>
           <button onclick="window.gmTargetAction('addTroops')" style="background:#8b5cf6;">給予10萬大軍</button>
           <button onclick="window.gmTargetAction('addItems')" style="background:#f59e0b;">給予百張護盾/加速</button>
-          <button onclick="window.gmTargetAction('clear')" style="background:#475569;">清空該玩家資源/兵力</button>
+          <button onclick="window.gmTargetAction('clear')" style="background:#475569;">清空物資與兵力</button>
         </div>
 
         <!-- GM 全服天眼 -->
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊 UID 可自動複製)</h4>
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊玩家即可鎖定目標)</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
