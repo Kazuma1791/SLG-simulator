@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 極致流暢與同心圓地標版</title>
+  <title>多人領地戰 - 生態階級與極致流暢版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -27,7 +27,7 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* 🌍 巨型地圖框：手機佔用更大空間 */
+    /* 🌍 巨型地圖框 */
     .map-frame { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid #2e4461; background: #050811; width: 100%; height: 68vh; min-height: 480px; }
     canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
     canvas:active { cursor: grabbing; }
@@ -63,6 +63,7 @@
   <div id="danger-overlay" class="danger-border"></div>
 
   <div class="container">
+    <!-- 登入面板 -->
     <div id="login-panel" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 11, 20, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center;">
       <div style="background: #131d2e; padding: 30px; border-radius: 8px; border: 1px solid #23354d; width: 90%; max-width: 320px; text-align: center;">
         <h2 style="color: #38bdf8; margin-bottom: 20px;">🏰 領地戰登入</h2>
@@ -85,6 +86,7 @@
       </div>
     </div>
 
+    <!-- 資源面板 -->
     <div class="card" style="padding-bottom: 8px;">
       <h2 id="player-title" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
         <span style="font-size:1.1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏰 連線中...</span>
@@ -205,7 +207,7 @@
 
     const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("2d");
     
-    // 🚀 地圖快取矩陣 (解決 Lag 的關鍵)
+    // 🚀 地圖快取矩陣 (解決 Lag)
     let MAP_CACHE = [];
     const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
@@ -237,35 +239,41 @@
     }
 
     // ==========================================
-    // 地圖生成與快取 (僅在載入時執行一次)
+    // 💡 地圖生成與快取引擎 (修正數學機率Bug)
     // ==========================================
     function getTileTypeRaw(x, y) {
       const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
-    function getTileEntityRaw(x, y, type) {
+    function getStaticEntity(x, y, type) {
       if (x === 25 && y === 25) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 5 } };
       if (type === 'water') return null;
-      const dist = Math.hypot(x - 25, y - 25);
-      const rand = (Math.sin(x * 45.123 + y * 89.456) * 98765.4321) % 1; 
       
+      const dist = Math.hypot(x - 25, y - 25);
+      const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321;
+      const rand = v - Math.floor(v); // 確保機率為正小數 (0.0~0.999)
+      
+      // 1. 核心禁區 (距離 1~7)
       if (dist <= 7) {
-        if (rand < 0.10) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
-        if (rand < 0.20) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
+        if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 3000, iron: 3000, food: 3000 } };
+        if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000 } };
+        if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         return null;
       }
+      // 2. 中間激戰區 (距離 8~16)
       if (dist <= 16) {
-        if (rand < 0.02) return { type: 'npc_castle', name: '🏰 黑暗軍團要塞', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
-        if (rand < 0.08) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
-        if (rand < 0.14) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
-        if (rand < 0.20) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
+        if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
+        if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 80, loot: { iron: 800, wood: 400 } };
+        if (rand < 0.070) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 600, iron: 600, food: 600 } };
+        if (rand < 0.110) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 20, loot: { wood: 300, food: 300 } };
         return null;
       }
-      if (rand < 0.005) return { type: 'npc_castle', name: '🏰 黑暗前哨', reqPwr: 100, loot: { wood: 800, iron: 800, food: 800 } };
-      if (rand < 0.040) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
-      if (rand < 0.090) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
-      if (rand < 0.120) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
+      // 3. 外圍安逸區 (距離 17+)
+      if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 80, loot: { wood: 800, iron: 800, food: 800 } };
+      if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 25, loot: { iron: 300, wood: 100 } };
+      if (rand < 0.055) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 5, loot: { wood: 120, food: 80 } };
+      if (rand < 0.075) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 150, iron: 150, food: 150 } };
       return null;
     }
 
@@ -274,12 +282,20 @@
         MAP_CACHE[x] = [];
         for(let y=0; y<WORLD_ROWS; y++) {
           let t = getTileTypeRaw(x,y);
-          if (x===25 && y===25) t = 'plains'; // 王城必須在陸地
-          MAP_CACHE[x][y] = { type: t, entity: getTileEntityRaw(x,y,t) };
+          if (x===25 && y===25) t = 'plains'; 
+          MAP_CACHE[x][y] = { type: t, entity: getStaticEntity(x,y,t) };
         }
       }
     }
     initMapCache();
+
+    // 動態獲取格子實體 (結合靜態快取與動態玩家/Boss)
+    function getTileEntity(x, y) {
+      if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
+      if (allCastles.some(p => p.x === x && p.y === y)) return null;
+      if (worldBoss && worldBoss.hp > 0 && worldBoss.x === x && worldBoss.y === y) return null;
+      return MAP_CACHE[x][y].entity;
+    }
 
     function getClearedPOI(x, y) {
       if (!myData || !myData.clearedPOI) return null;
@@ -290,9 +306,8 @@
     async function spawnWorldBoss() {
       let bx, by;
       do {
-        bx = Math.floor(Math.random() * 14) + 18; 
-        by = Math.floor(Math.random() * 14) + 18;
-      } while(bx === 25 && by === 25); // 避開王城
+        bx = Math.floor(Math.random() * 14) + 18; by = Math.floor(Math.random() * 14) + 18;
+      } while(bx === 25 && by === 25); 
       const b = CFG.bosses[Math.floor(Math.random() * CFG.bosses.length)];
       await setDoc(doc(db, "world_map", "WORLD_BOSS"), {
         name: b.name, isBoss: true, x: bx, y: by,
@@ -446,7 +461,7 @@
         const parts = poi.split(',');
         if (parts.length >= 4) {
           const cTime = parseInt(parts[2]), cType = parts[3];
-          if ((cType === 'npc_castle' || cType === 'npc_capital') && now - cTime > 15 * 60 * 1000) continue; 
+          if ((cType.startsWith('npc_')) && now - cTime > 15 * 60 * 1000) continue; 
         }
         newCleared.push(poi);
       }
@@ -472,9 +487,9 @@
         for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
           for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
             const cell = MAP_CACHE[tx][ty];
-            if (cell.ent && (cell.ent.type === 'npc_castle' || cell.ent.type === 'npc_capital') && !getClearedPOI(tx, ty)) {
+            if (cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
               const dist = Math.hypot(tx - myData.x, ty - myData.y);
-              if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.ent}; }
+              if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
             }
           }
         }
@@ -485,7 +500,7 @@
             id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
             startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
           });
-          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
+          myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
           needSave = true;
         }
       }
@@ -546,14 +561,13 @@
       let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
       if (m.entity.type === 'relic') { 
         res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-      } else if (m.entity.type === 'npc_capital') {
+      } else if (m.entity.type.startsWith('npc_')) {
         res.loot = m.entity.loot; 
-        if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 20 + 10);
-        if (res.troops.archer > 0) res.troops.archer -= Math.floor(Math.random() * 10 + 5);
-        if (res.troops.cavalry > 0) res.troops.cavalry -= Math.floor(Math.random() * 5 + 2);
-        myData.logs.unshift(`[史詩大捷] 成功摧毀 ${m.entity.name}！獲取海量戰利品與榮耀。`);
-      } else if (m.entity.type === 'npc_castle') { 
-        res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 5 + 2); myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+        let loss = Math.floor(Math.random() * 5 + 2); 
+        if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
+        else if (m.entity.type === 'npc_fortress') loss = Math.floor(Math.random() * 15 + 5);
+        if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
+        myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
       } else { 
         res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
       }
@@ -619,7 +633,7 @@
     }
 
     // ==========================================
-    // 🚀 60FPS 渲染循環 (極度流暢)
+    // 🚀 60FPS 渲染循環
     // ==========================================
     function renderLoop() {
       drawWorldMap();
@@ -648,7 +662,7 @@
           const dist = Math.hypot(x-25, y-25);
           const isCore = dist <= 7, isMid = dist > 7 && dist <= 16;
 
-          // 🗺️ 動態同心圓地貌顏色
+          // 🗺️ 動態同心圓地貌
           if (cell.type === 'plains') { 
             ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); 
             ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -671,7 +685,7 @@
           }
           ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
-          // 😈 實體繪製與區分
+          // 😈 NPC 實體繪製與區分
           if (cell.entity && !allCastles.some(p => p.x === x && p.y === y)) {
             const clrInfo = getClearedPOI(x, y);
             const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
@@ -683,10 +697,18 @@
                 ctx.fillStyle = '#4c1d95'; ctx.fillRect(px+2, py+2, TILE_SIZE-4, TILE_SIZE-4);
                 ctx.font = '32px sans-serif'; ctx.textAlign='center'; ctx.fillText('😈', px+TILE_SIZE/2, py+35+floatY);
                 ctx.fillStyle = '#d946ef'; ctx.font = 'bold 11px sans-serif'; ctx.fillText('黑暗王城', px+TILE_SIZE/2, py+50);
+              } else if (cell.entity.type === 'npc_fortress') {
+                ctx.fillStyle = '#3f000f'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+32+floatY);
+                ctx.fillStyle = '#f43f5e'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+45);
               } else if (cell.entity.type === 'npc_castle') {
-                ctx.fillStyle = '#3b0764'; ctx.fillRect(px+10, py+10, 35, 35);
+                ctx.fillStyle = '#3b0764'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
                 ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
-                ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+45);
+                ctx.fillStyle = '#a855f7'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
+              } else if (cell.entity.type === 'npc_outpost') {
+                ctx.fillStyle = '#171717'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
+                ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏚️', px+TILE_SIZE/2, py+32+floatY);
+                ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
               } else if (cell.entity.type === 'barbarian') {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
                 ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+45);
@@ -707,7 +729,9 @@
         const bx = worldBoss.x*TILE_SIZE, by = worldBoss.y*TILE_SIZE;
         if (godModeFog || Math.hypot(worldBoss.x-myData.x, worldBoss.y-myData.y) <= radius) {
           const bounce = Math.sin(t/200)*5;
-          ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText('🐉', bx+TILE_SIZE/2, by+40+bounce);
+          ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 20;
+          ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText(worldBoss.name.split(' ')[0], bx+TILE_SIZE/2, by+40+bounce);
+          ctx.shadowBlur = 0;
           ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(worldBoss.hp/worldBoss.maxHp), 6);
           ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
         }
@@ -772,7 +796,7 @@
     }
 
     // ==========================================
-    // 實體按鈕縮放與觸控
+    // 實體按鈕縮放與雙指觸控
     // ==========================================
     window.zoomMapBtn = (factor) => {
       const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
@@ -780,7 +804,7 @@
         const cx = canvas.width / 2, cy = canvas.height / 2;
         const wX = cx / zoom + camX, wY = cy / zoom + camY;
         zoom = nZ; camX = wX - cx / zoom; camY = wY - cy / zoom; clampCamera();
-        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
+        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
       }
     };
 
@@ -858,12 +882,19 @@
       }
       else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
         const ent = cell.entity;
+        let actionTitle = '⚔️ 討伐敵陣';
+        if (ent.type === 'relic') actionTitle = '🏛️ 遺跡探險';
+        else if (ent.type === 'npc_capital') actionTitle = '😈 攻略王城';
+        else if (ent.type === 'npc_fortress') actionTitle = '🏯 攻堅要塞';
+        else if (ent.type === 'npc_castle') actionTitle = '🏰 攻打城堡';
+        else if (ent.type === 'npc_outpost') actionTitle = '🏚️ 拔除前哨';
+
         targetAction = { type: ent.type==='relic'?'relic':(ent.type==='npc_capital'?'attack_capital':'attack_npc'), entity: ent, x: tX, y: tY, dist };
-        document.getElementById("modal-title").innerHTML = ent.type==='relic'?`🏛️ 奇蹟探險`:(ent.type==='npc_capital'?`😈 攻略王城`:(ent.type==='npc_castle'?`🏰 攻堅要塞`:`⚔️ 討伐敵陣`));
-        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`需要一定兵力強度。`;
+        document.getElementById("modal-title").innerHTML = actionTitle;
+        document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。`:`距離：${Math.ceil(dist)} 格<br>建議兵力戰力：${ent.reqPwr}`;
         document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
       }
-      else if (!tC && getTileTypeRaw(tX,tY) !== 'water') {
+      else if (!tC && cell && cell.type !== 'water') {
         const moveCost = Math.max(100, Math.ceil(dist * 50));
         targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
         document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
