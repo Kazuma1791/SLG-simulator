@@ -3,12 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 史詩視覺與模組化版</title>
-  <!-- 載入外部 CSS 樣式表 -->
+  <title>多人領地戰 - 終極防外掛與管理員版</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="danger-overlay" class="danger-border"></div>
+
+  <!-- 🚫 終極防外掛封鎖畫面 (預設隱藏，觸發時覆蓋全螢幕) -->
+  <div id="ban-screen" class="modal-overlay" style="z-index: 99999; background: rgba(5, 8, 17, 0.98); flex-direction: column; text-align: center;">
+      <h1 style="color: #ef4444; font-size: 3rem; margin-bottom: 20px;">🚫 帳號已遭封鎖</h1>
+      <p style="color: #cbd5e1; font-size: 1.2rem; margin-bottom: 10px;">系統偵測到您的帳號存在異常數據竄改或違規行為。</p>
+      <p style="color: #facc15; font-size: 1.1rem; margin-bottom: 30px;">封鎖原因：<span id="ban-reason" style="font-weight: bold; color: #fff;">未知</span></p>
+      <p style="color: #94a3b8; font-size: 0.9rem;">如果您認為這是一個誤判，請聯繫遊戲管理員 (GM) 解封。</p>
+      <button onclick="window.logoutUser()" style="margin-top: 30px; background: #475569; padding: 12px 24px; font-size: 1.1rem;">登出帳號</button>
+  </div>
 
   <div class="container">
     <!-- 登入面板 -->
@@ -57,7 +65,7 @@
       <button class="tab-btn" id="btn-tab-city" onclick="window.switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="window.switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="window.switchTab('inv')">🎒 背包</button>
-      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 管理員</button>
       <button onclick="window.logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
     </div>
 
@@ -117,11 +125,11 @@
         <div class="grid" id="building-container"></div>
       </div>
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技研發)</h3>
         <div class="grid" id="research-container"></div>
       </div>
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">⚔️ 軍事招募所 (依兵營擴容)</h3>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">⚔️ 軍事招募所</h3>
         <div class="grid" id="train-container"></div>
       </div>
     </div>
@@ -133,10 +141,12 @@
           <h3 style="margin:0;">📡 周遭情報雷達</h3>
           <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button>
         </div>
-        <h4 style="margin-top: 12px; color:#facc15; font-size:0.95rem;">🐲 附近的世界首領 (最近 5 隻)</h4>
+        
+        <h4 style="margin-top: 12px; color:#facc15; font-size:0.95rem;">🐲 附近的世界首領</h4>
         <div id="radar-boss-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
-        <h4 style="margin-top: 16px; color:#38bdf8; font-size:0.95rem;">👥 附近的玩家勢力 (最近 5 位)</h4>
-        <div id="radar-players-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
+
+        <h4 style="margin-top: 16px; color:#38bdf8; font-size:0.95rem;">👥 附近的玩家勢力</h4>
+        <div id="radar-players-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
 
@@ -144,7 +154,6 @@
     <div id="tab-inv" class="tab-content">
       <div class="card">
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主背包</h3>
-        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">管理與使用您的戰略物資道具。</p>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
             <div style="font-size:2.5rem; margin-bottom:4px;">🛡️</div>
@@ -168,22 +177,38 @@
       </div>
     </div>
 
-    <!-- ==================== 🛠️ GM 面板 ==================== -->
+    <!-- ==================== 👑 GM 面板 ==================== -->
     <div id="tab-gm" class="tab-content">
-      <div class="card" style="border-color: #f87171;">
-        <h3 style="color:#f87171;">🛠️ 開發者控制台 (GM)</h3>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+      <div class="card" style="border-color: #facc15;">
+        <h3 style="color:#facc15;">👑 最高管理員控制台</h3>
+        
+        <!-- 自己的操作 -->
+        <h4 style="margin-top:10px; color:#cbd5e1; font-size:0.9rem;">➤ 對自己操作 (快速測試)</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
           <button onclick="window.gmAddRes('wood', 1000000)" style="background:#059669;">+1M 木材</button>
           <button onclick="window.gmAddRes('iron', 1000000)" style="background:#059669;">+1M 鐵礦</button>
           <button onclick="window.gmAddRes('food', 1000000)" style="background:#059669;">+1M 糧草</button>
-          <button onclick="window.gmAddRes('speedup', 100)" style="background:#d97706;">+100 加速卡</button>
-          <button onclick="window.gmAddRes('shield', 10)" style="background:#06b6d4;">+10 護盾</button>
-          <button onclick="window.gmAddTroop('infantry', 5000)" style="background:#2563eb;">+5k 步兵</button>
-          <button onclick="window.gmAddTroop('cavalry', 5000)" style="background:#2563eb;">+5k 騎兵</button>
-          <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置所有Boss</button>
-          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成隊列</button>
+          <button onclick="window.gmAddTroop('infantry', 50000)" style="background:#2563eb;">+5萬 步兵</button>
+          <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置所有 Boss</button>
+          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成建築隊列</button>
         </div>
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px;">🌐 全服領主監控</h4>
+
+        <!-- 針對指定玩家操作 -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🎯 對指定玩家操作 (含解封)</h4>
+        <input type="text" id="gm-target-uid" placeholder="在此貼上目標玩家的 UID" style="width:100%; padding:10px; margin-top:6px; margin-bottom:10px; background:#0a0f1d; color:white; border:1px solid #475569; border-radius:4px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解除封鎖帳號</button>
+          <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 手動永久封鎖</button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button onclick="window.gmTargetAction('addRes')" style="background:#0ea5e9;">給予100萬資源</button>
+          <button onclick="window.gmTargetAction('addTroops')" style="background:#8b5cf6;">給予10萬大軍</button>
+          <button onclick="window.gmTargetAction('addItems')" style="background:#f59e0b;">給予百張護盾/加速</button>
+          <button onclick="window.gmTargetAction('clear')" style="background:#475569;">清空該玩家資源/兵力</button>
+        </div>
+
+        <!-- GM 全服天眼 -->
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊 UID 可自動複製)</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
@@ -195,7 +220,6 @@
     </div>
   </div>
 
-  <!-- 載入外部 JS 遊戲核心 -->
   <script type="module" src="game.js"></script>
 </body>
 </html>
