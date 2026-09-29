@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 護盾與情報雷達版</title>
+  <title>多人領地戰 - 終極介面與護盾雷達版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -52,13 +52,22 @@
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
     .item-card { background: linear-gradient(145deg, #0f172a, #1e293b); padding: 12px; border-radius: 8px; border: 1px solid #334155; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;}
     .item-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #3b82f6; }
+    .item-info { font-size: 0.8rem; color: #94a3b8; margin: 6px 0; }
+    .item-cost { display: flex; gap: 8px; margin-top: 4px; font-size: 0.8rem; }
+    .item-cost span { background: #0a0f1d; padding: 2px 6px; border-radius: 4px; border: 1px solid #1e2c40; }
     
+    /* 排程看板樣式 */
     .task-row { display: flex; justify-content: space-between; align-items: center; background: #0a0f1d; padding: 8px 12px; border-radius: 6px; border: 1px solid #1e2c40; margin-bottom: 6px; }
-    .task-info { display: flex; flex-direction: column; width: 65%; }
+    .task-info { display: flex; flex-direction: column; width: 65%; text-align: left; }
     .task-title { font-size: 0.9rem; font-weight: bold; color: #f8fafc; }
     .task-time { font-size: 0.75rem; color: #facc15; margin-top: 4px; }
     .task-bar-bg { width: 100%; height: 4px; background: #1e2c40; border-radius: 2px; margin-top: 4px; overflow: hidden; }
     .task-bar-fill { height: 100%; background: #10b981; width: 0%; transition: width 1s linear; }
+    
+    .progress-bar-bg { width: 100%; height: 6px; background: #1e2c40; border-radius: 3px; margin-top: 8px; overflow: hidden; display: none; }
+    .progress-bar-fill { height: 100%; background: #10b981; width: 0%; transition: width 1s linear; }
+    .btn-upgrade { width: 100%; background: #2563eb; margin-top: 8px; }
+    .btn-speed { width: 100%; background: #10b981; margin-top: 8px; display: none; }
     
     .log-box { background: #050811; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 0.8rem; border: 1px solid #182333; }
     .log-box p { margin-bottom: 6px; border-bottom: 1px solid #0d1522; padding-bottom: 4px; line-height: 1.3; }
@@ -71,6 +80,7 @@
   <div id="danger-overlay" class="danger-border"></div>
 
   <div class="container">
+    <!-- 登入面板 -->
     <div id="login-panel" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(7, 11, 20, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center;">
       <div style="background: #131d2e; padding: 30px; border-radius: 8px; border: 1px solid #23354d; width: 90%; max-width: 320px; text-align: center;">
         <h2 style="color: #38bdf8; margin-bottom: 20px;">🏰 領地戰登入</h2>
@@ -84,7 +94,7 @@
     <div id="rename-modal" class="modal-overlay">
       <div class="action-modal">
         <h3 style="color:#38bdf8;">✏️ 更改名稱</h3>
-        <p id="rename-desc">首次免費，之後需消耗改名卡。</p>
+        <p id="rename-desc">首次改名免費，之後需消耗改名卡。</p>
         <input type="text" id="rename-input" class="rename-input" placeholder="輸入新名稱 (2-8字)">
         <div class="btn-group">
           <button style="background: #475569; flex: 1;" onclick="closeRenameModal()">取消</button>
@@ -109,13 +119,13 @@
       </div>
     </div>
 
-    <!-- 分頁導覽 -->
+    <!-- 導覽分頁 -->
     <div class="tabs">
       <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 地圖</button>
       <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="switchTab('inv')">🎒 背包</button>
-      <button class="tab-btn" id="btn-tab-gm" onclick="switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM面板</button>
       <button onclick="logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
     </div>
 
@@ -132,27 +142,23 @@
         
         <div class="map-frame" id="map-frame">
           <canvas id="worldCanvas"></canvas>
-          
           <div class="zoom-controls">
             <button class="zoom-btn" onclick="zoomMapBtn(1.3)">+</button>
             <button class="zoom-btn" onclick="zoomMapBtn(0.7)">-</button>
             <div style="text-align:center; color:#94a3b8; font-size:0.75rem; margin-top:2px;" id="zoom-indicator">100%</div>
           </div>
-
           <div id="hover-hud" class="hud-tooltip"><h4 id="hud-title">地形資訊</h4><div id="hud-content">座標: (0, 0)</div></div>
 
           <div id="action-modal" class="modal-overlay">
             <div class="action-modal">
               <h3 id="modal-title">⚔️ 軍事行動</h3>
               <p id="modal-desc" style="border-bottom: 1px solid #334155; padding-bottom: 10px;"></p>
-              
               <div id="troop-selector" style="text-align: left; margin-top: 10px; display: none;">
                 <div class="troop-input-row" id="row-inf"><span>🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span><input type="number" id="send-inf" min="0" value="0"></div>
                 <div class="troop-input-row" id="row-arc"><span>🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span><input type="number" id="send-arc" min="0" value="0"></div>
                 <div class="troop-input-row" id="row-cav"><span>🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span><input type="number" id="send-cav" min="0" value="0"></div>
                 <p id="troop-lock-msg" style="color:#ef4444; font-size:0.75rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
               </div>
-
               <div class="btn-group">
                 <button style="background: #475569; flex: 1;" onclick="closeActionModal()">取消</button>
                 <button id="btn-confirm-action" style="background: #dc2626; flex: 1;">確認執行</button>
@@ -163,7 +169,7 @@
       </div>
     </div>
 
-    <!-- ==================== 城內政務 (新增任務列表) ==================== -->
+    <!-- ==================== 城內政務 ==================== -->
     <div id="tab-city" class="tab-content">
       
       <!-- 📋 進行中的排程區塊 -->
@@ -175,8 +181,8 @@
       </div>
 
       <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
-          ⚒️ 基礎設施營造 <span style="font-size:0.8rem; color:#94a3b8;" id="build-queue-text">(0/1)</span>
+        <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
+          <span>⚒️ 基礎設施營造 <span style="font-size:0.8rem; color:#94a3b8;" id="build-queue-text">(0/1)</span></span>
         </h3>
         <div class="grid" id="building-container"></div>
       </div>
@@ -192,12 +198,12 @@
       </div>
     </div>
 
-    <!-- ==================== 📡 雙效情報雷達 ==================== -->
+    <!-- ==================== 📡 情報雷達 ==================== -->
     <div id="tab-radar" class="tab-content">
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px;">
-          <h3 style="margin:0;">📡 周遭情報雷達</h3>
-          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button>
+          <h3 style="margin:0;">📡 情報雷達</h3>
+          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 掃描</button>
         </div>
         
         <h4 style="margin-top: 12px; color:#facc15; font-size:0.95rem;">🐲 附近的世界首領</h4>
@@ -208,29 +214,29 @@
       </div>
     </div>
 
-    <!-- ==================== 🎒 背包 ==================== -->
+    <!-- ==================== 🎒 領主背包 ==================== -->
     <div id="tab-inv" class="tab-content">
       <div class="card">
-        <h3>🎒 領主背包</h3>
-        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">管理與使用您的戰略物資道具。</p>
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主背包</h3>
+        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">管理您的戰略物資。</p>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">🛡️</div>
+            <div style="font-size:2.5rem; margin-bottom:4px;">🛡️</div>
             <strong style="font-size:1.05rem;">和平護盾 (6h)</strong>
-            <span style="color:#94a3b8; font-size:0.85rem;">擁有: <span id="inv-shield" style="color:#fff;">0</span></span>
-            <button onclick="useShield()" style="background:#06b6d4; margin-top:10px; width:100%;">開啟護盾</button>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span>
+            <button onclick="useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">開啟護盾</button>
           </div>
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">⏳</div>
+            <div style="font-size:2.5rem; margin-bottom:4px;">⏳</div>
             <strong style="font-size:1.05rem;">加速卡 (5m)</strong>
-            <span style="color:#94a3b8; font-size:0.85rem;">擁有: <span id="inv-speed" style="color:#fff;">0</span></span>
-            <span style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">請於內政排程中點擊使用</span>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed" style="color:#fff; font-weight:bold;">0</span></span>
+            <span style="font-size:0.75rem; color:#94a3b8; margin-top:auto;">請於排程看板中使用</span>
           </div>
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">✏️</div>
+            <div style="font-size:2.5rem; margin-bottom:4px;">✏️</div>
             <strong style="font-size:1.05rem;">改名卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem;">擁有: <span id="inv-rename" style="color:#fff;">0</span></span>
-            <button onclick="openRenameModal()" style="background:#3b82f6; margin-top:10px; width:100%;">前往改名</button>
+            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-rename" style="color:#fff; font-weight:bold;">0</span></span>
+            <button onclick="openRenameModal()" style="background:#3b82f6; margin-top:auto; width:100%;">前往改名</button>
           </div>
         </div>
       </div>
@@ -281,6 +287,7 @@
     let myUid = null, myData = null, allCastles = [], worldBosses = [], hasCentered = false;
     let godModeFog = false, isAdmin = false; 
 
+    // 💡 巨型地圖 100x100
     const TILE_SIZE = 55, WORLD_COLS = 100, WORLD_ROWS = 100, BASE_VISION_RADIUS = 5;
     const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
     let currentVisionBonus = 0, camX = 0, camY = 0, zoom = 1.0;
@@ -330,14 +337,14 @@
     }
 
     function getStaticEntity(x, y, type) {
-      if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10 } };
+      if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10, resourceCard: 2 } };
       if (type === 'water') return null;
       
       const dist = Math.hypot(x - 50, y - 50);
       const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
       
       if (dist <= 14) {
-        if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 3 } };
+        if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 500, loot: { wood: 10000, iron: 10000, food: 10000, speedup: 3, resourceCard: 1 } };
         if (rand < 0.050) return { type: 'barbarian', name: '👹 黑暗禁衛', reqPwr: 300, loot: { iron: 2000, wood: 1000, food: 1500 } };
         if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 1500, iron: 1500, food: 1500 } };
         return null;
@@ -427,7 +434,7 @@
             wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
             buildings: { castle: 1, builder: 0, academy: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
             research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
-            items: { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 }, // 💡 送1個護盾
+            items: { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 },
             freeRenameUsed: false, lastRelocateTime: 0, shieldEndsAt: 0,
             buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。獲得護盾1個！']
           };
@@ -437,7 +444,7 @@
           if (isNaN(d.wood) || d.wood === null) d.wood = 200;
           if (typeof d.troops === 'number') d.troops = { infantry: d.troops, archer: 0, cavalry: 0 };
           if (!d.items) d.items = { speedup: 3, renameCard: 0, resourceCard: 0, shieldCard: 1 }; 
-          if (d.items.shieldCard === undefined) d.items.shieldCard = 1; // 💡 補發護盾
+          if (d.items.shieldCard === undefined) d.items.shieldCard = 1; 
           if (d.shieldEndsAt === undefined) d.shieldEndsAt = 0;
           if (d.freeRenameUsed === undefined) d.freeRenameUsed = false;
           if (d.lastRelocateTime === undefined) d.lastRelocateTime = 0;
@@ -450,7 +457,6 @@
           await setDoc(playerRef, d, {merge:true});
         }
 
-        // 💡 權限判定
         isAdmin = (user.email === 'topacoau@gmail.com');
 
         if (!wSnap.exists()) { 
@@ -568,7 +574,7 @@
 
     async function savePrivateData() { myData.lastTick = Date.now(); await setDoc(doc(db, "players", myUid), myData, { merge: true }); }
     
-    // 💡 渲染雷達 (Boss 與 Player 雙層顯示)
+    // 💡 渲染雷達 (Boss 與 Player)
     window.refreshMap = async function() {
       const snap = await getDocs(collection(db, "world_map"));
       allCastles = []; snap.forEach(d => { if(!d.data().isBoss) allCastles.push({ id: d.id, ...d.data() }) });
@@ -578,38 +584,40 @@
     function renderRadar() {
       if (!myData) return;
       
-      // Boss Radar
       const bContainer = document.getElementById('radar-boss-container');
-      const bSorted = [...worldBosses].map(b => { b.dist = Math.hypot(b.x - myData.x, b.y - myData.y); return b; }).filter(b => b.hp > 0).sort((a,b) => a.dist - b.dist);
-      if (bSorted.length === 0) { bContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">目前世界和平，無首領肆虐。</p>'; }
-      else {
-        bContainer.innerHTML = bSorted.map(b => `
-          <div style="background:#2e1065; border:1px solid #7c3aed; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                  <strong style="color:#d946ef; font-size:1.05rem;">${b.name}</strong> <span style="color:#f87171; font-size:0.8rem;">(HP: ${Math.floor((b.hp/b.maxHp)*100)}%)</span><br>
-                  <span style="font-size:0.8rem; color:#cbd5e1;">座標: (${b.x}, ${b.y}) | 距離: ${Math.ceil(b.dist)} 格</span>
+      if (bContainer) {
+          const bSorted = [...worldBosses].map(b => { b.dist = Math.hypot(b.x - myData.x, b.y - myData.y); return b; }).filter(b => b.hp > 0).sort((a,b) => a.dist - b.dist);
+          if (bSorted.length === 0) { bContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">目前世界和平，無首領肆虐。</p>'; }
+          else {
+            bContainer.innerHTML = bSorted.map(b => `
+              <div style="background:#2e1065; border:1px solid #7c3aed; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                      <strong style="color:#d946ef; font-size:1.05rem;">${b.name}</strong> <span style="color:#f87171; font-size:0.8rem;">(HP: ${Math.floor((b.hp/b.maxHp)*100)}%)</span><br>
+                      <span style="font-size:0.8rem; color:#cbd5e1;">座標: (${b.x}, ${b.y}) | 距離: ${Math.ceil(b.dist)} 格</span>
+                  </div>
+                  <button onclick="locatePlayer(${b.x}, ${b.y})" style="background:#dc2626; padding:6px 12px; font-size:0.8rem;">📍 鎖定</button>
               </div>
-              <button onclick="locatePlayer(${b.x}, ${b.y})" style="background:#dc2626; padding:6px 12px; font-size:0.8rem;">📍 鎖定</button>
-          </div>
-        `).join('');
+            `).join('');
+          }
       }
 
-      // Player Radar
       const pContainer = document.getElementById('radar-players-container');
-      const pSorted = [...allCastles].map(p => { p.dist = Math.hypot(p.x - myData.x, p.y - myData.y); return p; }).filter(p => p.id !== myUid).sort((a,b) => a.dist - b.dist);
-      if (pSorted.length === 0) { pContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">附近暫無其他勢力。</p>'; }
-      else {
-        pContainer.innerHTML = pSorted.map(p => {
-          const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
-          return `
-          <div style="background:#0a0f1d; border:1px solid #1e2c40; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                  <strong style="color:#fff; font-size:1.05rem;">${p.name}</strong> <span style="color:#94a3b8; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.8rem;">[🛡️護盾中]</span>':''}<br>
-                  <span style="font-size:0.8rem; color:#94a3b8;">座標: (${p.x}, ${p.y}) | 距離: ${Math.ceil(p.dist)} 格</span>
+      if (pContainer) {
+          const pSorted = [...allCastles].map(p => { p.dist = Math.hypot(p.x - myData.x, p.y - myData.y); return p; }).filter(p => p.id !== myUid).sort((a,b) => a.dist - b.dist);
+          if (pSorted.length === 0) { pContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem;">附近暫無其他勢力。</p>'; }
+          else {
+            pContainer.innerHTML = pSorted.map(p => {
+              const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
+              return `
+              <div style="background:#0a0f1d; border:1px solid #1e2c40; border-radius:6px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                      <strong style="color:#fff; font-size:1.05rem;">${p.name}</strong> <span style="color:#94a3b8; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.8rem;">[🛡️護盾中]</span>':''}<br>
+                      <span style="font-size:0.8rem; color:#94a3b8;">座標: (${p.x}, ${p.y}) | 距離: ${Math.ceil(p.dist)} 格</span>
+                  </div>
+                  <button onclick="locatePlayer(${p.x}, ${p.y})" style="background:#0ea5e9; padding:6px 12px; font-size:0.8rem;">📍 偵查</button>
               </div>
-              <button onclick="locatePlayer(${p.x}, ${p.y})" style="background:#0ea5e9; padding:6px 12px; font-size:0.8rem;">📍 偵查</button>
-          </div>
-        `}).join('');
+            `}).join('');
+          }
       }
     }
     window.locatePlayer = (x, y) => { switchTab('world'); centerCameraOn(x, y); };
@@ -670,9 +678,9 @@
          if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
       });
 
-      // 💡 NPC 入侵邏輯 (新增護盾判定)
+      // 💡 NPC 入侵邏輯 (護盾判定)
       if (Math.random() < 0.005) {
-        if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { // 沒有被護盾保護
+        if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
           let nearestNPC = null, minDist = 15;
           for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
             for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
@@ -703,8 +711,10 @@
             myData.troops.infantry += m.troops.infantry; myData.troops.archer += m.troops.archer; myData.troops.cavalry += m.troops.cavalry;
             myData.wood += (m.loot.wood || 0); myData.iron += (m.loot.iron || 0); myData.food += (m.loot.food || 0);
             if (m.loot.speedup) myData.items.speedup += m.loot.speedup;
+            if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
             let lootStr = `木:${m.loot.wood||0} 鐵:${m.loot.iron||0} 糧:${m.loot.food||0}`;
             if (m.loot.speedup) lootStr += ` | ⏳x${m.loot.speedup}`;
+            if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
             myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
             setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
           } 
@@ -802,10 +812,7 @@
           if (!tDoc.exists()) throw new Error("城池空");
           const target = tDoc.data();
 
-          // 🛡️ 戰鬥前護盾二次檢查 (防止行軍期間開盾)
-          if (target.shieldEndsAt && target.shieldEndsAt > Date.now()) {
-            throw new Error("Shielded");
-          }
+          if (target.shieldEndsAt && target.shieldEndsAt > Date.now()) { throw new Error("Shielded"); }
           
           const attPwr = getPwrByTech(m.troops, m.techs);
           const defTroops = target.troops || {infantry:0, archer:0, cavalry:0};
@@ -839,7 +846,7 @@
     }
 
     // ==========================================
-    // 🎨 渲染世界地圖 (全息動態畫布版)
+    // 🎨 渲染世界地圖
     // ==========================================
     function renderLoop() {
       if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -868,7 +875,6 @@
           const dist = Math.hypot(x-50, y-50);
           const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
 
-          // 地貌渲染優化
           if (cell.type === 'plains') { 
             ctx.fillStyle = isCore ? '#2e1065' : (isMid ? '#451a03' : '#1e3a1e'); ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
             ctx.fillStyle = isCore ? '#4c1d95' : (isMid ? '#78350f' : '#2d5a2d'); ctx.fillRect(px+10,py+15,3,6); ctx.fillRect(px+35,py+30,4,8);
@@ -1065,7 +1071,7 @@
     canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
 
     // ==========================================
-    // 點擊事件與出征/遷城 (含護盾防禦邏輯)
+    // 點擊事件與出征/遷城
     // ==========================================
     let targetAction = null;
     window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
@@ -1084,11 +1090,7 @@
       if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
 
       if (tC && tC.id!==myUid) {
-        // 🛡️ 護盾判定：禁止攻擊擁有護盾的玩家
-        if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) {
-          return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！");
-        }
-
+        if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
         targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
         document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 (Lv.${tC.castleLevel||1})`; 
         document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
@@ -1196,7 +1198,7 @@
     });
 
     // ==========================================
-    // 渲染 UI (新增進行中排程看板與背包道具)
+    // 渲染 UI (任務排程與清單)
     // ==========================================
     function renderSelf() {
       const now = Date.now();
@@ -1223,7 +1225,7 @@
       const maxQueues = 1 + (myData.buildings.builder || 0);
       document.getElementById('build-queue-text').innerText = `(${myData.buildQueues.length}/${maxQueues})`;
 
-      // 📋 渲染：進行中的排程區塊
+      // 📋 任務排程看板
       const tasksContainer = document.getElementById('active-tasks-container');
       let tasksHtml = '';
       
@@ -1238,7 +1240,7 @@
                  <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
                  <span class="task-time">倒數: ${formatTime(remainSec)}</span>
                </div>
-               <button onclick="useSpeedUp('build')" style="background:#10b981; padding:6px; font-size:0.75rem;">⚡加速</button>
+               <button onclick="useSpeedUp('build', ${idx})" style="background:#10b981; padding:6px; font-size:0.75rem;">⚡加速</button>
             </div>
          `;
       });
@@ -1275,44 +1277,114 @@
          `;
       }
       if (tasksHtml === '') tasksHtml = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無進行中的任務</p>';
-      tasksContainer.innerHTML = tasksHtml;
+      if (tasksContainer) tasksContainer.innerHTML = tasksHtml;
 
-      // 🎒 渲染背包
-      document.getElementById('inv-shield').innerText = myData.items.shieldCard || 0;
-      document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
-      document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
+      // 🎒 背包
+      if(document.getElementById('inv-shield')) document.getElementById('inv-shield').innerText = myData.items.shieldCard || 0;
+      if(document.getElementById('inv-speed')) document.getElementById('inv-speed').innerText = myData.items.speedup || 0;
+      if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
 
-      // 🎨 渲染設施與招募卡片
+      // 🎨 設施清單
       const bContainer = document.getElementById('building-container');
-      bContainer.innerHTML = Object.entries(myData.buildings).map(([key, lvl]) => {
-        const cost = getUpgradeCost(key, lvl);
-        const timeSec = getUpgradeTime(key, lvl);
-        const isUpgrading = myData.buildQueues.some(q => q.target === key);
-        const isMax = (key === 'builder' && lvl >= CFG.buildings.builder.maxLevel);
-        const disabled = isMax || isUpgrading || myData.buildQueues.length >= maxQueues;
-        const btnText = isMax ? '已達上限' : (isUpgrading ? '升級中...' : `升級 (${formatTime(timeSec)})`);
-        return `<div class="item-card"><div><strong style="font-size:1.1rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">所需: 🌲${cost.w} ⛏️${cost.i}</div></div><button style="width:100%; background:${isMax?'#475569':''}" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${btnText}</button></div>`;
-      }).join('');
+      if (bContainer) {
+          bContainer.innerHTML = Object.entries(myData.buildings).map(([key, lvl]) => {
+            const cost = getUpgradeCost(key, lvl);
+            const timeSec = getUpgradeTime(key, lvl);
+            const queueObj = myData.buildQueues.find(q => q.target === key);
+            const isMax = (key === 'builder' && lvl >= CFG.buildings.builder.maxLevel);
+            const disabled = isMax || queueObj || myData.buildQueues.length >= maxQueues;
+            
+            let btnHtml = ''; let progressHtml = '';
+            if (queueObj) {
+                const remainSec = Math.max(0, Math.ceil((queueObj.finishesAt - now) / 1000));
+                const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
+                btnHtml = `<button class="btn-speed" style="display:block;" onclick="useSpeedUp('build', ${myData.buildQueues.indexOf(queueObj)})">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+            } else {
+                btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
+            }
 
-      const rContainer = document.getElementById('research-container');
-      if (myData.buildings.academy < 1) { rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先升級【學院】來解鎖科技。</p>'; } 
-      else {
-        rContainer.innerHTML = Object.entries(CFG.techs).map(([key, d]) => {
-            const lvl = myData.research[key] || 0; const cost = getUpgradeCost(key, lvl, true); const timeSec = getUpgradeTime(key, lvl, true);
-            const isResearching = myData.researchQueue && myData.researchQueue.target === key;
-            const isMax = lvl >= myData.buildings.academy * 2;
-            let btnText = isMax ? '學院等級不足' : (isResearching ? '研發中...' : `研發 (${formatTime(timeSec)})`);
-            return `<div class="item-card"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">所需: 🌲${cost.w} ⛏️${cost.i}<br>附加戰力: +${lvl}</div></div><button style="width:100%; background:${isMax?'#475569':''}" onclick="window.startResearch('${key}')" ${isMax||isResearching?'disabled':''}>${btnText}</button></div>`;
-        }).join('');
+            return `
+            <div class="item-card">
+                <div>
+                <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
+                <div class="item-cost"><span>🌲${cost.w}</span><span>⛏️${cost.i}</span></div>
+                </div>
+                ${progressHtml}
+                ${btnHtml}
+            </div>`;
+          }).join('');
       }
 
+      // 🎨 科技清單
+      const rContainer = document.getElementById('research-container');
+      if (rContainer) {
+          if (myData.buildings.academy < 1) {
+              rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先建造並升級【學院】來解鎖科技研發。</p>';
+          } else {
+              rContainer.innerHTML = Object.entries(CFG.techs).map(([key, d]) => {
+                  const lvl = myData.research[key] || 0;
+                  const cost = getUpgradeCost(key, lvl, true);
+                  const timeSec = getUpgradeTime(key, lvl, true);
+                  const isResearching = myData.researchQueue && myData.researchQueue.target === key;
+                  const isMax = lvl >= myData.buildings.academy * 2;
+                  
+                  let btnHtml = ''; let progressHtml = '';
+                  if (isResearching) {
+                      const remainSec = Math.max(0, Math.ceil((myData.researchQueue.finishesAt - now) / 1000));
+                      const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
+                      btnHtml = `<button class="btn-speed" style="display:block;" onclick="useSpeedUp('research')">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                      progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+                  } else {
+                      btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
+                  }
+
+                  return `
+                  <div class="item-card">
+                      <div>
+                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
+                      <div class="item-info">附加戰力: +${lvl}</div>
+                      <div class="item-cost"><span>🌲${cost.w}</span><span>⛏️${cost.i}</span></div>
+                      </div>
+                      ${progressHtml}
+                      ${btnHtml}
+                  </div>`;
+              }).join('');
+          }
+      }
+
+      // 🎨 招募清單
       const tContainer = document.getElementById('train-container');
-      const bLvl = myData.buildings.barracks || 1;
-      tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
-        if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.1rem;">🔒 未解鎖</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需 兵營 Lv.${d.reqLvl}</div></div><button style="width:100%; background:#475569; margin-top:auto;" disabled>未解鎖</button></div>`;
-        const buff = myData.research[`${key}_atk`] || 0;
-        return `<div class="item-card" style="justify-content:flex-start;"><div><strong style="font-size:1.1rem;">${d.icon} ${d.name}</strong><div style="font-size:0.85rem; color:#94a3b8; margin:8px 0;">需: 🌲${d.w} ⛏️${d.i} 🌾${d.f}<br>戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 維護: 🌾${d.upkeep}/h</div></div><button style="width:100%; background:#059669; margin-top:auto;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button></div>`;
-      }).join('');
+      if (tContainer) {
+          const bLvl = myData.buildings.barracks || 1;
+          tContainer.innerHTML = Object.entries(CFG.troops).map(([key, d]) => {
+              if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div class="item-info">需 兵營 Lv.${d.reqLvl}</div></div><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div>`;
+              
+              const buff = myData.research[`${key}_atk`] || 0;
+              const isTraining = myData.trainQueue && myData.trainQueue.type === key;
+              let btnHtml = ''; let progressHtml = '';
+              
+              if (isTraining) {
+                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
+                  const pct = Math.min(100, Math.max(0, 100 - (remainSec / d.time * 100)));
+                  btnHtml = `<button class="btn-speed" style="display:block;" onclick="useSpeedUp('train')">⚡ 加速 (${formatTime(remainSec)})</button>`;
+                  progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
+              } else {
+                  btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 5名 (${formatTime(d.time)})</button>`;
+              }
+
+              return `
+              <div class="item-card" style="justify-content:flex-start;">
+                  <div>
+                  <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong>
+                  <div class="item-info">戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h</div>
+                  <div class="item-cost"><span>🌲${d.w}</span><span>⛏️${d.i}</span><span>🌾${d.f}</span></div>
+                  </div>
+                  ${progressHtml}
+                  ${btnHtml}
+              </div>`;
+          }).join('');
+      }
 
       let qMsg = []; 
       if (myData.marches && myData.marches.length > 0) qMsg.push(`🚩 ${myData.marches.length} 支部隊行軍中`);
@@ -1333,7 +1405,7 @@
       await savePrivateData();
       await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true });
       alert('🛡️ 護盾已啟動！');
-      renderSelf(); drawWorldMap();
+      renderSelf(); window.refreshMap();
     };
 
     window.openRenameModal = () => { document.getElementById("rename-modal").style.display='flex'; };
@@ -1344,7 +1416,7 @@
       if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
       else if (myData.items.renameCard > 0) myData.items.renameCard--; else return alert('需要改名卡！');
       myData.name = newName; await savePrivateData(); await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
-      alert("✅ 名稱已更改！"); closeRenameModal(); renderSelf();
+      alert("✅ 名稱已更改！"); closeRenameModal(); renderSelf(); window.refreshMap();
     };
 
     window.locateHome = () => { if (myData) { centerCameraOn(myData.x, myData.y); switchTab('world'); }};
@@ -1387,20 +1459,24 @@
       myData.trainQueue = { type: typeKey, count: 5, finishesAt: Date.now() + (req.time * 1000) }; await savePrivateData();
     };
 
-    window.useSpeedUp = async (type) => {
+    window.useSpeedUp = async (type, idx = 0) => {
       if (!myData || myData.items.speedup <= 0) return alert("沒有足夠的加速道具！");
       if (type === 'build') {
         if (myData.buildQueues.length === 0) return alert("沒有進行中的建築隊列！");
+        if (!myData.buildQueues[idx]) return;
         myData.items.speedup--;
-        myData.buildQueues.forEach(q => { q.finishesAt -= 5 * 60 * 1000; if (q.finishesAt < Date.now()) q.finishesAt = Date.now(); });
+        myData.buildQueues[idx].finishesAt -= 5 * 60 * 1000; 
+        if (myData.buildQueues[idx].finishesAt < Date.now()) myData.buildQueues[idx].finishesAt = Date.now();
       } else if (type === 'research') {
         if (!myData.researchQueue) return alert("沒有進行中的研發隊列！");
         myData.items.speedup--;
-        myData.researchQueue.finishesAt -= 5 * 60 * 1000; if (myData.researchQueue.finishesAt < Date.now()) myData.researchQueue.finishesAt = Date.now();
+        myData.researchQueue.finishesAt -= 5 * 60 * 1000; 
+        if (myData.researchQueue.finishesAt < Date.now()) myData.researchQueue.finishesAt = Date.now();
       } else {
         if (!myData.trainQueue) return alert("該項目沒有進行中的隊列！");
         myData.items.speedup--;
-        myData.trainQueue.finishesAt -= 5 * 60 * 1000; if (myData.trainQueue.finishesAt < Date.now()) myData.trainQueue.finishesAt = Date.now();
+        myData.trainQueue.finishesAt -= 5 * 60 * 1000; 
+        if (myData.trainQueue.finishesAt < Date.now()) myData.trainQueue.finishesAt = Date.now();
       }
       await savePrivateData();
     };
