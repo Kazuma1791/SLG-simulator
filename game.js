@@ -28,7 +28,7 @@ let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
 // ==========================================
-// 🖼️ 載入外部材質圖片 (支援新 Boss 圖片)
+// 🖼️ 載入外部材質圖片 (支援 7 階段城堡 & 新 Boss 圖片)
 // ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
@@ -148,7 +148,7 @@ function sanitizeData() {
 
   if (!myData.items || typeof myData.items !== 'object') myData.items = { speedup5m: 3, speedup30m: 0, speedup1h: 0, renameCard: 0, resourceCard: 0, shieldCard: 1 };
   
-  // 升級舊版加速道具
+  // 升級舊版道具並確保新屬性存在
   if (myData.items.speedup !== undefined) { myData.items.speedup5m = myData.items.speedup; delete myData.items.speedup; }
   ['speedup5m', 'speedup30m', 'speedup1h', 'renameCard', 'resourceCard', 'shieldCard'].forEach(k => { if(isNaN(myData.items[k]) || myData.items[k]===null) myData.items[k] = 0; });
 
@@ -174,22 +174,25 @@ function sanitizeData() {
   if (typeof myData.isBanned !== 'boolean') myData.isBanned = false;
 }
 
-// 🛡️ 終極防外掛看門狗 (Memory Watchdog + Logging)
+// 🛡️ 終極防外掛看門狗 (Memory Watchdog + 即時資料同步)
 function runAntiCheat() {
     if (isAdmin || myData.isBanned) return false;
     let cheatDetected = false; let reason = "";
     
+    // 定義安全數據極限
     const MAX_RESOURCE = 2000000000; const MAX_TROOPS = 2000000000; const MAX_ITEMS = 100000;
 
     if (myData.wood > MAX_RESOURCE || myData.iron > MAX_RESOURCE || myData.food > MAX_RESOURCE) { cheatDetected = true; reason = "修改資源數量異常"; }
     if (myData.troops.infantry > MAX_TROOPS || myData.troops.archer > MAX_TROOPS || myData.troops.cavalry > MAX_TROOPS) { cheatDetected = true; reason = "修改兵力數量異常"; }
-    if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { cheatDetected = true; reason = "修改道具數量異常"; }
+    if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS || myData.items.resourceCard > MAX_ITEMS) { cheatDetected = true; reason = "修改道具數量異常"; }
     if (myData.buildings.castle > 100 || myData.buildings.builder > 10) { cheatDetected = true; reason = "修改建築等級異常"; }
     if (myData.name) myData.name = myData.name.replace(/[<>]/g, "").substring(0, 15);
 
     if (cheatDetected) {
         myData.isBanned = true; myData.banReason = reason;
         myData.cheatLog.unshift(`[${new Date().toLocaleString()}] 查獲: ${reason} (木:${myData.wood}, 鐵:${myData.iron}, 兵:${myData.troops.infantry})`);
+        
+        // 將外掛紀錄強制上傳到伺服器並顯示封鎖畫面
         setDoc(doc(db, "players", myUid), { isBanned: true, banReason: reason, cheatLog: myData.cheatLog }, { merge: true });
         document.getElementById('ban-screen').style.display = 'flex';
         document.getElementById('ban-reason').innerText = reason;
@@ -404,15 +407,24 @@ window.gmTargetAction = async (action) => {
     
     if (action === 'ban') { tData.isBanned = true; tData.banReason = "管理員手動永久封鎖"; }
     if (action === 'unban') { tData.isBanned = false; tData.banReason = ""; }
+    if (action === 'addRes') { tData.wood += 1000000; tData.iron += 1000000; tData.food += 1000000; }
+    if (action === 'addTroops') { tData.troops.infantry += 100000; tData.troops.archer += 100000; tData.troops.cavalry += 100000; }
+    if (action === 'addItems') { tData.items.shieldCard += 100; tData.items.speedup5m += 100; tData.items.speedup1h += 10; }
+    if (action === 'clear') { tData.wood = 0; tData.iron = 0; tData.food = 0; tData.troops = {infantry:0, archer:0, cavalry:0}; }
     
     if (!Array.isArray(tData.logs)) tData.logs = [];
     tData.logs.unshift(`[系統警告] 管理員介入了您的帳號。`);
     await setDoc(targetRef, tData, {merge: true});
+    
+    if (action === 'addTroops' || action === 'clear') {
+        const totalT = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
+        await setDoc(doc(db, "world_map", targetUid), { troops: totalT }, {merge: true});
+    }
+    
     alert(`✅ 成功對玩家 ${tData.name} 執行操作！`);
     window.refreshMap();
 };
 
-// 👑 GM 自訂資料寫入器
 window.gmExecuteCustom = async () => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
@@ -432,7 +444,7 @@ window.gmExecuteCustom = async () => {
     if(field === 'castleLevel') { tData.buildings = tData.buildings || {}; tData.buildings.castle = amount; }
     
     tData.logs = tData.logs || [];
-    tData.logs.unshift(`[GM] 您的資料已被管理員修正。`);
+    tData.logs.unshift(`[GM] 您的資料已被管理員手動修正。`);
     await setDoc(targetRef, tData, {merge: true});
     
     if(['infantry','archer','cavalry'].includes(field)) {
@@ -444,7 +456,6 @@ window.gmExecuteCustom = async () => {
     alert(`✅ 已將玩家 ${tData.name} 的 [${field}] 修改為 ${amount}`);
 }
 
-// 👁️ 天眼系統：玩家數據審計
 window.gmAuditPlayer = async () => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
@@ -507,9 +518,10 @@ function centerCameraOn(tx, ty) {
   clampCamera();
 }
 
+// 🛡️ 同步寫入前必定經過外掛檢測，保障資料庫安全
 async function savePrivateData() { 
     if (!myData || myData.isBanned) return;
-    if (runAntiCheat()) return; 
+    if (runAntiCheat()) return; // 觸發查殺則阻斷寫入
     myData.lastTick = Date.now(); 
     await setDoc(doc(db, "players", myUid), myData, { merge: true }); 
 }
@@ -680,11 +692,13 @@ async function localTick() {
         if (m.loot.speedup30m) myData.items.speedup30m += m.loot.speedup30m;
         if (m.loot.speedup1h) myData.items.speedup1h += m.loot.speedup1h;
         if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
+        
         let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
         if (m.loot.speedup1h) lootStr += ` | ⚡1hx${m.loot.speedup1h}`;
         else if (m.loot.speedup30m) lootStr += ` | ⚡30mx${m.loot.speedup30m}`;
         else if (m.loot.speedup5m) lootStr += ` | ⚡5mx${m.loot.speedup5m}`;
         if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
+        
         myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
         setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
       } 
@@ -756,7 +770,6 @@ async function resolveInteractNPC(m) {
   return res;
 }
 
-// Boss 獎勵提升，支援高階加速卡
 async function resolveAttackBoss(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0, speedup5m:0, speedup30m:0, speedup1h:0} };
   try {
@@ -826,7 +839,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (加入新 Boss 圖片與滑鼠滾輪控制)
+// 🎨 渲染世界地圖
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -940,7 +953,7 @@ function drawWorldMap() {
     }
   }
 
-  // 💡 渲染 3階強度的世界 Boss 圖片
+  // 💡 渲染 3 階強度的世界 Boss
   worldBosses.forEach(boss => {
      const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
      if (boss.hp > 0 && (isExplored || godModeFog)) {
@@ -1221,7 +1234,7 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
 });
 
 // ==========================================
-// 渲染 UI (加入三階加速選項)
+// 渲染 UI
 // ==========================================
 window.renderSelf = function() {
   if (myData.isBanned) return;
@@ -1330,6 +1343,9 @@ window.renderSelf = function() {
       if(document.getElementById('inv-speed30m')) document.getElementById('inv-speed30m').innerText = myData.items.speedup30m || 0;
       if(document.getElementById('inv-speed1h')) document.getElementById('inv-speed1h').innerText = myData.items.speedup1h || 0;
       if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
+      
+      // 物資卡 UI 顯示 (若你在 index.html 有加上的話)
+      if(document.getElementById('inv-resource')) document.getElementById('inv-resource').innerText = myData.items.resourceCard || 0;
 
       const bContainer = document.getElementById('building-container');
       if (bContainer) {
@@ -1445,7 +1461,24 @@ window.renderSelf = function() {
   }
 }
 
-// 💡 支援三種時長的道具消耗機制
+// ==========================================
+// 道具與各項系統功能綁定
+// ==========================================
+
+// 📦 新增：物資卡使用功能
+window.useResourceCard = async () => {
+    if (!myData || myData.items.resourceCard <= 0) return alert("背包中沒有足夠的物資卡！");
+    myData.items.resourceCard--;
+    const gain = 100000; // 每張卡給予 10 萬三項資源
+    myData.wood += gain;
+    myData.iron += gain;
+    myData.food += gain;
+    myData.logs.unshift(`[後勤補給] 成功開啟物資卡，獲得各項資源 ${formatCompact(gain)}！`);
+    await savePrivateData();
+    alert(`📦 開啟成功！\n獲得 木材/鐵礦/糧草 各 ${formatCompact(gain)}`);
+    try { window.renderSelf(); } catch(e){}
+};
+
 window.useSpeedUp = async (type, idx = 0, speedType = '5m') => {
   if (!myData) return;
   const timeReduce = speedType === '1h' ? 3600000 : (speedType === '30m' ? 1800000 : 300000);
