@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 史詩首領與經濟修復版</title>
+  <title>多人領地戰 - GM管理員專屬版</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
     body { background: #070b14; color: #f1f5f9; padding: 8px; overflow-x: hidden; }
@@ -103,10 +103,12 @@
       <div id="queue-status" style="color: #f59e0b; font-size: 0.8rem; min-height: 18px; margin-top:2px;"></div>
     </div>
 
+    <!-- 分頁導覽 -->
     <div class="tabs">
       <button class="tab-btn active" id="btn-tab-world" onclick="switchTab('world')">🌍 世界沙盤</button>
       <button class="tab-btn" id="btn-tab-city" onclick="switchTab('city')">🏰 城內政務</button>
       <button class="tab-btn" id="btn-tab-players" onclick="switchTab('players')">👥 領主雷達</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="switchTab('gm')" style="display:none; color:#f87171; border-color:#f87171;">🛠️ GM面板</button>
       <button onclick="logoutUser()" style="background:#dc2626; margin-left:auto; padding:6px 10px; font-size:0.8rem;">🚪 登出</button>
     </div>
 
@@ -194,6 +196,43 @@
       </div>
     </div>
 
+    <!-- 🛠️ GM 面板 -->
+    <div id="tab-gm" class="tab-content">
+      <div class="card" style="border-color: #f87171;">
+        <h3 style="color:#f87171; display:flex; align-items:center; gap:8px;">
+          🛠️ 遊戲管理員控制台 (GM Panel)
+        </h3>
+        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:16px;">歡迎登入開發者模式。在此面板中，您可以隨意修改資源與世界狀態。</p>
+
+        <div style="margin-bottom:16px;">
+          <h4 style="margin-bottom:8px; color:#cbd5e1; font-size:0.95rem;">💰 資源與道具發放</h4>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="gmAddRes('wood', 100000)" style="background:#059669;">+10萬 木材</button>
+            <button onclick="gmAddRes('iron', 100000)" style="background:#059669;">+10萬 鐵礦</button>
+            <button onclick="gmAddRes('food', 100000)" style="background:#059669;">+10萬 糧草</button>
+            <button onclick="gmAddRes('speedup', 100)" style="background:#d97706;">+100 加速卡</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <h4 style="margin-bottom:8px; color:#cbd5e1; font-size:0.95rem;">⚔️ 軍隊直接徵召</h4>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="gmAddTroop('infantry', 5000)" style="background:#2563eb;">+5000 步兵</button>
+            <button onclick="gmAddTroop('archer', 5000)" style="background:#2563eb;">+5000 弓兵</button>
+            <button onclick="gmAddTroop('cavalry', 5000)" style="background:#2563eb;">+5000 騎兵</button>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="margin-bottom:8px; color:#cbd5e1; font-size:0.95rem;">🌍 世界伺服器控制</h4>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="gmRespawnBosses()" style="background:#9333ea;">🔄 強制重置所有世界首領</button>
+            <button onclick="gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成所有隊列</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h3 style="margin-bottom: 6px;">📜 王國日誌</h3>
       <div class="log-box" id="log-list"></div>
@@ -251,7 +290,11 @@
         infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 5, reqLvl: 1, upkeep: 10 },
         archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 8, reqLvl: 3, upkeep: 25 },
         cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 12, reqLvl: 5, upkeep: 45 }
-      }
+      },
+      bosses: [
+        { name: '🐉 滅世魔龍', hp: 200000 }, { name: '🦅 風暴巨鷹', hp: 80000 },
+        { name: '🦑 深海巨妖', hp: 80000 }, { name: '🗿 大地岩魔', hp: 30000 }
+      ]
     };
 
     function getUpgradeCost(key, level, isTech=false) { const base = isTech ? CFG.techs[key] : CFG.buildings[key]; const m = Math.pow(1.6, level); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; }
@@ -267,7 +310,6 @@
       if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
     }
 
-    // 💡 超級有吸引力的靜態 NPC 戰利品
     function getStaticEntity(x, y, type) {
       if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 1500, loot: { wood: 50000, iron: 50000, food: 50000, speedup: 10, resourceCard: 2 } };
       if (type === 'water') return null;
@@ -320,7 +362,6 @@
       if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
     }
 
-    // 💡 3 隻分區世界 Boss 系統
     async function spawnWorldBoss(id) {
       let bx, by, bName, bHp, mult;
       if (id === 'BOSS_CORE') {
@@ -380,7 +421,6 @@
           await setDoc(playerRef, d);
         } else {
           d = pSnap.data();
-          // 💡 鐵礦 NaN 終極修復防護網
           if (isNaN(d.wood) || d.wood === null) d.wood = 200;
           if (isNaN(d.iron) || d.iron === null) d.iron = 200;
           if (isNaN(d.food) || d.food === null) d.food = 200;
@@ -408,6 +448,10 @@
           if (docSnap.exists()) {
             myData = docSnap.data();
             isAdmin = (user.email === 'admin@gmail.com') || (myData.name && myData.name.includes('GM'));
+            
+            // 💡 根據權限動態顯示/隱藏 GM 面板按鈕
+            document.getElementById('btn-tab-gm').style.display = isAdmin ? 'block' : 'none';
+
             if (!myData.buildQueues) myData.buildQueues = [];
             updateFogOfWar();
             if (!hasCentered) { resizeCanvas(); centerCameraOn(myData.x, myData.y); hasCentered = true; }
@@ -417,7 +461,6 @@
           }
         });
 
-        // 💡 監聽 3 隻世界 Boss
         ['BOSS_CORE', 'BOSS_MID', 'BOSS_OUTER'].forEach(id => {
            onSnapshot(doc(db, "world_map", id), (snap) => {
               if (snap.exists()) {
@@ -432,11 +475,52 @@
         setInterval(localTick, 1000); requestAnimationFrame(renderLoop); setInterval(window.refreshMap, 60000);
       } else {
         document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null; isAdmin = false;
+        document.getElementById('btn-tab-gm').style.display = 'none';
       }
     });
 
     window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
+    // ==========================================
+    // 👑 GM 專屬功能 (Admin API)
+    // ==========================================
+    window.gmAddRes = async (type, amount) => {
+      if (!isAdmin) return;
+      if (type === 'wood') myData.wood += amount;
+      if (type === 'iron') myData.iron += amount;
+      if (type === 'food') myData.food += amount;
+      if (type === 'speedup') myData.items.speedup += amount;
+      myData.logs.unshift(`[GM系統] 成功生成 ${amount} 單位 ${type === 'speedup' ? '加速卡' : '資源'}！`);
+      await savePrivateData(); renderSelf();
+    };
+
+    window.gmAddTroop = async (type, amount) => {
+      if (!isAdmin) return;
+      myData.troops[type] += amount;
+      myData.logs.unshift(`[GM系統] 憑空徵召了 ${amount} 名部隊！`);
+      await savePrivateData();
+      setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+      renderSelf();
+    };
+
+    window.gmRespawnBosses = () => {
+      if (!isAdmin) return;
+      spawnWorldBoss('BOSS_CORE'); spawnWorldBoss('BOSS_MID'); spawnWorldBoss('BOSS_OUTER');
+      alert("已強制重生所有世界 Boss！");
+    };
+
+    window.gmClearQueues = async () => {
+      if (!isAdmin) return;
+      myData.buildQueues.forEach(q => q.finishesAt = Date.now());
+      if(myData.researchQueue) myData.researchQueue.finishesAt = Date.now();
+      if(myData.trainQueue) myData.trainQueue.finishesAt = Date.now();
+      myData.logs.unshift(`[GM系統] 已動用時間魔法，所有隊列瞬間完成！`);
+      await savePrivateData(); renderSelf();
+    };
+
+    // ==========================================
+    // 底層視圖與地圖邏輯
+    // ==========================================
     function resizeCanvas() {
       const frame = document.getElementById('map-frame');
       if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); }
@@ -602,12 +686,6 @@
       return { id: 'R'+Date.now(), type: 'return', startX: oldMarch.targetX, startY: oldMarch.targetY, targetX: oldMarch.startX, targetY: oldMarch.startY, startTime: Date.now(), finishesAt: Date.now() + (oldMarch.finishesAt - oldMarch.startTime), troops: survivedTroops, loot: loot };
     }
 
-    function getMyPower(troops) {
-      const t = myData.research || {infantry_atk:0, archer_atk:0, cavalry_atk:0};
-      return troops.infantry * (CFG.troops.infantry.pwr + (t.infantry_atk||0)) +
-             troops.archer * (CFG.troops.archer.pwr + (t.archer_atk||0)) +
-             troops.cavalry * (CFG.troops.cavalry.pwr + (t.cavalry_atk||0));
-    }
     function getPwrByTech(troops, tech) {
       return (troops.infantry||0) * (CFG.troops.infantry.pwr + (tech.infantry_atk||0)) +
              (troops.archer||0) * (CFG.troops.archer.pwr + (tech.archer_atk||0)) +
@@ -615,7 +693,7 @@
     }
 
     async function resolveDefendNPC(m) {
-      const defPwr = getMyPower(myData.troops);
+      const defPwr = getPwrByTech(myData.troops, myData.research);
       if (defPwr >= m.npcPower) {
         const lossRatio = m.npcPower / (defPwr + 1);
         myData.troops.infantry -= Math.floor(myData.troops.infantry * lossRatio * 0.3); myData.troops.archer -= Math.floor(myData.troops.archer * lossRatio * 0.3); myData.troops.cavalry -= Math.floor(myData.troops.cavalry * lossRatio * 0.3);
