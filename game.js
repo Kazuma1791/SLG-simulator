@@ -183,13 +183,19 @@ function runAntiCheat() {
     return false;
 }
 
+function getTileEntity(x, y) {
+  if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
+  if (allCastles.some(p => p.x === x && p.y === y)) return null;
+  if (worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && x >= b.x && x <= b.x + 1 && y >= b.y && y <= b.y + 1)) return null;
+  return MAP_CACHE[x][y].entity;
+}
+
 function getClearedPOI(x, y) {
   if (!myData || !myData.clearedPOI) return null;
   const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
   if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
 }
 
-// 💡 優化 Boss 生成機制：嚴格拉開 15 格距離，且避開水域與山脈
 async function spawnWorldBoss(id) {
   let bx, by, bName, bHp, mult, overlap;
   let tries = 0;
@@ -209,7 +215,6 @@ async function spawnWorldBoss(id) {
     if (id.startsWith('BOSS_MID') && dist < 15) { overlap = true; continue; }
     if (id.startsWith('BOSS_OUTER') && dist <= 35) { overlap = true; continue; }
     
-    // 與其他存活 Boss 保持 15 格絕對距離
     for (let b of worldBosses) {
         if (b.id !== id && (b.hp > 0 || b.despawnAt > Date.now())) {
             if (Math.hypot(b.x - bx, b.y - by) < 15) { overlap = true; break; }
@@ -217,7 +222,6 @@ async function spawnWorldBoss(id) {
     }
     if (overlap) continue;
 
-    // 確保 Boss 的 2x2 佔用格子不能有水或山
     for (let i=0; i<=1; i++) {
         for (let j=0; j<=1; j++) {
             let type = getTileTypeRaw(bx+i, by+j);
@@ -256,6 +260,10 @@ window.loginUser = () => {
 };
 window.logoutUser = () => { signOut(auth).then(() => location.reload()); };
 
+// 💡 教學彈窗控制函數
+window.openGuideModal = () => { document.getElementById('guide-modal').style.display = 'flex'; };
+window.closeGuideModal = () => { document.getElementById('guide-modal').style.display = 'none'; };
+
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     document.getElementById("login-panel").style.display = "none";
@@ -277,10 +285,12 @@ onAuthStateChanged(auth, async (user) => {
             research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
             items: { speedup5m: 3, speedup30m: 0, speedup1h: 0, renameCard: 0, resourceCard: 0, shieldCard: 1 },
             freeRenameUsed: false, lastRelocateTime: 0, shieldEndsAt: 0, isBanned: false, banReason: "", cheatLog: [], claimedBosses: [],
-            buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。獲得護盾1個！']
+            buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['歡迎降生於這片大陸！獲得護盾1個！']
           };
           await setDoc(playerRef, d);
           myData = d;
+          // 💡 首次創建帳號，延遲 1.5 秒後自動彈出新手教學
+          setTimeout(() => { window.openGuideModal(); }, 1500);
         } else {
           myData = pSnap.data();
           sanitizeData();
@@ -834,7 +844,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (加入首領領域淨空機制)
+// 🎨 渲染世界地圖 
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -863,6 +873,7 @@ function drawWorldMap() {
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
 
+      // 🎨 地貌渲染
       if (cell.type === 'plains') { 
         ctx.fillStyle = isCore ? '#3b1c1c' : (isMid ? '#544238' : '#8f9779'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -911,10 +922,8 @@ function drawWorldMap() {
           continue; 
       }
 
-      // 💡 首領威壓淨空領域：檢測該格子周圍是否為 Boss 的 4x4 禁區
       const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 1 && x <= b.x + 2 && y >= b.y - 1 && y <= b.y + 2);
 
-      // 如果有 Boss 在這附近，就完全不要畫出靜態的遺跡、野蠻人等物件
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
         const clrInfo = getClearedPOI(x, y);
         const floatY = clrInfo ? 0 : Math.sin(t/300 + x + y) * 4;
@@ -970,7 +979,6 @@ function drawWorldMap() {
     }
   }
 
-  // 💡 巨型 Boss 的獨立渲染
   worldBosses.forEach(boss => {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
      if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
@@ -1058,7 +1066,7 @@ function drawWorldMap() {
       ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
       ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
+      ctx.fillText(m.type === 'return' ? '🔙' : '⚔', cX, cY+4);
 
       const left = Math.ceil((m.finishesAt-t)/1000);
       if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
@@ -1164,9 +1172,7 @@ canvas.addEventListener("click", (e) => {
   
   const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
   
-  // 💡 Boss 點擊判定更新為 2x2 格
   const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x && tX <= b.x + 1 && tY >= b.y && tY <= b.y + 1);
-  // 💡 同步威壓領域防止誤觸透明物件
   const isNearBoss = worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x - 1 && tX <= b.x + 2 && tY >= b.y - 1 && tY <= b.y + 2);
 
   if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
@@ -1179,7 +1185,7 @@ canvas.addEventListener("click", (e) => {
     document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
   } 
   else if (wBoss) {
-    if (wBoss.hp <= 0) return alert("☠️️ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
+    if (wBoss.hp <= 0) return alert("☠ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
     
     const suggestPwr = wBoss.mult === 20 ? 150000 : (wBoss.mult === 8 ? 50000 : 15000); 
     targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
@@ -1187,7 +1193,7 @@ canvas.addEventListener("click", (e) => {
     document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br>建議部隊戰力：<span style="color:#f87171;">${formatCompact(suggestPwr)}</span><br><span style="color:#10b981; font-weight:bold;">🎁 掉落大量加速道具與物資！</span><br><span style="color:#facc15; font-size:0.8rem;">🩸 獎勵將於首領倒下後統一根據貢獻度結算</span>`;
     document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
   }
-  else if (cell && cell.entity && !getClearedPOI(tX,tY) && !isNearBoss) { // 💡 在這裡阻擋威壓領域內的點擊
+  else if (cell && cell.entity && !getClearedPOI(tX,tY) && !isNearBoss) { 
     const ent = cell.entity;
     let actionTitle = '⚔️ 討伐敵陣';
     if (ent.type === 'relic') actionTitle = '🏛️ 奇蹟探險';
@@ -1198,7 +1204,7 @@ canvas.addEventListener("click", (e) => {
 
     let lootStr = '';
     if (ent.loot) {
-       lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${formatCompact(ent.loot.wood||0)} ⛏️${formatCompact(ent.loot.iron||0)} 🌾${formatCompact(ent.loot.food||0)}`;
+       lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${formatCompact(ent.loot.wood||0)} ⛏️️${formatCompact(ent.loot.iron||0)} 🌾${formatCompact(ent.loot.food||0)}`;
        if (ent.loot.speedup1h) lootStr += ` | ⚡1hx${ent.loot.speedup1h}`;
        else if (ent.loot.speedup30m) lootStr += ` | ⚡30mx${ent.loot.speedup30m}`;
        else if (ent.loot.speedup5m) lootStr += ` | ⚡5mx${ent.loot.speedup5m}`;
@@ -1335,7 +1341,7 @@ window.renderSelf = function() {
              tasksHtml += `
                 <div class="task-row" style="flex-direction: column; align-items: stretch;">
                    <div style="display:flex; justify-content:space-between;">
-                       <span class="task-title" style="flex:1;">🏗️️ 升級: ${CFG.buildings[q.target].name}</span>
+                       <span class="task-title" style="flex:1;">🏗 升級: ${CFG.buildings[q.target].name}</span>
                        <span class="task-time">倒數: ${formatTime(remainSec)}</span>
                    </div>
                    <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
@@ -1422,7 +1428,7 @@ window.renderSelf = function() {
             <div class="item-card">
                 <div>
                 <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏${formatCompact(cost.i)}</span></div>
                 </div>
                 ${progressHtml}
                 ${btnHtml}
