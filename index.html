@@ -8,23 +8,12 @@
   <style>
     .speed-btn-group { display: flex; gap: 4px; margin-top: 8px; }
     .speed-btn-group button { flex: 1; padding: 6px 2px; font-size: 0.75rem; border-radius: 4px; }
-    
-    .troop-slider {
-      -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px;
-      background: #334155; outline: none; margin-top: 14px; margin-bottom: 4px;
-    }
-    .troop-slider::-webkit-slider-thumb {
-      -webkit-appearance: none; appearance: none; width: 24px; height: 24px;
-      border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-    }
-    .troop-slider::-moz-range-thumb {
-      width: 24px; height: 24px; border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-    }
+    .troop-slider { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: #334155; outline: none; margin-top: 14px; margin-bottom: 4px; }
+    .troop-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+    .troop-slider::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #38bdf8; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
     .troop-input-row { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 8px; background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1e2c40; font-size: 0.9rem; }
     .troop-input-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
     .troop-input-row input[type="number"], .rename-input { width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; font-weight: bold; }
-    
-    /* 新手教學專屬排版 */
     .guide-section { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #334155; }
     .guide-section h4 { color: #facc15; margin-bottom: 5px; font-size: 1.05rem; }
     .guide-section p { color: #cbd5e1; font-size: 0.9rem; line-height: 1.4; margin: 0; }
@@ -46,28 +35,11 @@
   <div id="guide-modal" class="modal-overlay" style="z-index: 5000; display: none;">
     <div class="action-modal" style="max-width: 450px; text-align: left; max-height: 85vh; overflow-y: auto;">
       <h3 style="color:#38bdf8; text-align:center; border-bottom: 2px solid #1e2c40; padding-bottom: 10px;">📖 領主求生指南</h3>
-      
-      <div class="guide-section" style="margin-top:10px;">
-        <h4>1. ⚒️ 基礎發育 (內政)</h4>
-        <p>「木材、鐵礦、糧草」是維持王國運轉的核心。請優先在【內政】升級資源建築，並升級「工匠小屋」來增加同時建造的數量！</p>
-      </div>
-      <div class="guide-section">
-        <h4>2. ⚔️ 軍事武力 (招募)</h4>
-        <p>提升「兵營」等級可解鎖強大的弓兵與騎兵。注意：部隊會持續消耗您的「糧草」，但若糧草耗盡部隊不會餓死，只是無法繼續囤積。</p>
-      </div>
-      <div class="guide-section">
-        <h4>3. 🌍 地圖探索 (討伐)</h4>
-        <p>切換至【地圖】，點擊周圍的「流寇、野蠻人或遺跡」發起行軍。討伐成功將獲得大量資源、加速卡甚至珍貴的「物資卡」。</p>
-      </div>
-      <div class="guide-section">
-        <h4>4. 🐉 史詩世界首領 (Boss)</h4>
-        <p>地圖上巨大的首領需要全服玩家協力討伐！攻擊首領不會損失兵力，當首領倒下時，系統會依照您的「傷害貢獻度」派發豪華獎勵。</p>
-      </div>
-      <div class="guide-section" style="border-bottom: none;">
-        <h4>5. 🛡️ 生存法則 (護盾與遷城)</h4>
-        <p>點擊地圖空地可以進行「遷城」以逃離戰火或靠近資源區。當您準備離線時，請務必到【背包】開啟「和平護盾」，以免遭到其他玩家掠奪！</p>
-      </div>
-
+      <div class="guide-section" style="margin-top:10px;"><h4>1. ⚒️ 基礎發育 (內政)</h4><p>「木材、鐵礦、糧草」是維持王國運轉的核心。請優先在【內政】升級資源建築，並升級「工匠小屋」來增加同時建造的數量！</p></div>
+      <div class="guide-section"><h4>2. ⚔️ 軍事武力 (招募)</h4><p>提升「兵營」等級可解鎖強大的弓兵與騎兵。注意：部隊會持續消耗您的「糧草」，但若糧草耗盡部隊不會餓死，只是無法繼續囤積。</p></div>
+      <div class="guide-section"><h4>3. 🌍 地圖探索 (討伐)</h4><p>切換至【地圖】，點擊周圍的「流寇、野蠻人或遺跡」發起行軍。討伐成功將獲得大量資源、加速卡甚至珍貴的「物資卡」。</p></div>
+      <div class="guide-section"><h4>4. 🐉 史詩世界首領 (Boss)</h4><p>地圖上巨大的首領需要全服玩家協力討伐！攻擊首領不會損失兵力，當首領倒下時，系統會依照您的「傷害貢獻度」派發豪華獎勵。</p></div>
+      <div class="guide-section" style="border-bottom: none;"><h4>5. 🛡️ 生存法則 (護盾與遷城)</h4><p>點擊地圖空地可以進行「遷城」以逃離戰火或靠近資源區。當您準備離線時，請務必到【背包】開啟「和平護盾」，以免遭到其他玩家掠奪！</p></div>
       <button onclick="window.closeGuideModal()" style="background: #10b981; width: 100%; margin-top: 10px; font-size:1.1rem; padding: 12px;">我準備好征服世界了！</button>
     </div>
   </div>
@@ -91,31 +63,9 @@
       <h3 id="modal-title">⚔️ 軍事行動</h3>
       <p id="modal-desc" style="border-bottom: 1px solid #334155; padding-bottom: 10px;"></p>
       <div id="troop-selector" style="text-align: left; margin-top: 10px; display: none;">
-        
-        <div class="troop-input-row" id="row-inf">
-          <div class="troop-input-header">
-            <span>🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span>
-            <input type="number" id="send-inf" min="0" value="0" oninput="window.syncTroop('inf', 'input')">
-          </div>
-          <input type="range" id="slider-inf" min="0" value="0" class="troop-slider" oninput="window.syncTroop('inf', 'slider')">
-        </div>
-        
-        <div class="troop-input-row" id="row-arc">
-          <div class="troop-input-header">
-            <span>🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span>
-            <input type="number" id="send-arc" min="0" value="0" oninput="window.syncTroop('arc', 'input')">
-          </div>
-          <input type="range" id="slider-arc" min="0" value="0" class="troop-slider" oninput="window.syncTroop('arc', 'slider')">
-        </div>
-
-        <div class="troop-input-row" id="row-cav">
-          <div class="troop-input-header">
-            <span>🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span>
-            <input type="number" id="send-cav" min="0" value="0" oninput="window.syncTroop('cav', 'input')">
-          </div>
-          <input type="range" id="slider-cav" min="0" value="0" class="troop-slider" oninput="window.syncTroop('cav', 'slider')">
-        </div>
-
+        <div class="troop-input-row" id="row-inf"><div class="troop-input-header"><span>🛡️ 步兵 (剩 <span id="avail-inf">0</span>)</span><input type="number" id="send-inf" min="0" value="0" oninput="window.syncTroop('inf', 'input')"></div><input type="range" id="slider-inf" min="0" value="0" class="troop-slider" oninput="window.syncTroop('inf', 'slider')"></div>
+        <div class="troop-input-row" id="row-arc"><div class="troop-input-header"><span>🏹 弓兵 (剩 <span id="avail-arc">0</span>)</span><input type="number" id="send-arc" min="0" value="0" oninput="window.syncTroop('arc', 'input')"></div><input type="range" id="slider-arc" min="0" value="0" class="troop-slider" oninput="window.syncTroop('arc', 'slider')"></div>
+        <div class="troop-input-row" id="row-cav"><div class="troop-input-header"><span>🐎 騎兵 (剩 <span id="avail-cav">0</span>)</span><input type="number" id="send-cav" min="0" value="0" oninput="window.syncTroop('cav', 'input')"></div><input type="range" id="slider-cav" min="0" value="0" class="troop-slider" oninput="window.syncTroop('cav', 'slider')"></div>
         <p id="troop-lock-msg" style="color:#ef4444; font-size:0.75rem; margin-top:5px; display:none;">部分兵種需提升兵營等級解鎖。</p>
       </div>
       <div class="btn-group">
@@ -159,7 +109,7 @@
       <button class="tab-btn" id="btn-tab-city" onclick="window.switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="window.switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="window.switchTab('inv')">🎒 背包</button>
-      <!-- 💡 新增的教學按鈕 -->
+      <button class="tab-btn" id="btn-tab-mail" onclick="window.switchTab('mail')">📜 公告</button>
       <button class="tab-btn" onclick="window.openGuideModal()" style="color:#10b981; border-color:#10b981;">📖 教學</button>
       <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 GM</button>
       <button onclick="window.logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
@@ -175,7 +125,6 @@
             <button onclick="window.locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
         </div>
-        
         <div class="map-frame" id="map-frame">
           <canvas id="worldCanvas"></canvas>
           <div class="zoom-controls">
@@ -192,37 +141,19 @@
     <div id="tab-city" class="tab-content">
       <div class="card" style="border-color: #0ea5e9;">
         <h3 style="color:#0ea5e9; margin-bottom:10px;">📋 進行中的排程</h3>
-        <div id="active-tasks-container">
-          <p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無進行中的任務</p>
-        </div>
+        <div id="active-tasks-container"><p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無進行中的任務</p></div>
       </div>
-      <div class="card">
-        <h3 style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">
-          <span>⚒️ 基礎設施營造 <span style="font-size:0.8rem; color:#94a3b8;" id="build-queue-text">(0/1)</span></span>
-        </h3>
-        <div class="grid" id="building-container"></div>
-      </div>
-      <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3>
-        <div class="grid" id="research-container"></div>
-      </div>
-      <div class="card">
-        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">⚔️ 軍事招募所</h3>
-        <div class="grid" id="train-container"></div>
-      </div>
+      <div class="card"><h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">⚒️ 基礎設施營造</h3><div class="grid" id="building-container"></div></div>
+      <div class="card"><h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🧪 軍事學院 (科技)</h3><div class="grid" id="research-container"></div></div>
+      <div class="card"><h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">⚔️ 軍事招募所</h3><div class="grid" id="train-container"></div></div>
     </div>
 
     <!-- ==================== 📡 情報雷達分頁 ==================== -->
     <div id="tab-radar" class="tab-content">
       <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px;">
-          <h3 style="margin:0;">📡 周遭情報雷達</h3>
-          <button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button>
-        </div>
-        
+        <div style="display: flex; justify-content: space-between; align-items:center; border-bottom: 1px solid #1e2c40; padding-bottom: 8px;"><h3 style="margin:0;">📡 周遭情報雷達</h3><button onclick="window.refreshMap()" style="background:#475569; font-size:0.75rem; padding:4px 8px;">🔄 重新掃描</button></div>
         <h4 style="margin-top: 12px; color:#facc15; font-size:0.95rem;">🐲 附近的世界首領</h4>
         <div id="radar-boss-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
-
         <h4 style="margin-top: 16px; color:#38bdf8; font-size:0.95rem;">👥 附近的玩家勢力</h4>
         <div id="radar-players-container" style="display:flex; flex-direction:column; gap:8px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
@@ -233,41 +164,24 @@
       <div class="card">
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主戰略背包</h3>
         <div class="grid">
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">🛡️</div>
-            <strong style="font-size:0.95rem;">護盾 (6h)</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">使用</button>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">⚡</div>
-            <strong style="font-size:0.95rem;">5分加速卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed5m" style="color:#fff; font-weight:bold;">0</span></span>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">🚀</div>
-            <strong style="font-size:0.95rem;">30分加速卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed30m" style="color:#fff; font-weight:bold;">0</span></span>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">⏱️</div>
-            <strong style="font-size:0.95rem;">1小時加速卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed1h" style="color:#fff; font-weight:bold;">0</span></span>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">📦</div>
-            <strong style="font-size:0.95rem;">軍用物資卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-resource" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.useResourceCard()" style="background:#0ea5e9; margin-top:auto; width:100%;">開啟</button>
-          </div>
-          <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">✏️</div>
-            <strong style="font-size:0.95rem;">改名卡</strong>
-            <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-rename" style="color:#fff; font-weight:bold;">0</span></span>
-            <button onclick="window.openRenameModal()" style="background:#3b82f6; margin-top:auto; width:100%;">改名</button>
-          </div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">🛡️</div><strong style="font-size:0.95rem;">護盾 (6h)</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span><button onclick="window.useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">使用</button></div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">⚡</div><strong style="font-size:0.95rem;">5分加速卡</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed5m" style="color:#fff; font-weight:bold;">0</span></span></div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">🚀</div><strong style="font-size:0.95rem;">30分加速卡</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed30m" style="color:#fff; font-weight:bold;">0</span></span></div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">⏱️</div><strong style="font-size:0.95rem;">1小時加速卡</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-speed1h" style="color:#fff; font-weight:bold;">0</span></span></div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">📦</div><strong style="font-size:0.95rem;">軍用物資卡</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-resource" style="color:#fff; font-weight:bold;">0</span></span><button onclick="window.useResourceCard()" style="background:#0ea5e9; margin-top:auto; width:100%;">開啟</button></div>
+          <div class="item-card" style="justify-content:center; text-align:center;"><div style="font-size:2rem; margin-bottom:4px;">✏️</div><strong style="font-size:0.95rem;">改名卡</strong><span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-rename" style="color:#fff; font-weight:bold;">0</span></span><button onclick="window.openRenameModal()" style="background:#3b82f6; margin-top:auto; width:100%;">改名</button></div>
         </div>
         <p style="font-size:0.75rem; color:#94a3b8; margin-top:12px; text-align:center;">*加速卡請直接於「內政」排程看板中點擊使用</p>
+      </div>
+    </div>
+
+    <!-- ==================== 📜 公告與獎勵分頁 ==================== -->
+    <div id="tab-mail" class="tab-content">
+      <div class="card">
+        <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px; color:#38bdf8;">📜 王國公告欄</h3>
+        <div id="announcement-container">
+            <p style="color:#94a3b8; text-align:center;">目前沒有新公告。</p>
+        </div>
       </div>
     </div>
 
@@ -284,7 +198,7 @@
 
         <h4 style="color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">👁️ 帳號查緝與安全操作</h4>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
-          <button onclick="window.gmAuditPlayer()" style="background:#d946ef; flex:2;">📊 審計該玩家 (檢查外掛/修改紀錄)</button>
+          <button onclick="window.gmAuditPlayer()" style="background:#d946ef; flex:2;">📊 審計該玩家</button>
           <button onclick="window.gmTargetAction('unban')" style="background:#10b981; flex:1;">✅ 解封</button>
           <button onclick="window.gmTargetAction('ban')" style="background:#ef4444; flex:1;">🚫 封鎖</button>
         </div>
@@ -296,25 +210,34 @@
              <option value="iron">資源 - 鐵礦</option>
              <option value="food">資源 - 糧草</option>
              <option value="infantry">兵力 - 步兵</option>
-             <option value="archer">兵力 - 弓兵</option>
-             <option value="cavalry">兵力 - 騎兵</option>
              <option value="speedup5m">道具 - 5分加速卡</option>
-             <option value="speedup30m">道具 - 30分加速卡</option>
-             <option value="speedup1h">道具 - 1小時加速卡</option>
              <option value="shieldCard">道具 - 和平護盾</option>
              <option value="castleLevel">建築 - 主城等級(慎用)</option>
           </select>
-          <input type="number" id="gm-custom-amount" placeholder="輸入數量" style="width:100px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
+          <input type="number" id="gm-custom-amount" placeholder="數量" style="width:80px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
           <button onclick="window.gmExecuteCustom()" style="background:#8b5cf6; padding:8px 12px;">確認寫入</button>
+        </div>
+
+        <!-- 📢 新增：全服廣播與獎勵派發 -->
+        <h4 style="margin-top:16px; color:#facc15; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">📢 發布全服公告與獎勵</h4>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+          <textarea id="gm-announce-text" placeholder="輸入公告內容 (支援換行)..." style="background:#1e2c40; color:white; padding:8px; border-radius:4px; min-height:60px; border:1px solid #475569; width:95%;"></textarea>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <input type="number" id="gm-ann-wood" placeholder="木材" style="width:calc(25% - 10px); background:#1e2c40; color:white; padding:6px; border:1px solid #475569; border-radius:4px;">
+            <input type="number" id="gm-ann-iron" placeholder="鐵礦" style="width:calc(25% - 10px); background:#1e2c40; color:white; padding:6px; border:1px solid #475569; border-radius:4px;">
+            <input type="number" id="gm-ann-food" placeholder="糧草" style="width:calc(25% - 10px); background:#1e2c40; color:white; padding:6px; border:1px solid #475569; border-radius:4px;">
+            <input type="number" id="gm-ann-speed" placeholder="1h加速卡" style="width:calc(25% - 10px); background:#1e2c40; color:white; padding:6px; border:1px solid #475569; border-radius:4px;">
+          </div>
+          <button onclick="window.gmSendAnnouncement()" style="background:#0ea5e9; padding:8px; border-radius:4px; font-weight:bold;">發布廣播並派發獎勵</button>
         </div>
 
         <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚡ 伺服器快速操作</h4>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
           <button onclick="window.gmRespawnBosses()" style="background:#9333ea;">🔄 重置地圖所有 Boss</button>
-          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成全伺服器隊列</button>
+          <button onclick="window.gmClearQueues()" style="background:#ea580c;">🚀 瞬間完成全服隊列</button>
         </div>
 
-        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控 (點擊玩家即可鎖定為目標)</h4>
+        <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">🌐 全服領主監控</h4>
         <div id="gm-players-container" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height: 40vh; overflow-y: auto;"></div>
       </div>
     </div>
