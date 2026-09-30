@@ -27,9 +27,6 @@ const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("
 let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
-// ==========================================
-// 🖼️ 載入外部材質圖片
-// ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
     const img = new Image();
@@ -42,7 +39,7 @@ const imgDarkFortress = new Image(); imgDarkFortress.src = 'dark_fortress.png';
 const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
 const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
 const imgBarbarian = new Image(); imgBarbarian.src = 'ico_buildings_stronghold_cyclopsMound.png';
-const imgRelic = new Image(); imgRelic.src = 'relic.png'; // 💡 新增遺跡圖片載入
+const imgRelic = new Image(); imgRelic.src = 'relic.png'; 
 
 const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
@@ -61,7 +58,7 @@ const CFG = {
     barracks:  { name: '兵營',     rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
   },
   techs: {
-    infantry_atk: { name: '步兵鍛甲', icon: '🛡', baseW: 300, baseI: 300, baseTime: 600 },
+    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 600 },
     archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 600 },
     cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 }
   },
@@ -100,7 +97,6 @@ function getTileTypeRaw(x, y) {
   if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
 }
 
-// 💡 移除了流寇，調整野蠻人與遺跡的生成機率
 function getStaticEntity(x, y, type) {
   if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
   if (type === 'water') return null;
@@ -190,7 +186,7 @@ function runAntiCheat() {
 function getTileEntity(x, y) {
   if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
   if (allCastles.some(p => p.x === x && p.y === y)) return null;
-  if (worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && b.x === x && b.y === y)) return null;
+  if (worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && x >= b.x && x <= b.x + 1 && y >= b.y && y <= b.y + 1)) return null;
   return MAP_CACHE[x][y].entity;
 }
 
@@ -816,7 +812,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 - 【中世紀三階腐化地貌 & 比例調整】
+// 🎨 渲染世界地圖 (中世紀三階腐化地貌 + 巨型 Boss)
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -901,7 +897,6 @@ function drawWorldMap() {
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
-          // 💡 調整比例：放大 NPC 城堡，縮小野蠻人與遺跡
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
                   ctx.drawImage(imgDarkCapital, px - 15, py + floatY - 25, TILE_SIZE + 30, TILE_SIZE + 30);
@@ -932,15 +927,16 @@ function drawWorldMap() {
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
             if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
-                // 野蠻人：略小於城堡
                 ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
             } else {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
             }
             ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'bandit') {
+            ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
+            ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'relic') {
             if (imgRelic.complete && imgRelic.naturalHeight !== 0) {
-                // 遺跡：縮小
                 ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
             } else {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
@@ -952,27 +948,40 @@ function drawWorldMap() {
     }
   }
 
+  // 💡 渲染 2x2 巨型世界 Boss 與底部名字
   worldBosses.forEach(boss => {
-     const isExplored = exploredTiles[boss.x] && exploredTiles[boss.x][boss.y];
-     if ((boss.hp > 0 || boss.despawnAt > t) && (isExplored || godModeFog)) {
-        const bx = boss.x*TILE_SIZE, by = boss.y*TILE_SIZE;
+     const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
+     if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
+        const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
         const bounce = boss.hp > 0 ? Math.sin(t/200)*5 : 0;
+        const centerBx = bx + TILE_SIZE; // 2x2 格子的正中心 X 座標
         
         if (boss.hp <= 0) {
-            ctx.font = '30px sans-serif'; ctx.textAlign='center'; ctx.fillText('☠️', bx+TILE_SIZE/2, by+40);
-            ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.fillText('首領遺骸', bx+TILE_SIZE/2, by+55);
+            ctx.font = '50px sans-serif'; ctx.textAlign='center'; ctx.fillText('☠️', centerBx, by + TILE_SIZE + 10);
+            ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif'; ctx.fillText('首領遺骸', centerBx, by + TILE_SIZE + 30);
+            ctx.fillStyle = '#64748b'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center';
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 15);
         } else {
             let targetImg = imgBossOuter; let fallbackEmoji = '🗿';
             if (boss.id === 'BOSS_CORE') { targetImg = imgBossCore; fallbackEmoji = '🐉'; }
             else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
 
+            // 畫 2x2 巨型圖片
             if (targetImg.complete && targetImg.naturalHeight !== 0) {
-                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE, TILE_SIZE);
+                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
             } else {
-                ctx.font = '45px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, bx+TILE_SIZE/2, by+40+bounce);
+                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
             }
-            ctx.fillStyle = '#ef4444'; ctx.fillRect(bx, by-10, TILE_SIZE*(boss.hp/boss.maxHp), 6);
-            ctx.strokeStyle = '#fff'; ctx.strokeRect(bx, by-10, TILE_SIZE, 6);
+            
+            // 血條置中 (寬度為 1.5 倍 TILE_SIZE)
+            const barW = TILE_SIZE * 1.5;
+            const barX = bx + (TILE_SIZE * 2 - barW) / 2;
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
+            
+            // 名字顯示在巨型 Boss 下方
+            ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
         }
      }
   });
@@ -1001,7 +1010,6 @@ function drawWorldMap() {
     
     let currentCastleImg = castleImgs[imgIdx];
     
-    // 💡 調整比例：放大所有玩家的城堡
     if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
         ctx.drawImage(currentCastleImg, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
     } else {
@@ -1031,7 +1039,7 @@ function drawWorldMap() {
       ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
       ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
+      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️️', cX, cY+4);
 
       const left = Math.ceil((m.finishesAt-t)/1000);
       if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
@@ -1136,7 +1144,9 @@ canvas.addEventListener("click", (e) => {
   const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
   
   const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
-  const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && b.x === tX && b.y === tY);
+  
+  // 💡 判定點擊是否落在 2x2 的巨型 Boss 範圍內
+  const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x && tX <= b.x + 1 && tY >= b.y && tY <= b.y + 1);
 
   if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
 
@@ -1149,9 +1159,12 @@ canvas.addEventListener("click", (e) => {
   } 
   else if (wBoss) {
     if (wBoss.hp <= 0) return alert("☠️ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
+    
+    // 💡 新增：根據 Boss 倍率給予戰力建議
+    const suggestPwr = wBoss.mult === 20 ? 150000 : (wBoss.mult === 8 ? 50000 : 15000); 
     targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
     document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; 
-    document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 掉落大量加速道具與物資！</span>`;
+    document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br>建議部隊戰力：<span style="color:#f87171;">${formatCompact(suggestPwr)}</span><br><span style="color:#10b981; font-weight:bold;">🎁 掉落大量加速道具與物資！</span><br><span style="color:#facc15; font-size:0.8rem;">🩸 獎勵將於首領倒下後統一根據貢獻度結算</span>`;
     document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
   }
   else if (cell && cell.entity && !getClearedPOI(tX,tY)) {
@@ -1256,6 +1269,9 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
   window.closeActionModal(); try{window.renderSelf();}catch(e){}
 });
 
+// ==========================================
+// 渲染 UI (加入領主城堡等級標籤)
+// ==========================================
 window.renderSelf = function() {
   if (myData.isBanned) return;
   try {
@@ -1264,7 +1280,8 @@ window.renderSelf = function() {
       const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
       
       const titleEl = document.getElementById('player-title');
-      if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
+      // 💡 新增：將城堡等級顯示在領主名字旁邊
+      if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="color:#fbbf24; font-size:0.95rem;">(Lv.${myData.buildings.castle || 1})</span> <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
       
       const hrToSec = 3600;
       const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
@@ -1389,7 +1406,7 @@ window.renderSelf = function() {
             <div class="item-card">
                 <div>
                 <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️️${formatCompact(cost.i)}</span></div>
                 </div>
                 ${progressHtml}
                 ${btnHtml}
