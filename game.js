@@ -196,18 +196,35 @@ function getClearedPOI(x, y) {
   if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
 }
 
+// 💡 巨型首領生成：數量減少，並加入防重疊機制 (距離至少 5 格)
 async function spawnWorldBoss(id) {
-  let bx, by, bName, bHp, mult;
-  if (id === 'BOSS_CORE') {
-    do { bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6); } while(bx===50&&by===50);
-    bName = '🐉 滅世魔龍'; bHp = 500000; mult = 20;
-  } else if (id.startsWith('BOSS_MID')) {
-    do { bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20); } while(Math.hypot(bx-50, by-50) < 15);
-    bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 150000; mult = 8;
-  } else {
-    do { bx=Math.floor(Math.random()*90+5); by=Math.floor(Math.random()*90+5); } while(Math.hypot(bx-50, by-50) <= 35);
-    bName = '🗿 大地岩魔'; bHp = 50000; mult = 3;
-  }
+  let bx, by, bName, bHp, mult, overlap;
+  do {
+    overlap = false;
+    if (id === 'BOSS_CORE') {
+      bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6);
+    } else if (id.startsWith('BOSS_MID')) {
+      bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20);
+    } else {
+      bx=Math.floor(Math.random()*90+5); by=Math.floor(Math.random()*90+5);
+    }
+    const dist = Math.hypot(bx-50, by-50);
+    if (id === 'BOSS_CORE' && bx===50 && by===50) overlap = true;
+    if (id.startsWith('BOSS_MID') && dist < 15) overlap = true;
+    if (id.startsWith('BOSS_OUTER') && dist <= 35) overlap = true;
+    
+    // 檢查防重疊：與其他存活/等待重生的 Boss 距離至少 5 格
+    for (let b of worldBosses) {
+        if (b.id !== id && (b.hp > 0 || b.despawnAt > Date.now())) {
+            if (Math.hypot(b.x - bx, b.y - by) < 5) overlap = true;
+        }
+    }
+  } while(overlap);
+
+  if (id === 'BOSS_CORE') { bName = '🐉 滅世魔龍'; bHp = 500000; mult = 20; }
+  else if (id.startsWith('BOSS_MID')) { bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 150000; mult = 8; }
+  else { bName = '🗿 大地岩魔'; bHp = 50000; mult = 3; }
+  
   await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 });
 }
 
@@ -296,9 +313,10 @@ onAuthStateChanged(auth, async (user) => {
       }
     });
 
+    // 💡 首領監聽：減少綁定數量 (1 核心, 4 中層, 10 外層)
     const bossIds = ['BOSS_CORE'];
-    for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
-    for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
+    for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
+    for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
 
     bossIds.forEach(id => {
        onSnapshot(doc(db, "world_map", id), (snap) => {
@@ -347,8 +365,8 @@ window.gmAddTroop = async (type, amount) => {
 window.gmRespawnBosses = () => {
   if (!isAdmin) return;
   const bossIds = ['BOSS_CORE'];
-  for(let i=1; i<=10; i++) bossIds.push(`BOSS_MID_${i}`);
-  for(let i=1; i<=30; i++) bossIds.push(`BOSS_OUTER_${i}`);
+  for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
+  for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
   bossIds.forEach(id => spawnWorldBoss(id)); alert("已強制重生所有 世界 Boss！");
 };
 
@@ -812,7 +830,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (中世紀三階腐化地貌 + 巨型 Boss)
+// 🎨 渲染世界地圖
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -948,13 +966,12 @@ function drawWorldMap() {
     }
   }
 
-  // 💡 渲染 2x2 巨型世界 Boss 與底部名字
   worldBosses.forEach(boss => {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
      if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
         const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
         const bounce = boss.hp > 0 ? Math.sin(t/200)*5 : 0;
-        const centerBx = bx + TILE_SIZE; // 2x2 格子的正中心 X 座標
+        const centerBx = bx + TILE_SIZE; 
         
         if (boss.hp <= 0) {
             ctx.font = '50px sans-serif'; ctx.textAlign='center'; ctx.fillText('☠️', centerBx, by + TILE_SIZE + 10);
@@ -966,20 +983,17 @@ function drawWorldMap() {
             if (boss.id === 'BOSS_CORE') { targetImg = imgBossCore; fallbackEmoji = '🐉'; }
             else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
 
-            // 畫 2x2 巨型圖片
             if (targetImg.complete && targetImg.naturalHeight !== 0) {
                 ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
             } else {
                 ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
             }
             
-            // 血條置中 (寬度為 1.5 倍 TILE_SIZE)
             const barW = TILE_SIZE * 1.5;
             const barX = bx + (TILE_SIZE * 2 - barW) / 2;
             ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
             ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
             
-            // 名字顯示在巨型 Boss 下方
             ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
             ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
         }
@@ -1039,7 +1053,7 @@ function drawWorldMap() {
       ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
       ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️️', cX, cY+4);
+      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
 
       const left = Math.ceil((m.finishesAt-t)/1000);
       if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
@@ -1145,7 +1159,6 @@ canvas.addEventListener("click", (e) => {
   
   const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
   
-  // 💡 判定點擊是否落在 2x2 的巨型 Boss 範圍內
   const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x && tX <= b.x + 1 && tY >= b.y && tY <= b.y + 1);
 
   if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
@@ -1160,7 +1173,6 @@ canvas.addEventListener("click", (e) => {
   else if (wBoss) {
     if (wBoss.hp <= 0) return alert("☠️ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
     
-    // 💡 新增：根據 Boss 倍率給予戰力建議
     const suggestPwr = wBoss.mult === 20 ? 150000 : (wBoss.mult === 8 ? 50000 : 15000); 
     targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
     document.getElementById("modal-title").innerHTML = `🐉 討伐首領`; 
@@ -1280,7 +1292,6 @@ window.renderSelf = function() {
       const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
       
       const titleEl = document.getElementById('player-title');
-      // 💡 新增：將城堡等級顯示在領主名字旁邊
       if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="color:#fbbf24; font-size:0.95rem;">(Lv.${myData.buildings.castle || 1})</span> <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
       
       const hrToSec = 3600;
@@ -1406,7 +1417,7 @@ window.renderSelf = function() {
             <div class="item-card">
                 <div>
                 <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️️${formatCompact(cost.i)}</span></div>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
                 </div>
                 ${progressHtml}
                 ${btnHtml}
