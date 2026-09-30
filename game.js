@@ -906,22 +906,52 @@ async function resolveDefendNPC(m) {
 
 async function resolveInteractNPC(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  
   if (m.entity.type === 'relic') { 
-    res.loot = m.entity.loot; myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-  } else if (m.entity.type.startsWith('npc_')) {
     res.loot = m.entity.loot; 
+    myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
+  } else if (m.entity.type.startsWith('npc_') || m.entity.type === 'barbarian') {
+    res.loot = m.entity.loot || {}; 
     let loss = Math.floor(Math.random() * 5 + 2); 
     if (m.entity.type === 'npc_super_castle') loss = Math.floor(Math.random() * 50 + 20);
     else if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
+    
     if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
     myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
+
+    // 💡 核心機制：檢查是否驚動了附近的史詩級勢力聯盟！
+    const angryFaction = checkFactionRetaliation(m.targetX, m.targetY);
+    if (angryFaction) {
+        myData.logs.unshift(`⚠️ 【${angryFaction.name}】震怒！偵測到您在周邊撒野，已派遣復仇大軍直撲您的主城！`);
+        
+        // 計算敵軍從地標出發到玩家主城的行軍時間 (速度 3 格/秒)
+        const distToHome = Math.hypot(myData.x - angryFaction.x, myData.y - angryFaction.y);
+        const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
+
+        // 強制在玩家的 marches 陣列中塞入一筆「敵軍反撲」的進攻行軍
+        myData.marches.push({
+            id: 'COUNTER_' + Date.now(),
+            type: 'defend_npc',
+            startX: angryFaction.x,
+            startY: angryFaction.y,
+            targetX: myData.x,
+            targetY: myData.y,
+            startTime: Date.now(),
+            finishesAt: Date.now() + counterTimeMs,
+            npcPower: angryFaction.pwr,
+            npcName: angryFaction.name
+        });
+    }
+
   } else { 
-    res.loot = m.entity.loot; if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
+    res.loot = m.entity.loot || {}; 
+    if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); 
+    myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
   }
+  
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
   return res;
 }
-
 async function resolveAttackBoss(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0, speedup5m:0, speedup30m:0, speedup1h:0} };
   try {
@@ -1054,53 +1084,52 @@ function drawWorldMap() {
 
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
         const clrInfo = getClearedPOI(x, y);
-        const floatY = 0; 
+        // 💡 讓所有地標與資源點產生「呼吸般的微幅上下浮動」
+        const floatY = Math.sin(t / 300 + x) * 6; 
         
         if (clrInfo) {
-          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35 + floatY);
         } else {
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
+              // 💡 王都放大 3 倍！並加入「動態金色光暈」
+              ctx.shadowColor = '#facc15'; ctx.shadowBlur = 15 + Math.sin(t/200)*10;
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCapital, px - 15, py + floatY - 25, TILE_SIZE + 30, TILE_SIZE + 30);
+                  ctx.drawImage(imgDarkCapital, px - TILE_SIZE, py + floatY - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
               } else {
-                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px, py + floatY, TILE_SIZE, TILE_SIZE);
               }
-              ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
+              ctx.shadowBlur = 0; // 畫完圖後重置光暈
+              ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign='center'; 
+              ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py + TILE_SIZE*2 + floatY - 10);
+              
           } else if (cell.entity.type === 'npc_fortress') {
+              // 💡 要塞放大 2 倍！並加入「動態紅色光暈」
+              ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10 + Math.sin(t/200)*5;
               if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkFortress, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+                  ctx.drawImage(imgDarkFortress, px - TILE_SIZE/2, py + floatY - TILE_SIZE/2, TILE_SIZE * 2, TILE_SIZE * 2);
               } else {
-                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px, py + floatY, TILE_SIZE, TILE_SIZE);
               }
-              ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+50);
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = '#f87171'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center'; 
+              ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 + floatY - 5);
+              
           } else if (cell.entity.type === 'npc_castle') {
-              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCastle, px - 5, py + floatY - 10, TILE_SIZE + 10, TILE_SIZE + 10);
-              } else {
-                  ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
-              }
-              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
+              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10 + floatY, TILE_SIZE-20, TILE_SIZE-20); }
+              ctx.fillStyle = '#f87171'; ctx.font = '11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45 + floatY);
           } else if (cell.entity.type === 'npc_outpost') {
-              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
-              } else {
-                  ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
-              }
-              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
+              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12 + floatY, TILE_SIZE-24, TILE_SIZE-24); }
+              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45 + floatY);
           } else if (cell.entity.type === 'barbarian') {
-            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
-                ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
-            } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
-            }
-            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
+            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY); }
+            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50 + floatY);
           } else if (cell.entity.type === 'relic') {
-            if (imgRelic.complete && imgRelic.naturalHeight !== 0) {
-                ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
-            } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
-            }
-            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY); }
+            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45 + floatY);
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid);
@@ -1109,20 +1138,13 @@ function drawWorldMap() {
             else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
             else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
 
-            if (resImg && resImg.complete && resImg.naturalHeight !== 0) {
-                ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
-            } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
-                ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28);
-            }
+            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py + floatY - 10, TILE_SIZE - 4, TILE_SIZE - 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28 + floatY); }
 
             const resName = cell.entity.name.split(' ')[1] || '資源區';
-            ctx.textAlign='center'; 
-            ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; 
-            ctx.fillText(resName, px+TILE_SIZE/2, py+42);
+            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42 + floatY);
             ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
-            ctx.font = 'bold 10px sans-serif'; 
-            ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
+            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54 + floatY);
           }
         }
       }
@@ -1164,43 +1186,63 @@ function drawWorldMap() {
      }
   });
 
-  // 💡 4. 繪製玩家城池
+  // 💡 4. 繪製玩家城池 (加入呼吸浮動與專屬聖光)
   allCastles.forEach(p => {
     const isMe = (p.id === myUid);
     const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
     if (!godModeFog && !isMe && !isExplored) return;
     
     const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
-    if (px<camX-TILE_SIZE || px>camX+vW+TILE_SIZE || py<camY-TILE_SIZE || py>camY+vH+TILE_SIZE) return;
+    // 稍微擴大剔除邊界，避免光柱在畫面邊緣突然消失
+    if (px<camX-TILE_SIZE*2 || px>camX+vW+TILE_SIZE*2 || py<camY-TILE_SIZE*2 || py>camY+vH+TILE_SIZE*2) return;
+
+    // 💡 讓城池有像呼吸一樣的微幅上下浮動感
+    const floatY = Math.sin(t / 250 + p.x) * 4;
 
     if (p.shieldEndsAt && p.shieldEndsAt > t) {
-        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2, 30, 0, Math.PI*2);
+        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 30, 0, Math.PI*2);
         ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
         ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
     }
 
-    if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24,0,Math.PI*2); ctx.stroke(); }
+    // 💡 如果是自己的城堡，畫出超明顯的金色聖光光柱與指引箭頭！
+    if (isMe) { 
+        // 底部金色光圈
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
+        ctx.beginPath(); ctx.ellipse(px + TILE_SIZE/2, py + TILE_SIZE - 5 + floatY, 35, 15, 0, 0, Math.PI*2); ctx.fill();
+        
+        // 沖天光柱 (由下往上漸層透明)
+        const grd = ctx.createLinearGradient(0, py - 120, 0, py + TILE_SIZE);
+        grd.addColorStop(0, 'rgba(250, 204, 21, 0)');
+        grd.addColorStop(1, 'rgba(250, 204, 21, 0.5)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(px + TILE_SIZE/2 - 20, py - 120 + floatY, 40, 120 + TILE_SIZE/2);
+        
+        // 浮動手指/箭頭 (彈跳幅度更大)
+        ctx.font = '35px sans-serif'; ctx.textAlign='center'; 
+        ctx.fillText('👇', px + TILE_SIZE/2, py - 30 + floatY * 2.5);
+    }
     
-    let cLv = p.castleLevel || 1;
-    let imgIdx = 0;
+    let cLv = p.castleLevel || 1; let imgIdx = 0;
     if (cLv >= 20) imgIdx = 6; else if (cLv >= 17) imgIdx = 5; else if (cLv >= 13) imgIdx = 4;
     else if (cLv >= 9) imgIdx = 3; else if (cLv >= 6) imgIdx = 2; else if (cLv >= 3) imgIdx = 1;
     
     let currentCastleImg = castleImgs[imgIdx];
     
     if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-        ctx.drawImage(currentCastleImg, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
+        // 💡 玩家城堡稍微放大一點點，並套用浮動
+        ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
     } else {
-        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
-        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
-        ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
+        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16+floatY,31,26);
+        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
     }
 
     if (zoom>0.5) {
       ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
+      ctx.fillText(p.name, px+TILE_SIZE/2, py+60 + floatY); 
+      ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
-    ctx.textAlign='start';
+    ctx.textAlign='start'; // 重置
   });
 
   // 💡 5. 繪製行軍路線
@@ -1795,3 +1837,20 @@ window.trainTroopType = async (typeKey) => {
   myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
   await savePrivateData(); window.renderSelf();
 };
+// 💡 定義各大史詩地標的勢力範圍與反擊戰力
+function checkFactionRetaliation(targetX, targetY) {
+  const factions = [
+    { name: '👑 中央王都禁衛軍', x: 115, y: 95, pwr: 30000 },
+    { name: '🗼 猩紅法師塔議會', x: 148, y: 32, pwr: 20000 },
+    { name: '👁️ 迷霧監視軍團', x: 145, y: 165, pwr: 15000 },
+    { name: '🏜️ 砂海要塞聯軍', x: 65, y: 185, pwr: 15000 }
+  ];
+
+  for (let fac of factions) {
+    // 如果玩家攻擊的座標距離該地標 12 格以內，判定進入其勢力範圍，觸發集體反抗！
+    if (Math.hypot(targetX - fac.x, targetY - fac.y) <= 12) {
+      return fac;
+    }
+  }
+  return null;
+}
