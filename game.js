@@ -106,30 +106,28 @@ function getTileTypeRaw(x, y) {
 
 // 💡 野外資源與 NPC 生成
 function getStaticEntity(x, y, type) {
-  if (x === 100 && y === 100) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
+  // 👑 1. 根據 8K 地圖視覺客製化的「絕對地標」
+  if (x === 115 && y === 95) return { type: 'npc_capital', name: '👑 中央王都', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
+  if (x === 148 && y === 32) return { type: 'npc_super_castle', name: '🗼 猩紅法師塔', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
+  if (x === 145 && y === 165) return { type: 'npc_fortress', name: '👁️ 迷霧監視塔', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
+  if (x === 65 && y === 185) return { type: 'npc_fortress', name: '🏜️ 砂海要塞', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
+
   if (type === 'water') return null;
-  const dist = Math.hypot(x - 100, y - 100);
-  const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const rand = v - Math.floor(v); 
+
+  // 🌲 2. 其餘空地依然使用亂數生成一般資源點與野蠻人
+  const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
   
-  if (dist <= 28) {
-    if (rand < 0.010) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
-    if (rand < 0.025) return { type: 'npc_super_castle', name: '🏰 夢魘巨城', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
-    if (rand < 0.045) return { type: 'res_mine', name: '⛏️ 核心晶礦', res: 'iron', cap: 100000, reqPwr: 1000 };
-    return null;
-  }
-  if (dist <= 64) {
-    if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 2000, loot: { wood: 20000, iron: 20000, food: 20000, speedup30m: 1 } };
-    if (rand < 0.035) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
-    if (rand < 0.055) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
-    if (rand < 0.075) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
-    return null;
-  }
-  if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 300, loot: { wood: 5000, iron: 5000, food: 5000, speedup5m: 3 } };
-  if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
-  if (rand < 0.045) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
-  if (rand < 0.065) return { type: 'res_farm', name: '🌾 小型農田', res: 'food', cap: 15000, reqPwr: 100 };
-  if (rand < 0.085) return { type: 'res_lumber', name: '🌲 散落林木', res: 'wood', cap: 15000, reqPwr: 100 };
-  if (rand < 0.100) return { type: 'res_mine', name: '⛏️ 露天鐵礦', res: 'iron', cap: 15000, reqPwr: 100 };
+  if (r < 0.002) return { type: 'npc_castle', name: '🏰 荒野城堡', reqPwr: 2000, loot: { wood: 20000, iron: 20000, food: 20000, speedup30m: 1 } };
+  if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
+  if (r < 0.025) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
+  if (r < 0.040) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
+  if (r < 0.045) return { type: 'npc_outpost', name: '🏚️ 邊境前哨', reqPwr: 300, loot: { wood: 5000, iron: 5000, food: 5000, speedup5m: 3 } };
+  if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
+  if (r < 0.080) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
+  if (r < 0.095) return { type: 'res_farm', name: '🌾 小型農田', res: 'food', cap: 15000, reqPwr: 100 };
+  if (r < 0.110) return { type: 'res_lumber', name: '🌲 散落林木', res: 'wood', cap: 15000, reqPwr: 100 };
+  if (r < 0.120) return { type: 'res_mine', name: '⛏️ 露天鐵礦', res: 'iron', cap: 15000, reqPwr: 100 };
+  
   return null;
 }
 
@@ -202,60 +200,47 @@ function getClearedPOI(x, y) {
 
 // 💡 絕對淨空領域：嚴格防重疊的 Boss 生成器
 async function spawnWorldBoss(id) {
-  let bx, by, bName, bHp, mult, overlap;
-  let tries = 0;
-  do {
-    overlap = false;
-    tries++;
-    if (id === 'BOSS_CORE') {
-      bx=100+Math.floor(Math.random()*24-12); by=100+Math.floor(Math.random()*24-12);
-    } else if (id.startsWith('BOSS_MID')) {
-      bx=100+Math.floor(Math.random()*60-30); by=100+Math.floor(Math.random()*60-30);
-    } else {
-      bx=Math.floor(Math.random()*190+5); by=Math.floor(Math.random()*190+5);
-    }
-    
-    const dist = Math.hypot(bx-100, by-100);
-    if (id === 'BOSS_CORE' && bx===100 && by===100) { overlap = true; continue; }
-    if (id.startsWith('BOSS_MID') && dist < 30) { overlap = true; continue; }
-    if (id.startsWith('BOSS_OUTER') && dist <= 70) { overlap = true; continue; }
-    
-    // 避開其他 Boss (15格)
-    for (let b of worldBosses) {
-        if (b.id !== id && (b.hp > 0 || b.despawnAt > Date.now())) {
-            if (Math.hypot(b.x - bx, b.y - by) < 15) { overlap = true; break; }
-        }
-    }
-    if (overlap) continue;
+  let bx, by, n, hp, m;
 
-    // 避開玩家主城 (8格)
-    for (let c of allCastles) {
-        if(Math.hypot(c.x-bx, c.y-by) < 8) { overlap=true; break; }
-    }
-    if(overlap) continue;
+  // 🌋 根據地貌硬派綁定 Boss 降臨點
+  if (id === 'BOSS_CORE') {
+      bx = 28; by = 135; // 左下方的巨大火山區
+      n = '🌋 熔岩滅世魔龍'; hp = 500000; m = 20;
+  } else if (id === 'BOSS_MID_1') {
+      bx = 55; by = 120; // 左側海域大漩渦附近
+      n = '🌪️ 深海漩渦巨妖'; hp = 150000; m = 8;
+  } else if (id === 'BOSS_MID_2') {
+      bx = 45; by = 35;  // 左上方雪山區
+      n = '❄️ 凜冬風暴巨鷹'; hp = 150000; m = 8;
+  } else if (id === 'BOSS_MID_3') {
+      bx = 160; by = 45; // 右上方紅樹林區
+      n = '🩸 猩紅樹魔'; hp = 150000; m = 8;
+  } else if (id === 'BOSS_MID_4') {
+      bx = 160; by = 145; // 右下方暗黑山脈
+      n = '🌑 腐化岩魔'; hp = 150000; m = 8;
+  } else {
+      // 🗿 其餘 10 隻 Outer Boss 隨機散布，並執行嚴格防重疊
+      let overlap, tries = 0;
+      do {
+          overlap = false; tries++;
+          bx = Math.floor(Math.random()*190+5); 
+          by = Math.floor(Math.random()*190+5);
+          for(let b of worldBosses) if(b.id!==id && (b.hp>0||b.despawnAt>Date.now()) && Math.hypot(b.x-bx,b.y-by)<10) {overlap=true;break;}
+          if(overlap) continue;
+          for(let c of allCastles) if(Math.hypot(c.x-bx, c.y-by)<8) {overlap=true;break;}
+          if(overlap) continue;
+          for(let i=-1; i<=2; i++) for(let j=-1; j<=2; j++) {
+              const cell = MAP_CACHE[bx+i]?.[by+j];
+              if(!cell || cell.type==='water' || cell.type==='mountain' || cell.entity) { overlap=true; break; }
+          }
+      } while(overlap && tries<1000);
+      n = '🗿 大地岩魔'; hp = 50000; m = 3;
+  }
 
-    // 嚴格地貌檢查 (不准有山水、不准有實體)
-    for (let i=-1; i<=2; i++) {
-        for (let j=-1; j<=2; j++) {
-            const cell = MAP_CACHE[bx+i] && MAP_CACHE[bx+i][by+j];
-            if(cell) {
-                if (cell.type === 'water' || cell.type === 'mountain') overlap = true;
-                if (cell.entity) overlap = true;
-            }
-        }
-    }
-  } while(overlap && tries < 1000);
-
-  if (id === 'BOSS_CORE') { bName = '🐉 滅世魔龍'; bHp = 500000; mult = 20; }
-  else if (id.startsWith('BOSS_MID')) { bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 150000; mult = 8; }
-  else { bName = '🗿 大地岩魔'; bHp = 50000; mult = 3; }
+  const bObj = { name: n, isBoss: true, x: bx, y: by, hp: hp, maxHp: hp, mult: m, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
   
-  const bObj = { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
-  
-  // 立刻寫入本地陣列防止高併發重疊
   const idx = worldBosses.findIndex(x=>x.id===id); 
   if(idx>=0) worldBosses[idx]={id,...bObj}; else worldBosses.push({id,...bObj});
-
   await setDoc(doc(db, "world_map", id), bObj);
 }
 
