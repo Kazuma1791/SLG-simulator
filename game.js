@@ -47,9 +47,9 @@ const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
 const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
 const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
 
-// 👇 新增這兩行載入世界地圖
+// 👇 新增這兩行載入世界大圖
 const imgWorldMap = new Image(); 
-imgWorldMap.src = 'image_17581f.png';
+imgWorldMap.src = 'map.png';
 
 // 💡 恢復完整的參數設定，防止變數讀取為 undefined 或 NaN
 const CFG = {
@@ -1026,16 +1026,17 @@ function drawWorldMap() {
   const t = Date.now();
 
   // 💡 1. 動態視角裁切繪製背景圖 (解決過大圖片導致的 GPU 渲染黑屏問題)
+  const mapPixelW = WORLD_COLS * TILE_SIZE;
+  const mapPixelH = WORLD_ROWS * TILE_SIZE;
+  
   if (imgWorldMap.complete && imgWorldMap.naturalHeight !== 0) {
-      const mapPixelW = WORLD_COLS * TILE_SIZE;
-      const mapPixelH = WORLD_ROWS * TILE_SIZE;
       const vLeft = Math.max(0, camX), vTop = Math.max(0, camY);
       const vRight = Math.min(mapPixelW, camX + vW), vBottom = Math.min(mapPixelH, camY + vH);
       const cW = vRight - vLeft, cH = vBottom - vTop;
 
       if (cW > 0 && cH > 0) {
-          const scaleX = imgWorldMap.width / mapPixelW;
-          const scaleY = imgWorldMap.height / mapPixelH;
+          const scaleX = imgWorldMap.naturalWidth / mapPixelW;
+          const scaleY = imgWorldMap.naturalHeight / mapPixelH;
           // 裁切原圖並繪製，確保不會觸發瀏覽器 8192px 的繪圖上限
           ctx.drawImage(imgWorldMap, vLeft * scaleX, vTop * scaleY, cW * scaleX, cH * scaleY, vLeft, vTop, cW, cH);
       }
@@ -1053,12 +1054,13 @@ function drawWorldMap() {
       
       const isExplored = exploredTiles[x][y] || godModeFog;
       if (!isExplored) { 
+          // 未探索區域：繪製高濃度迷霧
           ctx.fillStyle='rgba(5, 8, 17, 0.9)'; 
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
           continue; 
       }
 
-      // 繪製淡淡的網格線
+      // 繪製淡淡的網格線，幫助玩家對齊座標，但不會遮擋漂亮的底圖
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; 
       ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
@@ -1067,32 +1069,52 @@ function drawWorldMap() {
 
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
         const clrInfo = getClearedPOI(x, y);
+        const floatY = 0; 
+        
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
-              if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) ctx.drawImage(imgDarkCapital, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
-              else { ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12); }
+              if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkCapital, px - 15, py + floatY - 25, TILE_SIZE + 30, TILE_SIZE + 30);
+              } else {
+                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+              }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_fortress') {
-              if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) ctx.drawImage(imgDarkFortress, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
-              else { ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12); }
+              if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkFortress, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+              } else {
+                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
+              }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_castle') {
-              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 5, py - 10, TILE_SIZE + 10, TILE_SIZE + 10);
-              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20); }
+              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkCastle, px - 5, py + floatY - 10, TILE_SIZE + 10, TILE_SIZE + 10);
+              } else {
+                  ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
+              }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'npc_outpost') {
-              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
-              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24); }
+              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+              } else {
+                  ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
+              }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
-            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py - 10, TILE_SIZE + 4, TILE_SIZE + 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30); }
+            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
+                ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
+            }
             ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'relic') {
-            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30); }
+            if (imgRelic.complete && imgRelic.naturalHeight !== 0) {
+                ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+            }
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
@@ -1102,13 +1124,20 @@ function drawWorldMap() {
             else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
             else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
 
-            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28); }
+            if (resImg && resImg.complete && resImg.naturalHeight !== 0) {
+                ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
+                ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28);
+            }
 
             const resName = cell.entity.name.split(' ')[1] || '資源區';
-            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42);
+            ctx.textAlign='center'; 
+            ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; 
+            ctx.fillText(resName, px+TILE_SIZE/2, py+42);
             ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
-            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
+            ctx.font = 'bold 10px sans-serif'; 
+            ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
           }
         }
       }
@@ -1120,6 +1149,7 @@ function drawWorldMap() {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
      if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
         const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
+        const bounce = 0; 
         const centerBx = bx + TILE_SIZE; 
         
         if (boss.hp <= 0) {
@@ -1132,15 +1162,19 @@ function drawWorldMap() {
             if (boss.id === 'BOSS_CORE') { targetImg = imgBossCore; fallbackEmoji = '🐉'; }
             else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
 
-            if (targetImg.complete && targetImg.naturalHeight !== 0) ctx.drawImage(targetImg, bx, by, TILE_SIZE * 2, TILE_SIZE * 2);
-            else { ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20); }
+            if (targetImg.complete && targetImg.naturalHeight !== 0) {
+                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
+            } else {
+                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
+            }
             
-            const barW = TILE_SIZE * 1.5; const barX = bx + (TILE_SIZE * 2 - barW) / 2;
-            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10, barW * (boss.hp/boss.maxHp), 6);
-            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10, barW, 6);
+            const barW = TILE_SIZE * 1.5;
+            const barX = bx + (TILE_SIZE * 2 - barW) / 2;
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
             
             ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
-            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18);
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
         }
      }
   });
@@ -1159,21 +1193,29 @@ function drawWorldMap() {
         ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
         ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
     }
+
     if (isMe) { ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(px+TILE_SIZE/2,py+TILE_SIZE/2, 24,0,Math.PI*2); ctx.stroke(); }
     
-    let cLv = p.castleLevel || 1; let imgIdx = 0;
+    let cLv = p.castleLevel || 1;
+    let imgIdx = 0;
     if (cLv >= 20) imgIdx = 6; else if (cLv >= 17) imgIdx = 5; else if (cLv >= 13) imgIdx = 4;
     else if (cLv >= 9) imgIdx = 3; else if (cLv >= 6) imgIdx = 2; else if (cLv >= 3) imgIdx = 1;
     
-    if (castleImgs[imgIdx] && castleImgs[imgIdx].complete && castleImgs[imgIdx].naturalHeight !== 0) ctx.drawImage(castleImgs[imgIdx], px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
-    else {
+    let currentCastleImg = castleImgs[imgIdx];
+    
+    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+        ctx.drawImage(currentCastleImg, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
+    } else {
         ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
         ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(px+22,py+30,11,12);
     }
+
     if (zoom>0.5) {
       ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
       ctx.fillText(p.name, px+TILE_SIZE/2, py+52); ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py+8);
     }
+    ctx.textAlign='start';
   });
 
   // 💡 5. 繪製行軍路線
@@ -1189,6 +1231,7 @@ function drawWorldMap() {
           if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
           return;
       }
+
       const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
       const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
       const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
@@ -1204,6 +1247,7 @@ function drawWorldMap() {
 
       const left = Math.ceil((m.finishesAt-t)/1000);
       if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
+      ctx.textAlign = 'start';
     });
   }
   ctx.restore();
