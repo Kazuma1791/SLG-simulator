@@ -384,8 +384,6 @@ window.renderAnnouncement = () => {
     }
 
     const a = currentAnnouncement;
-
-    // 更新地圖正上方的浮動橫幅 (濾掉換行符號)
     if (mapBar && mapText) {
         mapBar.style.display = 'block';
         mapText.innerText = a.text.replace(/\n/g, '  '); 
@@ -394,8 +392,11 @@ window.renderAnnouncement = () => {
     if (!cont) return;
     const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(a.id);
     let rStr = [];
-    if(a.wood) rStr.push(`🌲${formatCompact(a.wood)}`); if(a.iron) rStr.push(`⛏️${formatCompact(a.iron)}`);
-    if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); if(a.speed) rStr.push(`⚡1hx${a.speed}`);
+    if(a.wood) rStr.push(`🌲${formatCompact(a.wood)}`); 
+    if(a.iron) rStr.push(`⛏️${formatCompact(a.iron)}`);
+    if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); 
+    if(a.speed) rStr.push(`⚡1hx${a.speed}`);
+    if(a.shield) rStr.push(`🛡️x${a.shield}`); // 💡 在公告面板顯示護盾獎勵圖示
     
     let btnHtml = '';
     if (rStr.length > 0) {
@@ -408,8 +409,14 @@ window.renderAnnouncement = () => {
 window.claimAnnouncement = async (id) => {
     if (!currentAnnouncement || currentAnnouncement.id !== id || myData.claimedAnnouncements.includes(id)) return;
     const a = currentAnnouncement;
-    if(a.wood) myData.wood += a.wood; if(a.iron) myData.iron += a.iron; if(a.food) myData.food += a.food; if(a.speed) myData.items.speedup1h += a.speed;
-    myData.claimedAnnouncements.push(id); myData.logs.unshift(`[系統] 成功領取全服公告補給！`);
+    if(a.wood) myData.wood += a.wood; 
+    if(a.iron) myData.iron += a.iron; 
+    if(a.food) myData.food += a.food; 
+    if(a.speed) myData.items.speedup1h += a.speed;
+    if(a.shield) myData.items.shieldCard += a.shield; // 💡 實際將護盾卡加進玩家背包
+    
+    myData.claimedAnnouncements.push(id); 
+    myData.logs.unshift(`[系統] 成功領取全服公告補給！`);
     await savePrivateData();
     const btn = document.getElementById('btn-tab-mail'); if(btn) btn.innerText = "📜 公告";
     window.renderAnnouncement(); window.renderSelf();
@@ -419,8 +426,19 @@ window.gmSendAnnouncement = async () => {
     if (!isAdmin) return;
     const txt = document.getElementById('gm-announce-text').value.trim();
     if (!txt) return alert("請輸入公告內容！");
-    const ann = { id: 'ANN_' + Date.now(), text: txt, wood: parseInt(document.getElementById('gm-ann-wood').value)||0, iron: parseInt(document.getElementById('gm-ann-iron').value)||0, food: parseInt(document.getElementById('gm-ann-food').value)||0, speed: parseInt(document.getElementById('gm-ann-speed').value)||0, timestamp: Date.now() };
-    await setDoc(doc(db, "world_map", "announcement"), ann); alert("📢 全服公告與獎勵已發布！"); document.getElementById('gm-announce-text').value = '';
+    const ann = { 
+        id: 'ANN_' + Date.now(), 
+        text: txt, 
+        wood: parseInt(document.getElementById('gm-ann-wood').value)||0, 
+        iron: parseInt(document.getElementById('gm-ann-iron').value)||0, 
+        food: parseInt(document.getElementById('gm-ann-food').value)||0, 
+        speed: parseInt(document.getElementById('gm-ann-speed').value)||0, 
+        shield: parseInt(document.getElementById('gm-ann-shield').value)||0, // 💡 新增護盾卡獎勵
+        timestamp: Date.now() 
+    };
+    await setDoc(doc(db, "world_map", "announcement"), ann); 
+    alert("📢 全服公告與獎勵已發布！"); 
+    document.getElementById('gm-announce-text').value = '';
 };
 
 window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
