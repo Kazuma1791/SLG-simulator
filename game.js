@@ -373,15 +373,30 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// 💡 渲染公告系統
+// 💡 渲染公告系統 (信箱與地圖浮動橫幅)
 window.renderAnnouncement = () => {
-    const cont = document.getElementById('announcement-container'); if (!cont) return;
-    if (!currentAnnouncement) { cont.innerHTML = '<p style="color:#94a3b8; text-align:center;">目前沒有新公告。</p>'; return; }
+    const cont = document.getElementById('announcement-container'); 
+    const mapBar = document.getElementById('map-announcement-bar');
+    const mapText = document.getElementById('map-announcement-text');
+
+    if (!currentAnnouncement) { 
+        if(cont) cont.innerHTML = '<p style="color:#94a3b8; text-align:center;">目前沒有新公告。</p>'; 
+        if(mapBar) mapBar.style.display = 'none';
+        return; 
+    }
 
     const a = currentAnnouncement;
+
+    // 更新地圖正上方的浮動橫幅 (濾掉換行符號)
+    if (mapBar && mapText) {
+        mapBar.style.display = 'block';
+        mapText.innerText = a.text.replace(/\n/g, '  '); 
+    }
+
+    if (!cont) return;
     const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(a.id);
     let rStr = [];
-    if(a.wood) rStr.push(`🌲${formatCompact(a.wood)}`); if(a.iron) rStr.push(`⛏️️${formatCompact(a.iron)}`);
+    if(a.wood) rStr.push(`🌲${formatCompact(a.wood)}`); if(a.iron) rStr.push(`⛏️${formatCompact(a.iron)}`);
     if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); if(a.speed) rStr.push(`⚡1hx${a.speed}`);
     
     let btnHtml = '';
@@ -1764,8 +1779,13 @@ window.confirmRename = async () => {
   alert("✅ 名稱已更改！"); window.closeRenameModal(); try{ window.renderSelf(); }catch(e){} window.refreshMap();
 };
 
-window.locateHome = () => { if (myData) { centerCameraOn(myData.x, myData.y); window.switchTab('world'); }};
-
+window.locateHome = () => { 
+  if (myData) { 
+      window.switchTab('world'); 
+      // 💡 延遲 60 毫秒，等待切換分頁、畫布完全展開後，再進行置中計算
+      setTimeout(() => { centerCameraOn(myData.x, myData.y); }, 60); 
+  }
+};
 window.upgradeBuilding = async (key) => {
   const maxQueues = 1 + (myData.buildings.builder || 0);
   if (myData.buildQueues.some(q => q && q.target === key)) return alert('該設施正在升級中！');
