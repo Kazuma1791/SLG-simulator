@@ -110,6 +110,7 @@
       <button class="tab-btn" id="btn-tab-radar" onclick="window.switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="window.switchTab('inv')">🎒 背包</button>
       <button class="tab-btn" id="btn-tab-mail" onclick="window.switchTab('mail')">📜 公告</button>
+      <button class="tab-btn" id="btn-tab-alliance" onclick="window.switchTab('alliance')">🛡️ 聯盟</button>
       <button class="tab-btn" onclick="window.openGuideModal()" style="color:#10b981; border-color:#10b981;">📖 教學</button>
       <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 GM</button>
       <button onclick="window.logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
@@ -185,6 +186,29 @@
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px; color:#38bdf8;">📜 王國公告欄</h3>
         <div id="announcement-container">
             <p style="color:#94a3b8; text-align:center;">目前沒有新公告。</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- ==================== 🛡️ 聯盟系統分頁 ==================== -->
+    <div id="tab-alliance" class="tab-content">
+      <div class="card">
+        <h3 style="color:#38bdf8; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🛡️ 玩家同盟總部</h3>
+        <div id="alliance-info-panel">
+            <!-- 未加入聯盟顯示 -->
+            <div id="alliance-create-box">
+                <p style="color:#94a3b8; font-size:0.9rem; margin-bottom:10px;">您目前尚未加入任何聯盟。建立聯盟與盟友一同征服史詩地標！</p>
+                <input type="text" id="alliance-name-input" placeholder="輸入聯盟名稱 (例: 皇家騎士團)" style="width:100%; padding:10px; background:#1e2c40; color:#fff; border:1px solid #475569; border-radius:4px; margin-bottom:10px;">
+                <button onclick="window.createAlliance()" style="background:#2563eb; width:100%; padding:10px; font-weight:bold;">創建新聯盟</button>
+            </div>
+            <!-- 已加入聯盟顯示 (動態切換) -->
+            <div id="alliance-main-box" style="display:none;">
+                <h4 style="color:#facc15; font-size:1.1rem; margin-bottom:6px;" id="my-alliance-title">聯盟名稱</h4>
+                <p style="color:#cbd5e1; font-size:0.85rem; margin-bottom:12px;">盟主 ID: <span id="my-alliance-leader" style="color:#38bdf8;"></span></p>
+                <h5 style="color:#94a3b8; border-top:1px solid #334155; padding-top:8px;">👥 同盟成員</h5>
+                <div id="alliance-members-list" style="margin-top:6px; max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;"></div>
+                <button onclick="window.leaveAlliance()" style="background:#dc2626; margin-top:15px; width:100%; padding:8px; font-size:0.85rem;">退出聯盟</button>
+            </div>
         </div>
       </div>
     </div>
