@@ -1069,20 +1069,28 @@ function drawWorldMap() {
             else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
             else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
 
-            // 💡 如果圖片載入成功就畫圖，否則顯示備用的 Emoji
+            // 💡 繪製圖案 (稍微往上提一點，留空間給文字)
             if (resImg && resImg.complete && resImg.naturalHeight !== 0) {
-                // 這裡的 px, py - 5 還有 TILE_SIZE 可以根據你的圖片實際長寬比稍微加減微調
-                ctx.drawImage(resImg, px, py - 5, TILE_SIZE, TILE_SIZE);
+                ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
             } else {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
-                ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+35);
+                ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28);
             }
 
-            // 💡 底部狀態文字
+            // 💡 提取資源點的名字 (把 Emoji 切掉，例如 '🌾 豐饒農田' 變成 '豐饒農田')
+            const resName = cell.entity.name.split(' ')[1] || '資源區';
+
             ctx.textAlign='center'; 
+            
+            // 💡 繪製第一層文字：資源點名稱 (用亮黃色顯示)
+            ctx.fillStyle = '#fef08a';
+            ctx.font = '10px sans-serif'; 
+            ctx.fillText(resName, px+TILE_SIZE/2, py+42);
+
+            // 💡 繪製第二層文字：佔領狀態 (依狀態變色)
             ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
             ctx.font = 'bold 10px sans-serif'; 
-            ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '資源點'), px+TILE_SIZE/2, py+48);
+            ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
           }
         }
       }
