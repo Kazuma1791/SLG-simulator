@@ -1120,6 +1120,14 @@ function drawWorldMap() {
               if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
               else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12 + floatY, TILE_SIZE-24, TILE_SIZE-24); }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45 + floatY);
+          } else if (cell.entity.type === 'npc_faction_guard') {
+            if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
+                ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🛡️', px+TILE_SIZE/2, py+30+floatY);
+            }
+            ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
+            ctx.fillText('禁衛哨所', px+TILE_SIZE/2, py+50 + floatY);
           } else if (cell.entity.type === 'barbarian') {
             if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
             else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY); }
