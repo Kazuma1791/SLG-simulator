@@ -183,7 +183,7 @@ function runAntiCheat() {
 
     if (cheatDetected) {
         myData.isBanned = true; myData.banReason = reason;
-        myData.cheatLog.unshift(`[${new Date().toLocaleString()}] 查獲: ${reason} (木:${myData.wood}, 鐵:${myData.iron}, 兵:${myData.troops.infantry})`);
+        myData.cheatLog.unshift(`[${new Date().toLocaleString()}] 查獲: ${reason}`);
         setDoc(doc(db, "players", myUid), { isBanned: true, banReason: reason, cheatLog: myData.cheatLog }, { merge: true });
         document.getElementById('ban-screen').style.display = 'flex';
         document.getElementById('ban-reason').innerText = reason;
@@ -191,58 +191,6 @@ function runAntiCheat() {
     }
     return false;
 }
-
-function getTileEntity(x, y) {
-  if (x < 0 || x >= WORLD_COLS || y < 0 || y >= WORLD_ROWS) return null;
-  if (allCastles.some(p => p.x === x && p.y === y)) return null;
-  if (worldBosses.some(b => b.hp > 0 && b.x === x && b.y === y)) return null;
-  return MAP_CACHE[x][y].entity;
-}
-
-function getClearedPOI(x, y) {
-  if (!myData || !myData.clearedPOI) return null;
-  const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
-  if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
-}
-
-async function spawnWorldBoss(id) {
-  let bx, by, bName, bHp, mult;
-  if (id === 'BOSS_CORE') {
-    do { bx=50+Math.floor(Math.random()*12-6); by=50+Math.floor(Math.random()*12-6); } while(bx===50&&by===50);
-    bName = '🐉 滅世魔龍'; bHp = 500000; mult = 20;
-  } else if (id.startsWith('BOSS_MID')) {
-    do { bx=50+Math.floor(Math.random()*40-20); by=50+Math.floor(Math.random()*40-20); } while(Math.hypot(bx-50, by-50) < 15);
-    bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 150000; mult = 8;
-  } else {
-    do { bx=Math.floor(Math.random()*90+5); by=Math.floor(Math.random()*90+5); } while(Math.hypot(bx-50, by-50) <= 35);
-    bName = '🗿 大地岩魔'; bHp = 50000; mult = 3;
-  }
-  await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, despawnAt: Date.now() + 6 * 3600 * 1000 });
-}
-
-window.viewFullMap = () => {
-    zoom = Math.max(MIN_ZOOM, Math.min(canvas.width / (WORLD_COLS * TILE_SIZE), canvas.height / (WORLD_ROWS * TILE_SIZE)));
-    camX = (WORLD_COLS * TILE_SIZE) / 2 - (canvas.width / zoom) / 2;
-    camY = (WORLD_ROWS * TILE_SIZE) / 2 - (canvas.height / zoom) / 2;
-    clampCamera();
-    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
-    godModeFog = true; 
-    document.getElementById('btn-toggle-fog').innerText = "👁️ 開啟迷霧";
-    document.getElementById('btn-toggle-fog').style.background = "#ef4444";
-    updateFogOfWar();
-};
-
-window.toggleFogMode = () => {
-  godModeFog = !godModeFog; document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
-  document.getElementById('btn-toggle-fog').style.background = godModeFog ? "#ef4444" : "#7c3aed"; updateFogOfWar();
-};
-
-window.switchTab = (tabName) => {
-  document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + tabName).classList.add('active'); document.getElementById('btn-tab-' + tabName).classList.add('active');
-  if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
-  if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
-};
 
 window.registerUser = () => {
   const e = document.getElementById("email-input").value, p = document.getElementById("password-input").value;
@@ -255,38 +203,54 @@ window.loginUser = () => {
 };
 window.logoutUser = () => { signOut(auth).then(() => location.reload()); };
 
+// 🚨 強化版 Firebase 登入與錯誤捕捉機制
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     document.getElementById("login-panel").style.display = "none";
+    // 💡 預防畫面卡死，先顯示同步中文字
+    const titleEl = document.getElementById('player-title');
+    if (titleEl) titleEl.innerHTML = `<span style="color:#facc15;">🔄 同步雲端資料庫中...</span>`;
+    
     myUid = user.uid;
     const playerRef = doc(db, "players", myUid), worldRef = doc(db, "world_map", myUid);
-    const pSnap = await getDoc(playerRef), wSnap = await getDoc(worldRef);
     
-    let d = null;
-    if (!pSnap.exists()) {
-      let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
-      d = {
-        name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
-        wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
-        buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
-        research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
-        items: { speedup5m: 3, speedup30m: 0, speedup1h: 0, renameCard: 0, resourceCard: 0, shieldCard: 1 },
-        freeRenameUsed: false, lastRelocateTime: 0, shieldEndsAt: 0, isBanned: false, banReason: "", cheatLog: [],
-        buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。獲得護盾1個！']
-      };
-      await setDoc(playerRef, d);
-      myData = d;
-    } else {
-      myData = pSnap.data();
-      sanitizeData();
-      await setDoc(playerRef, myData, {merge:true});
+    try {
+        const pSnap = await getDoc(playerRef);
+        
+        let d = null;
+        if (!pSnap.exists()) {
+          let startX, startY; do { startX = Math.floor(Math.random() * 80) + 10; startY = Math.floor(Math.random() * 80) + 10; } while (Math.hypot(startX - 50, startY - 50) <= 32);
+          d = {
+            name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
+            wood: 200, iron: 200, food: 200, troops: { infantry: 10, archer: 0, cavalry: 0 },
+            buildings: { castle: 1, builder: 0, academy: 0, wall: 0, warehouse: 0, lumber: 1, mine: 1, farm: 1, barracks: 1 },
+            research: { infantry_atk: 0, archer_atk: 0, cavalry_atk: 0 },
+            items: { speedup5m: 3, speedup30m: 0, speedup1h: 0, renameCard: 0, resourceCard: 0, shieldCard: 1 },
+            freeRenameUsed: false, lastRelocateTime: 0, shieldEndsAt: 0, isBanned: false, banReason: "", cheatLog: [],
+            buildQueues: [], researchQueue: null, trainQueue: null, lastTick: Date.now(), clearedPOI: [], marches: [], logs: ['降生於大陸邊陲地帶。獲得護盾1個！']
+          };
+          await setDoc(playerRef, d);
+          myData = d;
+        } else {
+          myData = pSnap.data();
+          sanitizeData();
+          await setDoc(playerRef, myData, {merge:true});
+        }
+
+        isAdmin = (user.email === 'topacoau@gmail.com');
+
+        const wSnap = await getDoc(worldRef);
+        if (!wSnap.exists()) { 
+          await setDoc(worldRef, { name: myData.name, x: myData.x, y: myData.y, troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry, castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); 
+        } else { 
+          await setDoc(worldRef, { castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); 
+        }
+
+    } catch (err) {
+        console.error("雲端資料庫初始化遭拒絕:", err);
+        if (titleEl) titleEl.innerHTML = `<span style="color:#ef4444; font-size:0.85rem;">🚨 伺服器拒絕存取！請確認已更新 Firebase 規則。</span>`;
+        // 若發生權限錯誤，仍盡可能讓遊戲以唯讀方式運行，不卡死白畫面
     }
-
-    isAdmin = (user.email === 'topacoau@gmail.com');
-
-    if (!wSnap.exists()) { 
-      await setDoc(worldRef, { name: myData.name, x: myData.x, y: myData.y, troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry, castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); 
-    } else { await setDoc(worldRef, { castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); }
 
     onSnapshot(playerRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -469,8 +433,32 @@ window.gmAuditPlayer = async () => {
 }
 
 // ==========================================
-// 地圖視圖更新
+// 地圖與視圖更新
 // ==========================================
+window.viewFullMap = () => {
+    zoom = Math.max(MIN_ZOOM, Math.min(canvas.width / (WORLD_COLS * TILE_SIZE), canvas.height / (WORLD_ROWS * TILE_SIZE)));
+    camX = (WORLD_COLS * TILE_SIZE) / 2 - (canvas.width / zoom) / 2;
+    camY = (WORLD_ROWS * TILE_SIZE) / 2 - (canvas.height / zoom) / 2;
+    clampCamera();
+    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
+    godModeFog = true; 
+    document.getElementById('btn-toggle-fog').innerText = "👁️ 開啟迷霧";
+    document.getElementById('btn-toggle-fog').style.background = "#ef4444";
+    updateFogOfWar();
+};
+
+window.toggleFogMode = () => {
+  godModeFog = !godModeFog; document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
+  document.getElementById('btn-toggle-fog').style.background = godModeFog ? "#ef4444" : "#7c3aed"; updateFogOfWar();
+};
+
+window.switchTab = (tabName) => {
+  document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tabName).classList.add('active'); document.getElementById('btn-tab-' + tabName).classList.add('active');
+  if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
+  if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
+};
+
 function resizeCanvas() {
   const frame = document.getElementById('map-frame');
   if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); }
@@ -504,7 +492,7 @@ async function savePrivateData() {
     if (!myData || myData.isBanned) return;
     if (runAntiCheat()) return; 
     myData.lastTick = Date.now(); 
-    await setDoc(doc(db, "players", myUid), myData, { merge: true }); 
+    try { await setDoc(doc(db, "players", myUid), myData, { merge: true }); } catch(e){}
 }
 
 window.refreshMap = async function() {
@@ -610,7 +598,7 @@ async function localTick() {
       if(CFG.buildings[q.target]) {
          myData.buildings[q.target]++;
          myData.logs.unshift(`[建造就緒] ${CFG.buildings[q.target].name} 升級至 Lv.${myData.buildings[q.target]}`);
-         if (q.target === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
+         try{ setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true }); }catch(e){}
       }
       needSave = true;
     } else { newBuildQueues.push(q); }
@@ -631,7 +619,7 @@ async function localTick() {
        myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名${CFG.troops[myData.trainQueue.type].name}入列`);
     }
     myData.trainQueue = null; needSave = true; 
-    setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+    try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
   }
 
   worldBosses.forEach(boss => {
@@ -681,7 +669,7 @@ async function localTick() {
         if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
         
         myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
-        setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+        try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
       } 
       else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
@@ -726,11 +714,11 @@ async function resolveDefendNPC(m) {
     if (bKeys.length > 0) {
       const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; myData.buildings[rKey]--;
       dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
-      if (rKey === 'castle') setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true });
+      try{ setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true }); }catch(e){}
     }
     myData.logs.unshift(`[城防潰敗] ${m.npcName} 攻破防線！被掠奪資源${dLog}`);
   }
-  setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+  try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
 }
 
 async function resolveInteractNPC(m) {
@@ -1091,7 +1079,6 @@ window.syncTroop = (type, source) => {
     const inputEl = document.getElementById(`send-${type}`);
     const sliderEl = document.getElementById(`slider-${type}`);
     let max = parseInt(inputEl.max) || 0;
-    
     if (source === 'slider') {
         let val = parseInt(sliderEl.value) || 0;
         inputEl.value = val;
@@ -1202,7 +1189,7 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
     myData.x = targetAction.x; myData.y = targetAction.y;
     myData.lastRelocateTime = Date.now();
     myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
-    savePrivateData(); setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });
+    savePrivateData(); try{setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });}catch(e){}
     window.closeActionModal(); updateFogOfWar(); centerCameraOn(myData.x, myData.y); try{window.renderSelf();}catch(e){} window.refreshMap(); return;
   }
 
@@ -1228,12 +1215,12 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
   });
 
   myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
-  savePrivateData(); setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });
+  savePrivateData(); try{setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });}catch(e){}
   window.closeActionModal(); try{window.renderSelf();}catch(e){}
 });
 
 // ==========================================
-// 渲染 UI (加入三階加速選項與物資卡功能)
+// 渲染 UI (加入三階加速選項與物資卡)
 // ==========================================
 window.renderSelf = function() {
   if (myData.isBanned) return;
@@ -1458,7 +1445,6 @@ window.renderSelf = function() {
   }
 }
 
-// 📦 新增：物資卡使用功能
 window.useResourceCard = async () => {
     if (!myData || myData.items.resourceCard <= 0) return alert("背包中沒有足夠的軍用物資卡！");
     myData.items.resourceCard--;
@@ -1508,7 +1494,7 @@ window.useShield = async () => {
   myData.shieldEndsAt = now + 6 * 3600 * 1000;
   myData.logs.unshift(`[防禦系統] 啟動和平護盾，領地 6 小時內將免受攻擊！`);
   await savePrivateData();
-  await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true });
+  try{ await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true }); }catch(e){}
   alert('🛡️ 護盾已啟動！');
   try{ window.renderSelf(); }catch(e){} window.refreshMap();
 };
@@ -1520,7 +1506,7 @@ window.confirmRename = async () => {
   if(newName.length < 2 || newName.length > 8) return alert('名字長度需為 2~8 字元！');
   if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
   else if (myData.items.renameCard > 0) myData.items.renameCard--; else return alert('需要改名卡！');
-  myData.name = newName; await savePrivateData(); await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });
+  myData.name = newName; await savePrivateData(); try{await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });}catch(e){}
   alert("✅ 名稱已更改！"); window.closeRenameModal(); try{ window.renderSelf(); }catch(e){} window.refreshMap();
 };
 
