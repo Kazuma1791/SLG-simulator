@@ -49,7 +49,7 @@ const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
 
 // 👇 新增這兩行載入世界大圖
 const imgWorldMap = new Image(); 
-imgWorldMap.src = 'map.png';
+imgWorldMap.src = 'map.jpg';
 
 // 💡 恢復完整的參數設定，防止變數讀取為 undefined 或 NaN
 const CFG = {
