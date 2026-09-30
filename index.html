@@ -126,6 +126,10 @@
           </div>
         </div>
         <div class="map-frame" id="map-frame">
+        <!-- 📢 地圖專屬浮動公告橫幅 -->
+          <div id="map-announcement-bar" style="display:none; position:absolute; top:15px; left:50%; transform:translateX(-50%); background:rgba(10, 15, 29, 0.85); border:1px solid #facc15; border-radius:20px; padding:6px 20px; color:#facc15; z-index:100; max-width:80%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px rgba(250,204,21,0.4); pointer-events:none;">
+             📢 <span id="map-announcement-text"></span>
+          </div>
           <canvas id="worldCanvas"></canvas>
           <div class="zoom-controls">
             <button class="zoom-btn" onclick="window.zoomMapBtn(1.3)">+</button>
