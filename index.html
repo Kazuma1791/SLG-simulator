@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>多人領地戰 - 終極視覺強化版</title>
+  <title>多人領地戰 - 史詩營運版</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .speed-btn-group { display: flex; gap: 4px; margin-top: 8px; }
@@ -23,6 +23,11 @@
     .troop-input-row { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 8px; background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1e2c40; font-size: 0.9rem; }
     .troop-input-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
     .troop-input-row input[type="number"], .rename-input { width: 75px; background: #1e2c40; color: white; border: 1px solid #475569; padding: 6px; border-radius: 4px; text-align: right; font-size: 1rem; font-weight: bold; }
+    
+    /* 新手教學專屬排版 */
+    .guide-section { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #334155; }
+    .guide-section h4 { color: #facc15; margin-bottom: 5px; font-size: 1.05rem; }
+    .guide-section p { color: #cbd5e1; font-size: 0.9rem; line-height: 1.4; margin: 0; }
   </style>
 </head>
 <body>
@@ -35,6 +40,36 @@
       <p style="color: #facc15; font-size: 1.1rem; margin-bottom: 30px;">封鎖原因：<span id="ban-reason" style="font-weight: bold; color: #fff;">未知</span></p>
       <p style="color: #94a3b8; font-size: 0.9rem;">如果您認為這是一個誤判，請聯繫遊戲管理員 (GM) 解封。</p>
       <button onclick="window.logoutUser()" style="margin-top: 30px; background: #475569; padding: 12px 24px; font-size: 1.1rem;">登出帳號</button>
+  </div>
+
+  <!-- 📖 新手教學彈窗 -->
+  <div id="guide-modal" class="modal-overlay" style="z-index: 5000; display: none;">
+    <div class="action-modal" style="max-width: 450px; text-align: left; max-height: 85vh; overflow-y: auto;">
+      <h3 style="color:#38bdf8; text-align:center; border-bottom: 2px solid #1e2c40; padding-bottom: 10px;">📖 領主求生指南</h3>
+      
+      <div class="guide-section" style="margin-top:10px;">
+        <h4>1. ⚒️ 基礎發育 (內政)</h4>
+        <p>「木材、鐵礦、糧草」是維持王國運轉的核心。請優先在【內政】升級資源建築，並升級「工匠小屋」來增加同時建造的數量！</p>
+      </div>
+      <div class="guide-section">
+        <h4>2. ⚔️ 軍事武力 (招募)</h4>
+        <p>提升「兵營」等級可解鎖強大的弓兵與騎兵。注意：部隊會持續消耗您的「糧草」，但若糧草耗盡部隊不會餓死，只是無法繼續囤積。</p>
+      </div>
+      <div class="guide-section">
+        <h4>3. 🌍 地圖探索 (討伐)</h4>
+        <p>切換至【地圖】，點擊周圍的「流寇、野蠻人或遺跡」發起行軍。討伐成功將獲得大量資源、加速卡甚至珍貴的「物資卡」。</p>
+      </div>
+      <div class="guide-section">
+        <h4>4. 🐉 史詩世界首領 (Boss)</h4>
+        <p>地圖上巨大的首領需要全服玩家協力討伐！攻擊首領不會損失兵力，當首領倒下時，系統會依照您的「傷害貢獻度」派發豪華獎勵。</p>
+      </div>
+      <div class="guide-section" style="border-bottom: none;">
+        <h4>5. 🛡️ 生存法則 (護盾與遷城)</h4>
+        <p>點擊地圖空地可以進行「遷城」以逃離戰火或靠近資源區。當您準備離線時，請務必到【背包】開啟「和平護盾」，以免遭到其他玩家掠奪！</p>
+      </div>
+
+      <button onclick="window.closeGuideModal()" style="background: #10b981; width: 100%; margin-top: 10px; font-size:1.1rem; padding: 12px;">我準備好征服世界了！</button>
+    </div>
   </div>
 
   <!-- 改名彈窗 -->
@@ -124,7 +159,9 @@
       <button class="tab-btn" id="btn-tab-city" onclick="window.switchTab('city')">🏰 內政</button>
       <button class="tab-btn" id="btn-tab-radar" onclick="window.switchTab('radar')">📡 雷達</button>
       <button class="tab-btn" id="btn-tab-inv" onclick="window.switchTab('inv')">🎒 背包</button>
-      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 營運面板</button>
+      <!-- 💡 新增的教學按鈕 -->
+      <button class="tab-btn" onclick="window.openGuideModal()" style="color:#10b981; border-color:#10b981;">📖 教學</button>
+      <button class="tab-btn" id="btn-tab-gm" onclick="window.switchTab('gm')" style="display:none; color:#facc15; border-color:#facc15;">👑 GM</button>
       <button onclick="window.logoutUser()" style="background:#dc2626; padding:6px 10px; font-size:0.8rem; border-radius:6px; margin-left:auto;">登出</button>
     </div>
 
@@ -134,7 +171,6 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
           <button id="btn-toggle-fog" onclick="window.toggleFogMode()" style="background:#7c3aed; padding:6px 8px; font-size:0.75rem; border-radius:4px;">👁️ 關閉迷霧</button>
           <div style="display:flex; gap:6px;">
-            <!-- 💡 將全圖按鈕替換為刷新地圖按鈕 -->
             <button onclick="window.refreshMap()" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem;">🔄 刷新地圖</button>
             <button onclick="window.locateHome()" style="background:#475569; padding:6px 10px; font-size:0.8rem;">📍 回城</button>
           </div>
@@ -198,7 +234,7 @@
         <h3 style="border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">🎒 領主戰略背包</h3>
         <div class="grid">
           <div class="item-card" style="justify-content:center; text-align:center;">
-            <div style="font-size:2rem; margin-bottom:4px;">🛡️️</div>
+            <div style="font-size:2rem; margin-bottom:4px;">🛡️</div>
             <strong style="font-size:0.95rem;">護盾 (6h)</strong>
             <span style="color:#94a3b8; font-size:0.85rem; margin:6px 0;">擁有: <span id="inv-shield" style="color:#fff; font-weight:bold;">0</span></span>
             <button onclick="window.useShield()" style="background:#06b6d4; margin-top:auto; width:100%;">使用</button>
