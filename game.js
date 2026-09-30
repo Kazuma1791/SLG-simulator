@@ -1082,60 +1082,56 @@ function drawWorldMap() {
 
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
         const clrInfo = getClearedPOI(x, y);
-        // 💡 讓所有地標與資源點產生「呼吸般的微幅上下浮動」
-        const floatY = Math.sin(t / 300 + x) * 6; 
         
         if (clrInfo) {
-          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35 + floatY);
+          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
-              // 💡 王都放大 3 倍！並加入「動態金色光暈」
               ctx.shadowColor = '#facc15'; ctx.shadowBlur = 15 + Math.sin(t/200)*10;
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCapital, px - TILE_SIZE, py + floatY - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
+                  ctx.drawImage(imgDarkCapital, px - TILE_SIZE, py - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
               } else {
-                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
               }
-              ctx.shadowBlur = 0; // 畫完圖後重置光暈
+              ctx.shadowBlur = 0;
               ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign='center'; 
-              ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py + TILE_SIZE*2 + floatY - 10);
+              ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py + TILE_SIZE*2 - 10);
               
           } else if (cell.entity.type === 'npc_fortress') {
-              // 💡 要塞放大 2 倍！並加入「動態紅色光暈」
               ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10 + Math.sin(t/200)*5;
               if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkFortress, px - TILE_SIZE/2, py + floatY - TILE_SIZE/2, TILE_SIZE * 2, TILE_SIZE * 2);
+                  ctx.drawImage(imgDarkFortress, px - TILE_SIZE/2, py - TILE_SIZE/2, TILE_SIZE * 2, TILE_SIZE * 2);
               } else {
-                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
               }
               ctx.shadowBlur = 0;
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center'; 
-              ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 + floatY - 5);
+              ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 - 5);
               
-          } else if (cell.entity.type === 'npc_castle') {
-              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
-              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10 + floatY, TILE_SIZE-20, TILE_SIZE-20); }
-              ctx.fillStyle = '#f87171'; ctx.font = '11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45 + floatY);
-          } else if (cell.entity.type === 'npc_outpost') {
-              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
-              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12 + floatY, TILE_SIZE-24, TILE_SIZE-24); }
-              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45 + floatY);
           } else if (cell.entity.type === 'npc_faction_guard') {
             if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
-                ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+                ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
             } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🛡️', px+TILE_SIZE/2, py+30+floatY);
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🛡️', px+TILE_SIZE/2, py+30);
             }
             ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
-            ctx.fillText('禁衛哨所', px+TILE_SIZE/2, py+50 + floatY);
+            ctx.fillText('禁衛哨所', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'npc_castle') {
+              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20); }
+              ctx.fillStyle = '#f87171'; ctx.font = '11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'npc_outpost') {
+              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24); }
+              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
-            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY); }
-            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50 + floatY);
+            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py - 10, TILE_SIZE + 4, TILE_SIZE + 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30); }
+            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'relic') {
-            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY); }
-            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45 + floatY);
+            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30); }
+            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid);
@@ -1144,13 +1140,13 @@ function drawWorldMap() {
             else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
             else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
 
-            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py + floatY - 10, TILE_SIZE - 4, TILE_SIZE - 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28 + floatY); }
+            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28); }
 
             const resName = cell.entity.name.split(' ')[1] || '資源區';
-            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42 + floatY);
+            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42);
             ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
-            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54 + floatY);
+            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
           }
         }
       }
