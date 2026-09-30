@@ -42,6 +42,7 @@ const imgDarkFortress = new Image(); imgDarkFortress.src = 'dark_fortress.png';
 const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
 const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
 const imgBarbarian = new Image(); imgBarbarian.src = 'ico_buildings_stronghold_cyclopsMound.png';
+const imgRelic = new Image(); imgRelic.src = 'relic.png'; // 💡 新增遺跡圖片載入
 
 const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
@@ -60,7 +61,7 @@ const CFG = {
     barracks:  { name: '兵營',     rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
   },
   techs: {
-    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 600 },
+    infantry_atk: { name: '步兵鍛甲', icon: '🛡', baseW: 300, baseI: 300, baseTime: 600 },
     archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 600 },
     cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 }
   },
@@ -99,6 +100,7 @@ function getTileTypeRaw(x, y) {
   if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
 }
 
+// 💡 移除了流寇，調整野蠻人與遺跡的生成機率
 function getStaticEntity(x, y, type) {
   if (x === 50 && y === 50) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
   if (type === 'water') return null;
@@ -107,21 +109,19 @@ function getStaticEntity(x, y, type) {
   
   if (dist <= 14) {
     if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
-    if (rand < 0.035) return { type: 'npc_super_castle', name: '🏰 夢魘巨城', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
-    if (rand < 0.090) return { type: 'relic', name: '🏛️️ 奇蹟遺跡', reqFood: 200, loot: { wood: 3000, iron: 3000, food: 3000 } };
+    if (rand < 0.050) return { type: 'npc_super_castle', name: '🏰 夢魘巨城', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
+    if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 3000, iron: 3000, food: 3000 } };
     return null;
   }
   if (dist <= 32) {
     if (rand < 0.010) return { type: 'npc_castle', name: '🏰 黑暗城堡', reqPwr: 2000, loot: { wood: 20000, iron: 20000, food: 20000, speedup30m: 1 } };
-    if (rand < 0.040) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
-    if (rand < 0.070) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 1500, iron: 1500, food: 1500 } };
-    if (rand < 0.110) return { type: 'bandit', name: '⛺ 精銳流寇', reqPwr: 200, loot: { wood: 2000, food: 2000, iron: 1000 } };
+    if (rand < 0.050) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
+    if (rand < 0.090) return { type: 'relic', name: '🏛️ 遠古遺跡', reqFood: 100, loot: { wood: 1500, iron: 1500, food: 1500 } };
     return null;
   }
   if (rand < 0.005) return { type: 'npc_outpost', name: '🏚️ 黑暗前哨', reqPwr: 300, loot: { wood: 5000, iron: 5000, food: 5000, speedup5m: 3 } };
-  if (rand < 0.025) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
-  if (rand < 0.055) return { type: 'bandit', name: '⛺ 流寇營地', reqPwr: 20, loot: { wood: 500, food: 400, iron: 300 } };
-  if (rand < 0.075) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
+  if (rand < 0.035) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
+  if (rand < 0.065) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
   return null;
 }
 
@@ -214,18 +214,6 @@ async function spawnWorldBoss(id) {
   }
   await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 });
 }
-
-window.viewFullMap = () => {
-    zoom = Math.max(MIN_ZOOM, Math.min(canvas.width / (WORLD_COLS * TILE_SIZE), canvas.height / (WORLD_ROWS * TILE_SIZE)));
-    camX = (WORLD_COLS * TILE_SIZE) / 2 - (canvas.width / zoom) / 2;
-    camY = (WORLD_ROWS * TILE_SIZE) / 2 - (canvas.height / zoom) / 2;
-    clampCamera();
-    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`;
-    godModeFog = true; 
-    document.getElementById('btn-toggle-fog').innerText = "👁️ 開啟迷霧";
-    document.getElementById('btn-toggle-fog').style.background = "#ef4444";
-    updateFogOfWar();
-};
 
 window.toggleFogMode = () => {
   godModeFog = !godModeFog; document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
@@ -828,7 +816,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 - 全新【中世紀三階腐化地貌】
+// 🎨 渲染世界地圖 - 【中世紀三階腐化地貌 & 比例調整】
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -857,7 +845,7 @@ function drawWorldMap() {
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
 
-      // 🎨 腐化平原
+      // 🎨 地貌渲染
       if (cell.type === 'plains') { 
         ctx.fillStyle = isCore ? '#3b1c1c' : (isMid ? '#544238' : '#8f9779'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -868,7 +856,6 @@ function drawWorldMap() {
         ctx.moveTo(px+35, py+40); ctx.lineTo(px+40, py+32); ctx.lineTo(px+45, py+40);
         ctx.stroke();
       }
-      // 🎨 腐化森林
       else if (cell.type === 'forest') { 
         ctx.fillStyle = isCore ? '#1a0d0d' : (isMid ? '#33271e' : '#3e522d'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -877,7 +864,6 @@ function drawWorldMap() {
         ctx.beginPath(); ctx.moveTo(px+15, py+20); ctx.lineTo(px+5, py+45); ctx.lineTo(px+25, py+45); ctx.fill();
         ctx.beginPath(); ctx.moveTo(px+40, py+25); ctx.lineTo(px+30, py+45); ctx.lineTo(px+50, py+45); ctx.fill();
       }
-      // 🎨 腐化山脈
       else if (cell.type === 'mountain') { 
         ctx.fillStyle = isCore ? '#1f1313' : (isMid ? '#3a3430' : '#5c544d'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -888,7 +874,6 @@ function drawWorldMap() {
         ctx.fillStyle = isCore ? '#7f1d1d' : (isMid ? '#9ca3af' : '#dcd7d4');
         ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+18, py+23); ctx.lineTo(px+27, py+28); ctx.lineTo(px+35, py+23); ctx.fill();
       }
-      // 🎨 腐化水域
       else { 
         ctx.fillStyle = isCore ? '#2b1116' : (isMid ? '#2f3b4c' : '#4a6b8c'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
@@ -900,12 +885,10 @@ function drawWorldMap() {
       }
 
       ctx.strokeStyle = isCore ? 'rgba(153, 27, 27, 0.15)' : 'rgba(0, 0, 0, 0.15)'; 
-      ctx.lineWidth = 1;
-      ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+      ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
       const isExplored = exploredTiles[x][y] || godModeFog;
       if (!isExplored) { 
-          // 🌫️ 三階迷霧：核心血紅 / 中間灰燼 / 外圍羊皮紙
           ctx.fillStyle = isCore ? 'rgba(20, 5, 5, 0.75)' : (isMid ? 'rgba(25, 20, 20, 0.7)' : 'rgba(30, 20, 15, 0.7)');
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
           continue; 
@@ -918,50 +901,50 @@ function drawWorldMap() {
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
+          // 💡 調整比例：放大 NPC 城堡，縮小野蠻人與遺跡
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCapital, px, py + floatY - 10, TILE_SIZE, TILE_SIZE + 10);
+                  ctx.drawImage(imgDarkCapital, px - 15, py + floatY - 25, TILE_SIZE + 30, TILE_SIZE + 30);
               } else {
                   ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
-                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+35+floatY);
               }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_fortress') {
               if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkFortress, px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  ctx.drawImage(imgDarkFortress, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
               } else {
                   ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
-                  ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+35+floatY);
               }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_castle') {
               if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCastle, px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  ctx.drawImage(imgDarkCastle, px - 5, py + floatY - 10, TILE_SIZE + 10, TILE_SIZE + 10);
               } else {
                   ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
-                  ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+32+floatY);
               }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'npc_outpost') {
               if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkOutpost, px, py + floatY, TILE_SIZE, TILE_SIZE);
+                  ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
               } else {
                   ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
-                  ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏚️', px+TILE_SIZE/2, py+32+floatY);
               }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
             if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
-                ctx.drawImage(imgBarbarian, px - 10, py + floatY - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+                // 野蠻人：略小於城堡
+                ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
             } else {
                 ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
             }
             ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
-          } else if (cell.entity.type === 'bandit') {
-            ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.fillText('⛺', px+TILE_SIZE/2, py+30+floatY);
-            ctx.fillStyle = '#fdba74'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('流寇', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'relic') {
-            ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+            if (imgRelic.complete && imgRelic.naturalHeight !== 0) {
+                // 遺跡：縮小
+                ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+            }
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           }
         }
@@ -1018,8 +1001,9 @@ function drawWorldMap() {
     
     let currentCastleImg = castleImgs[imgIdx];
     
+    // 💡 調整比例：放大所有玩家的城堡
     if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-        ctx.drawImage(currentCastleImg, px - 10, py - 20, TILE_SIZE + 20, TILE_SIZE + 20);
+        ctx.drawImage(currentCastleImg, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
     } else {
         ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16,31,26);
         ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12,10,30); ctx.fillRect(px+36,py+12,10,30);
@@ -1405,7 +1389,7 @@ window.renderSelf = function() {
             <div class="item-card">
                 <div>
                 <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️️${formatCompact(cost.i)}</span></div>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
                 </div>
                 ${progressHtml}
                 ${btnHtml}
