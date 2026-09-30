@@ -12,9 +12,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 💡 巨型地圖與陣列初始化
+// 💡 地圖擴大四倍：200 x 200，中心點為 100, 100
 let myUid = null, myData = null, allCastles = [], worldBosses = [], worldNodes = [], hasCentered = false;
-let godModeFog = false, isAdmin = false; 
+let godModeFog = false, isAdmin = false, currentAnnouncement = null; 
 
 const TILE_SIZE = 55, WORLD_COLS = 200, WORLD_ROWS = 200, BASE_VISION_RADIUS = 5;
 const RELOCATE_COOLDOWN = 12 * 60 * 60 * 1000; 
@@ -42,11 +42,12 @@ const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
 const imgBossOuter = new Image(); imgBossOuter.src = 'boss_outer.png';
 
-// 💡 載入你專屬的野外資源點圖片
+// 💡 載入野外資源點圖片
 const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
 const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
 const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
 
+// 💡 恢復完整的參數設定，防止變數讀取為 undefined 或 NaN
 const CFG = {
   buildings: { 
     castle:    { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 1200, maxLevel: 99 },
@@ -99,6 +100,7 @@ function getTileTypeRaw(x, y) {
   if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
 }
 
+// 💡 野外資源與 NPC 生成
 function getStaticEntity(x, y, type) {
   if (x === 100 && y === 100) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
   if (type === 'water') return null;
@@ -132,6 +134,7 @@ function initMapCache() {
 }
 initMapCache();
 
+// 💡 強制補齊缺失的變數，防止出現 NaN
 function sanitizeData() {
   if (!myData) return;
   if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
@@ -156,6 +159,7 @@ function sanitizeData() {
   if (!Array.isArray(myData.logs)) myData.logs = ['歡迎來到領地戰！'];
   if (!Array.isArray(myData.cheatLog)) myData.cheatLog = [];
   if (!Array.isArray(myData.claimedBosses)) myData.claimedBosses = [];
+  if (!Array.isArray(myData.claimedAnnouncements)) myData.claimedAnnouncements = [];
   
   if (isNaN(myData.wood) || myData.wood === null) myData.wood = 200;
   if (isNaN(myData.iron) || myData.iron === null) myData.iron = 200;
@@ -192,6 +196,7 @@ function getClearedPOI(x, y) {
   if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
 }
 
+// 💡 絕對淨空領域：嚴格防重疊的 Boss 生成器
 async function spawnWorldBoss(id) {
   let bx, by, bName, bHp, mult, overlap;
   let tries = 0;
@@ -211,16 +216,21 @@ async function spawnWorldBoss(id) {
     if (id.startsWith('BOSS_MID') && dist < 30) { overlap = true; continue; }
     if (id.startsWith('BOSS_OUTER') && dist <= 70) { overlap = true; continue; }
     
+    // 避開其他 Boss (15格)
     for (let b of worldBosses) {
         if (b.id !== id && (b.hp > 0 || b.despawnAt > Date.now())) {
             if (Math.hypot(b.x - bx, b.y - by) < 15) { overlap = true; break; }
         }
     }
     if (overlap) continue;
+
+    // 避開玩家主城 (8格)
     for (let c of allCastles) {
         if(Math.hypot(c.x-bx, c.y-by) < 8) { overlap=true; break; }
     }
     if(overlap) continue;
+
+    // 嚴格地貌檢查 (不准有山水、不准有實體)
     for (let i=-1; i<=2; i++) {
         for (let j=-1; j<=2; j++) {
             const cell = MAP_CACHE[bx+i] && MAP_CACHE[bx+i][by+j];
@@ -237,6 +247,8 @@ async function spawnWorldBoss(id) {
   else { bName = '🗿 大地岩魔'; bHp = 50000; mult = 3; }
   
   const bObj = { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
+  
+  // 立刻寫入本地陣列防止高併發重疊
   const idx = worldBosses.findIndex(x=>x.id===id); 
   if(idx>=0) worldBosses[idx]={id,...bObj}; else worldBosses.push({id,...bObj});
 
@@ -255,6 +267,7 @@ window.switchTab = (tabName) => {
   document.getElementById('tab-' + tabName).classList.add('active'); document.getElementById('btn-tab-' + tabName).classList.add('active');
   if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
   if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
+  if (tabName === 'mail') { window.renderAnnouncement(); }
 };
 
 window.registerUser = () => {
@@ -329,6 +342,17 @@ onAuthStateChanged(auth, async (user) => {
       }
     });
 
+    // 💡 監聽全服公告系統
+    onSnapshot(doc(db, "world_map", "announcement"), (snap) => {
+        if(snap.exists()) {
+            currentAnnouncement = snap.data();
+            if (myData && !myData.claimedAnnouncements.includes(currentAnnouncement.id)) {
+                const b = document.getElementById('btn-tab-mail'); if(b) b.innerText = "📜 公告 🔴";
+            }
+            if(document.getElementById('tab-mail').classList.contains('active')) window.renderAnnouncement();
+        }
+    });
+
     const bossIds = ['BOSS_CORE'];
     for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
     for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
@@ -348,6 +372,43 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null; isAdmin = false; document.getElementById('btn-tab-gm').style.display = 'none';
   }
 });
+
+// 💡 渲染公告系統
+window.renderAnnouncement = () => {
+    const cont = document.getElementById('announcement-container'); if (!cont) return;
+    if (!currentAnnouncement) { cont.innerHTML = '<p style="color:#94a3b8; text-align:center;">目前沒有新公告。</p>'; return; }
+
+    const a = currentAnnouncement;
+    const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(a.id);
+    let rStr = [];
+    if(a.wood) rStr.push(`🌲${formatCompact(a.wood)}`); if(a.iron) rStr.push(`⛏️️${formatCompact(a.iron)}`);
+    if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); if(a.speed) rStr.push(`⚡1hx${a.speed}`);
+    
+    let btnHtml = '';
+    if (rStr.length > 0) {
+        if (isClaimed) btnHtml = `<button style="background:#475569; margin-top:10px; width:100%; border-radius:4px; padding:8px;" disabled>✅ 獎勵已領取</button>`;
+        else btnHtml = `<button style="background:#10b981; margin-top:10px; width:100%; border-radius:4px; padding:8px; color:white; font-weight:bold;" onclick="window.claimAnnouncement('${a.id}')">🎁 領取全服補給</button>`;
+    }
+    cont.innerHTML = `<div style="background:#1e293b; padding:15px; border-radius:6px; border:1px solid #334155;"><div style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">發布時間: ${new Date(a.timestamp).toLocaleString()}</div><div style="color:#fff; font-size:1rem; line-height:1.5; margin-bottom:12px; white-space:pre-wrap;">${a.text}</div>${rStr.length>0?`<div style="background:#0a0f1d; padding:8px; border-radius:4px; font-size:0.9rem; color:#38bdf8;">附贈物資：${rStr.join(' ')}</div>`:''}${btnHtml}</div>`;
+};
+
+window.claimAnnouncement = async (id) => {
+    if (!currentAnnouncement || currentAnnouncement.id !== id || myData.claimedAnnouncements.includes(id)) return;
+    const a = currentAnnouncement;
+    if(a.wood) myData.wood += a.wood; if(a.iron) myData.iron += a.iron; if(a.food) myData.food += a.food; if(a.speed) myData.items.speedup1h += a.speed;
+    myData.claimedAnnouncements.push(id); myData.logs.unshift(`[系統] 成功領取全服公告補給！`);
+    await savePrivateData();
+    const btn = document.getElementById('btn-tab-mail'); if(btn) btn.innerText = "📜 公告";
+    window.renderAnnouncement(); window.renderSelf();
+};
+
+window.gmSendAnnouncement = async () => {
+    if (!isAdmin) return;
+    const txt = document.getElementById('gm-announce-text').value.trim();
+    if (!txt) return alert("請輸入公告內容！");
+    const ann = { id: 'ANN_' + Date.now(), text: txt, wood: parseInt(document.getElementById('gm-ann-wood').value)||0, iron: parseInt(document.getElementById('gm-ann-iron').value)||0, food: parseInt(document.getElementById('gm-ann-food').value)||0, speed: parseInt(document.getElementById('gm-ann-speed').value)||0, timestamp: Date.now() };
+    await setDoc(doc(db, "world_map", "announcement"), ann); alert("📢 全服公告與獎勵已發布！"); document.getElementById('gm-announce-text').value = '';
+};
 
 window.addEventListener("beforeunload", () => { if (myUid && myData) savePrivateData(); });
 
@@ -465,7 +526,7 @@ window.gmAuditPlayer = async () => {
     if(d.iron > 50000000) { report += `⚠️ 鐵礦異常高: ${formatCompact(d.iron)}\n`; isSus = true; }
     if(d.food > 50000000) { report += `⚠️ 糧草異常高: ${formatCompact(d.food)}\n`; isSus = true; }
     if(d.troops && (d.troops.infantry > 5000000 || d.troops.archer > 5000000 || d.troops.cavalry > 5000000)) { report += `⚠️ 兵力數量異常！\n`; isSus = true; }
-    if(d.items && (d.items.speedup1h > 10000 || d.items.shieldCard > 10000)) { report += `⚠️️ 道具數量異常！\n`; isSus = true; }
+    if(d.items && (d.items.speedup1h > 10000 || d.items.shieldCard > 10000)) { report += `⚠️ 道具數量異常！\n`; isSus = true; }
     if(!isSus) report += `✅ 當前數值無明顯異常\n`;
     report += `\n--- 外掛查緝紀錄 ---\n`;
     if (d.cheatLog && d.cheatLog.length > 0) { d.cheatLog.slice(0, 5).forEach(log => report += log + '\n'); } else { report += `無違規紀錄。\n`; }
@@ -510,15 +571,14 @@ function centerCameraOn(tx, ty) {
   clampCamera();
 }
 
-// 💡 關鍵修復：嚴格清除 undefined 以免 Firebase 阻擋寫入並導致本地快取回滾
 async function savePrivateData() { 
     if (!myData || myData.isBanned) return;
     if (runAntiCheat()) return; 
     myData.lastTick = Date.now(); 
     try { 
-        const cleanData = JSON.parse(JSON.stringify(myData)); // 強制清除所有 undefined 屬性
+        const cleanData = JSON.parse(JSON.stringify(myData));
         await setDoc(doc(db, "players", myUid), cleanData, { merge: true }); 
-    } catch(e) { console.error("存檔失敗:", e); }
+    } catch(e) {}
 }
 
 window.refreshMap = async function() {
@@ -526,6 +586,7 @@ window.refreshMap = async function() {
   allCastles = []; worldNodes = [];
   snap.forEach(d => { 
       const data = d.data();
+      if(d.id === 'announcement') return;
       if(!data.isBoss && !data.isNode) allCastles.push({ id: d.id, ...data });
       if(data.isNode) worldNodes.push({ id: d.id, ...data });
   });
@@ -601,8 +662,7 @@ async function localTick() {
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
 
-  const hrToSec = 3600;
-  const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / hrToSec;
+  const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
   const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
   
   myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
@@ -1391,7 +1451,6 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
     myData.lastRelocateTime = Date.now();
     myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
     
-    // 💡 關鍵修復：等待資料庫寫入完成，確保不被回滾
     await savePrivateData(); 
     try { await setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true }); } catch(e){}
     
@@ -1438,6 +1497,10 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
   window.closeActionModal(); 
   try{window.renderSelf();}catch(e){}
 });
+
+function genCard(title, lvl, info, resStr, progHtml, btnHtml) {
+  return `<div class="item-card"><div style="flex:1"><strong style="font-size:1.05rem;">${title}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span><div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">${info}</div><div class="item-cost">${resStr}</div></div><div style="width:100px;text-align:right">${progHtml}${btnHtml}</div></div>`;
+}
 
 window.renderSelf = function() {
   if (myData.isBanned) return;
@@ -1568,15 +1631,7 @@ window.renderSelf = function() {
                 btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
             }
 
-            return `
-            <div class="item-card">
-                <div>
-                <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
-                </div>
-                ${progressHtml}
-                ${btnHtml}
-            </div>`;
+            return genCard(CFG.buildings[key].name, lvl, `升級需 ${formatTime(timeSec)}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
           }).join('');
       }
 
@@ -1603,16 +1658,7 @@ window.renderSelf = function() {
                       btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
                   }
 
-                  return `
-                  <div class="item-card">
-                      <div>
-                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span>
-                      <div class="item-info">附加戰力: +${lvl}</div>
-                      <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
-                      </div>
-                      ${progressHtml}
-                      ${btnHtml}
-                  </div>`;
+                  return genCard(`${d.icon} ${d.name}`, lvl, `附加戰力: +${lvl}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
               }).join('');
           }
       }
@@ -1641,16 +1687,7 @@ window.renderSelf = function() {
                   btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
               }
 
-              return `
-              <div class="item-card" style="justify-content:flex-start;">
-                  <div>
-                  <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong>
-                  <div class="item-info">戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h</div>
-                  <div class="item-cost"><span>🌲${formatCompact(d.w * trainCount)}</span><span>⛏️${formatCompact(d.i * trainCount)}</span><span>🌾${formatCompact(d.f * trainCount)}</span></div>
-                  </div>
-                  ${progressHtml}
-                  ${btnHtml}
-              </div>`;
+              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.costW * trainCount)} ⛏️${formatCompact(d.costI * trainCount)} 🌾${formatCompact(d.costF * trainCount)}`, progressHtml, btnHtml);
           }).join('');
       }
 
@@ -1758,11 +1795,11 @@ window.trainTroopType = async (typeKey) => {
   const req = CFG.troops[typeKey];
   const bLvl = myData.buildings.barracks || 1;
   const trainCount = bLvl * 5;
-  const costW = req.w * trainCount, costI = req.i * trainCount, costF = req.f * trainCount;
+  const costW = req.costW * trainCount, costI = req.costI * trainCount, costF = req.costF * trainCount;
 
-  if (myData.buildings.barracks < req.reqLvl) return alert('兵營等級不足！');
+  if (bLvl < req.reqLvl) return alert('兵營等級不足！');
   if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
   myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
   myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
-  await savePrivateData();
+  await savePrivateData(); window.renderSelf();
 };
