@@ -47,6 +47,9 @@ const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
 const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
 const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
 
+// 💡 載入這張史詩級的世界地圖底圖
+const imgWorldMap = new Image(); imgWorldMap.src = 'image_17581f.png';
+
 // 💡 恢復完整的參數設定，防止變數讀取為 undefined 或 NaN
 const CFG = {
   buildings: { 
@@ -96,8 +99,8 @@ function formatTime(sec) {
 }
 
 function getTileTypeRaw(x, y) {
-  const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const rand = v - Math.floor(v);
-  if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
+  // 💡 廢棄舊的隨機地形演算法，統一視為平地，讓新圖片上的任何區域都能自由探索與搬遷
+  return 'plains'; 
 }
 
 // 💡 野外資源與 NPC 生成
@@ -1021,65 +1024,30 @@ function drawWorldMap() {
   const sR = Math.max(0, Math.floor(camY/TILE_SIZE)-1), eR = Math.min(WORLD_ROWS, Math.ceil((camY+vH)/TILE_SIZE)+1);
   const t = Date.now();
 
+  // 💡 1. 繪製整張 200x200 的史詩地圖作為底層背景
+  if (imgWorldMap.complete && imgWorldMap.naturalHeight !== 0) {
+      ctx.drawImage(imgWorldMap, 0, 0, WORLD_COLS * TILE_SIZE, WORLD_ROWS * TILE_SIZE);
+  }
+
+  // 💡 2. 處理迷霧、網格與地圖上的動態物件
   for (let x = sC; x < eC; x++) {
     for (let y = sR; y < eR; y++) {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
       const px = x*TILE_SIZE, py = y*TILE_SIZE;
       
-      if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
-
-      const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
-      const dist = Math.hypot(x-100, y-100);
-      const isCore = dist <= 28, isMid = dist > 28 && dist <= 64;
-
-      if (cell.type === 'plains') { 
-        ctx.fillStyle = isCore ? '#3b1c1c' : (isMid ? '#544238' : '#8f9779'); 
-        ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        ctx.strokeStyle = isCore ? 'rgba(239, 68, 68, 0.15)' : 'rgba(0,0,0,0.2)'; 
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(px+10, py+20); ctx.lineTo(px+15, py+12); ctx.lineTo(px+20, py+20);
-        ctx.moveTo(px+35, py+40); ctx.lineTo(px+40, py+32); ctx.lineTo(px+45, py+40);
-        ctx.stroke();
-      }
-      else if (cell.type === 'forest') { 
-        ctx.fillStyle = isCore ? '#1a0d0d' : (isMid ? '#33271e' : '#3e522d'); 
-        ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        ctx.fillStyle = isCore ? '#0a0505' : (isMid ? '#1c1611' : '#233318');
-        ctx.beginPath(); ctx.moveTo(px+27, py+10); ctx.lineTo(px+15, py+35); ctx.lineTo(px+40, py+35); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(px+15, py+20); ctx.lineTo(px+5, py+45); ctx.lineTo(px+25, py+45); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(px+40, py+25); ctx.lineTo(px+30, py+45); ctx.lineTo(px+50, py+45); ctx.fill();
-      }
-      else if (cell.type === 'mountain') { 
-        ctx.fillStyle = isCore ? '#1f1313' : (isMid ? '#3a3430' : '#5c544d'); 
-        ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        ctx.fillStyle = isCore ? '#0f0a0a' : (isMid ? '#241f1c' : '#2b2724'); 
-        ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+5, py+45); ctx.lineTo(px+27, py+45); ctx.fill();
-        ctx.fillStyle = isCore ? '#2e1c1c' : (isMid ? '#4f4741' : '#6e655c'); 
-        ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+27, py+45); ctx.lineTo(px+50, py+45); ctx.fill();
-        ctx.fillStyle = isCore ? '#7f1d1d' : (isMid ? '#9ca3af' : '#dcd7d4');
-        ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+18, py+23); ctx.lineTo(px+27, py+28); ctx.lineTo(px+35, py+23); ctx.fill();
-      }
-      else { 
-        ctx.fillStyle = isCore ? '#2b1116' : (isMid ? '#2f3b4c' : '#4a6b8c'); 
-        ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        ctx.strokeStyle = isCore ? 'rgba(220,38,38,0.2)' : 'rgba(255,255,255,0.3)'; 
-        ctx.lineWidth = 1.5;
-        const wave = Math.sin(t/500 + x + y) * 2;
-        ctx.beginPath(); ctx.moveTo(px+10, py+20+wave); ctx.quadraticCurveTo(px+15, py+15+wave, px+20, py+20+wave); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(px+30, py+35-wave); ctx.quadraticCurveTo(px+35, py+30-wave, px+40, py+35-wave); ctx.stroke();
-      }
-
-      ctx.strokeStyle = isCore ? 'rgba(153, 27, 27, 0.15)' : 'rgba(0, 0, 0, 0.15)'; 
-      ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
-
       const isExplored = exploredTiles[x][y] || godModeFog;
       if (!isExplored) { 
-          ctx.fillStyle = isCore ? 'rgba(20, 5, 5, 0.75)' : (isMid ? 'rgba(25, 20, 20, 0.7)' : 'rgba(30, 20, 15, 0.7)');
+          // 未探索區域：繪製高濃度迷霧
+          ctx.fillStyle='rgba(5, 8, 17, 0.9)'; 
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
           continue; 
       }
 
+      // 繪製淡淡的網格線，幫助玩家對齊座標，但不會遮擋漂亮的底圖
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; 
+      ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+
+      const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
       const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 1 && x <= b.x + 2 && y >= b.y - 1 && y <= b.y + 2);
 
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
