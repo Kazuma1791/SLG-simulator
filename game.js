@@ -12,6 +12,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+let currentAlliance = null;
 // 💡 地圖擴大四倍：200 x 200，中心點為 100, 100
 let myUid = null, myData = null, allCastles = [], worldBosses = [], worldNodes = [], hasCentered = false;
 let godModeFog = false, isAdmin = false, currentAnnouncement = null; 
@@ -106,28 +107,34 @@ function getTileTypeRaw(x, y) {
 
 // 💡 野外資源與 NPC 生成
 function getStaticEntity(x, y, type) {
-  // 👑 1. 根據 8K 地圖視覺客製化的「絕對地標」
-  if (x === 115 && y === 95) return { type: 'npc_capital', name: '👑 中央王都', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
-  if (x === 148 && y === 32) return { type: 'npc_super_castle', name: '🗼 猩紅法師塔', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
-  if (x === 145 && y === 165) return { type: 'npc_fortress', name: '👁️ 迷霧監視塔', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
-  if (x === 65 && y === 185) return { type: 'npc_fortress', name: '🏜️ 砂海要塞', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
+  // 👑 1. 四大史詩地標中心點 (擁有極高強度)
+  if (x === 115 && y === 95) return { type: 'npc_capital', name: '👑 中央王都', reqPwr: 50000, loot: { wood: 1000000, iron: 1000000, food: 1000000, speedup1h: 10, resourceCard: 5 } };
+  if (x === 148 && y === 32) return { type: 'npc_super_castle', name: '🗼 猩紅法師塔', reqPwr: 35000, loot: { iron: 300000, wood: 300000, food: 300000, speedup1h: 3 } };
+  if (x === 145 && y === 165) return { type: 'npc_fortress', name: '👁️ 迷霧監視塔', reqPwr: 20000, loot: { wood: 150000, iron: 150000, food: 150000, speedup30m: 5 } };
+  if (x === 65 && y === 185) return { type: 'npc_fortress', name: '🏜️ 砂海要塞', reqPwr: 15000, loot: { wood: 100000, iron: 100000, food: 100000, speedup30m: 3 } };
+
+  // 🛡️ 2. 地標周邊 6 格以內的「聯盟禁衛軍陣地」(會觸發連鎖反撲)
+  const landmarks = [
+    { name: '中央王都', x: 115, y: 95, pwr: 25000 },
+    { name: '猩紅法師塔', x: 148, y: 32, pwr: 18000 },
+    { name: '迷霧監視塔', x: 145, y: 165, pwr: 12000 },
+    { name: '砂海要塞', x: 65, y: 185, pwr: 10000 }
+  ];
+  for (let lm of landmarks) {
+      if (Math.hypot(x - lm.x, y - lm.y) <= 6 && (x !== lm.x || y !== lm.y)) {
+          return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·禁衛哨所`, reqPwr: lm.pwr, faction: lm.name, pwr: lm.pwr, loot: { wood: 10000, iron: 10000, food: 10000, speedup5m: 5 } };
+      }
+  }
 
   if (type === 'water') return null;
 
-  // 🌲 2. 其餘空地依然使用亂數生成一般資源點與野蠻人
+  // 🌲 3. 一般野外隨機物件
   const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
-  
-  if (r < 0.002) return { type: 'npc_castle', name: '🏰 荒野城堡', reqPwr: 2000, loot: { wood: 20000, iron: 20000, food: 20000, speedup30m: 1 } };
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
-  if (r < 0.025) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
-  if (r < 0.040) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
-  if (r < 0.045) return { type: 'npc_outpost', name: '🏚️ 邊境前哨', reqPwr: 300, loot: { wood: 5000, iron: 5000, food: 5000, speedup5m: 3 } };
+  if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
+  if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
   if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
-  if (r < 0.080) return { type: 'relic', name: '🏛️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
-  if (r < 0.095) return { type: 'res_farm', name: '🌾 小型農田', res: 'food', cap: 15000, reqPwr: 100 };
-  if (r < 0.110) return { type: 'res_lumber', name: '🌲 散落林木', res: 'wood', cap: 15000, reqPwr: 100 };
-  if (r < 0.120) return { type: 'res_mine', name: '⛏️ 露天鐵礦', res: 'iron', cap: 15000, reqPwr: 100 };
-  
+  if (r < 0.080) return { type: 'relic', name: '🏛️️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
   return null;
 }
 
@@ -138,6 +145,8 @@ initMapCache();
 
 // 💡 強制補齊缺失的變數，防止出現 NaN
 function sanitizeData() {
+  if (!myData.allianceId) myData.allianceId = null;
+  if (!myData.allianceName) myData.allianceName = null;
   if (!myData) return;
   if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
   ['infantry', 'archer', 'cavalry'].forEach(k => { if(isNaN(myData.troops[k]) || myData.troops[k]===null) myData.troops[k] = 0; });
@@ -919,27 +928,21 @@ async function resolveInteractNPC(m) {
     if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
     myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
 
-    // 💡 核心機制：檢查是否驚動了附近的史詩級勢力聯盟！
-    const angryFaction = checkFactionRetaliation(m.targetX, m.targetY);
-    if (angryFaction) {
-        myData.logs.unshift(`⚠️ 【${angryFaction.name}】震怒！偵測到您在周邊撒野，已派遣復仇大軍直撲您的主城！`);
+    // 💡 只有當玩家攻擊「地標聯盟禁衛軍」時，才會激怒該勢力進行集體反撲！
+    if (m.entity.type === 'npc_faction_guard' && m.entity.faction) {
+        myData.logs.unshift(`⚠️ 【${m.entity.faction}禁衛軍】遭受挑釁！該勢力已集結大軍朝您的主城反撲！`);
         
-        // 計算敵軍從地標出發到玩家主城的行軍時間 (速度 3 格/秒)
-        const distToHome = Math.hypot(myData.x - angryFaction.x, myData.y - angryFaction.y);
+        const lmCoords = { '中央王都': {x:115, y:95}, '猩紅法師塔': {x:148, y:32}, '迷霧監視塔': {x:145, y:165}, '砂海要塞': {x:65, y:185} };
+        const fPos = lmCoords[m.entity.faction] || {x: m.targetX, y: m.targetY};
+        const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
         const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
 
-        // 強制在玩家的 marches 陣列中塞入一筆「敵軍反撲」的進攻行軍
         myData.marches.push({
             id: 'COUNTER_' + Date.now(),
             type: 'defend_npc',
-            startX: angryFaction.x,
-            startY: angryFaction.y,
-            targetX: myData.x,
-            targetY: myData.y,
-            startTime: Date.now(),
-            finishesAt: Date.now() + counterTimeMs,
-            npcPower: angryFaction.pwr,
-            npcName: angryFaction.name
+            startX: fPos.x, startY: fPos.y, targetX: myData.x, targetY: myData.y,
+            startTime: Date.now(), finishesAt: Date.now() + counterTimeMs,
+            npcPower: m.entity.pwr * 1.5, npcName: `${m.entity.faction} 復仇軍團`
         });
     }
 
@@ -951,29 +954,6 @@ async function resolveInteractNPC(m) {
   
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
   return res;
-}
-async function resolveAttackBoss(m) {
-  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0, speedup5m:0, speedup30m:0, speedup1h:0} };
-  try {
-    await runTransaction(db, async (transaction) => {
-      const bRef = doc(db, "world_map", m.targetUid); const bDoc = await transaction.get(bRef);
-      if (!bDoc.exists()) throw new Error("Boss dead");
-      const boss = bDoc.data();
-      if (boss.hp <= 0) throw new Error("Boss already dead");
-
-      const pwr = getPwrByTech(m.troops, m.techs);
-      const dmg = Math.min(boss.hp, pwr * 10 + Math.floor(Math.random()*50));
-      
-      boss.hp -= dmg; 
-      if (boss.hp <= 0) { boss.hp = 0; boss.despawnAt = Date.now() + 15 * 60 * 1000; }
-      
-      boss.contributors = boss.contributors || {};
-      boss.contributors[myUid] = (boss.contributors[myUid] || 0) + dmg;
-      transaction.set(bRef, boss);
-      myData.logs.unshift(`[首領戰] 部隊對 ${boss.name} 造成了 ${formatCompact(dmg)} 點傷害！(獎勵將於首領倒下後結算)`);
-    });
-  } catch (e) { myData.logs.unshift(`[首領戰] 抵達時首領已被擊敗或消失。`); }
-  return res; 
 }
 
 async function resolveAttackPlayer(m) {
@@ -1854,3 +1834,45 @@ function checkFactionRetaliation(targetX, targetY) {
   }
   return null;
 }
+
+window.createAlliance = async () => {
+    const name = document.getElementById('alliance-name-input').value.trim();
+    if(name.length < 2 || name.length > 10) return alert("聯盟名稱需為 2~10 字元！");
+    myData.allianceId = 'ALLIANCE_' + Date.now();
+    myData.allianceName = name;
+    await savePrivateData();
+    window.renderAllianceUI();
+    alert(`✅ 成功創建聯盟【${name}】！`);
+};
+
+window.leaveAlliance = async () => {
+    if(!confirm("確定要退出目前聯盟嗎？")) return;
+    myData.allianceId = null; myData.allianceName = null;
+    await savePrivateData();
+    window.renderAllianceUI();
+    alert("已退出聯盟。");
+};
+
+window.renderAllianceUI = () => {
+    const createBox = document.getElementById('alliance-create-box');
+    const mainBox = document.getElementById('alliance-main-box');
+    if(!createBox || !mainBox) return;
+
+    if (myData && myData.allianceName) {
+        createBox.style.display = 'none';
+        mainBox.style.display = 'block';
+        document.getElementById('my-alliance-title').innerText = `🛡️ ${myData.allianceName}`;
+        document.getElementById('my-alliance-leader').innerText = myData.name + " (盟主)";
+        document.getElementById('alliance-members-list').innerHTML = `<div style="background:#0a0f1d; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#10b981;">👤 ${myData.name} (線上)</div>`;
+    } else {
+        createBox.style.display = 'block';
+        mainBox.style.display = 'none';
+    }
+};
+
+// 切換到聯盟分頁時自動刷新介面
+const originalSwitchTab = window.switchTab;
+window.switchTab = (t) => {
+    if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
+    if(t === 'alliance') window.renderAllianceUI();
+};
