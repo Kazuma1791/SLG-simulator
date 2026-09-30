@@ -15,7 +15,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 💡 地圖擴大四倍：200 x 200，中心點為 100, 100
 let myUid = null, myData = null, allCastles = [], worldBosses = [], worldNodes = [], hasCentered = false;
 let godModeFog = false, isAdmin = false; 
 
@@ -98,7 +97,6 @@ function getTileTypeRaw(x, y) {
   if (rand < 0.55) return 'plains'; if (rand < 0.75) return 'forest'; if (rand < 0.88) return 'mountain'; return 'water';
 }
 
-// 💡 中心點改為 100,100，刪除流寇，加入野外資源據點
 function getStaticEntity(x, y, type) {
   if (x === 100 && y === 100) return { type: 'npc_capital', name: '😈 黑暗王城', reqPwr: 15000, loot: { wood: 500000, iron: 500000, food: 500000, speedup1h: 5, resourceCard: 2 } };
   if (type === 'water') return null;
@@ -192,9 +190,11 @@ function getClearedPOI(x, y) {
   if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
 }
 
+// 💡 【核心修復】防止伺服器高併發導致的生成重疊
 async function spawnWorldBoss(id) {
   let bx, by, bName, bHp, mult, overlap;
   let tries = 0;
+  
   do {
     overlap = false;
     tries++;
@@ -211,28 +211,38 @@ async function spawnWorldBoss(id) {
     if (id.startsWith('BOSS_MID') && dist < 30) { overlap = true; continue; }
     if (id.startsWith('BOSS_OUTER') && dist <= 70) { overlap = true; continue; }
     
+    // 💡 首領之間絕對淨空距離：15 格 (避免擠在一起)
     for (let b of worldBosses) {
         if (b.id !== id && (b.hp > 0 || b.despawnAt > Date.now())) {
             if (Math.hypot(b.x - bx, b.y - by) < 15) { overlap = true; break; }
         }
     }
     if (overlap) continue;
+    
+    // 確保 2x2 格子不會有山脈或水域
     for (let i=0; i<=1; i++) {
         for (let j=0; j<=1; j++) {
             let type = getTileTypeRaw(bx+i, by+j);
             if (type === 'water' || type === 'mountain') overlap = true;
         }
     }
-  } while(overlap && tries < 200);
+  } while(overlap && tries < 500);
 
   if (id === 'BOSS_CORE') { bName = '🐉 滅世魔龍'; bHp = 500000; mult = 20; }
   else if (id.startsWith('BOSS_MID')) { bName = Math.random()>0.5?'🦑 深海巨妖':'🦅 風暴巨鷹'; bHp = 150000; mult = 8; }
   else { bName = '🗿 大地岩魔'; bHp = 50000; mult = 3; }
   
-  await setDoc(doc(db, "world_map", id), { name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 });
+  // 💡 【重要防護】生成完座標後，立刻同步推入本地陣列！
+  // 防止伺服器同時跑 15 次迴圈時互相不知道對方的座標。
+  const newBoss = { id, name: bName, isBoss: true, x: bx, y: by, hp: bHp, maxHp: bHp, mult: mult, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
+  const idx = worldBosses.findIndex(b => b.id === id);
+  if (idx >= 0) worldBosses[idx] = newBoss;
+  else worldBosses.push(newBoss);
+
+  // 寫入雲端資料庫
+  await setDoc(doc(db, "world_map", id), newBoss);
 }
 
-// 💡 修正開關迷霧陣列重置的問題
 window.toggleFogMode = () => {
   godModeFog = !godModeFog; 
   document.getElementById('btn-toggle-fog').innerText = godModeFog ? "👁️ 開啟迷霧" : "👁️ 關閉迷霧";
@@ -273,7 +283,6 @@ onAuthStateChanged(auth, async (user) => {
         const pSnap = await getDoc(playerRef);
         let d = null;
         if (!pSnap.exists()) {
-          // 💡 新帳號降生地點適應 200x200
           let startX, startY; do { startX = Math.floor(Math.random() * 180) + 10; startY = Math.floor(Math.random() * 180) + 10; } while (Math.hypot(startX - 100, startY - 100) <= 64);
           d = {
             name: `領主_${myUid.slice(0, 4)}`, x: startX, y: startY,
@@ -373,7 +382,8 @@ window.gmRespawnBosses = () => {
   const bossIds = ['BOSS_CORE'];
   for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
   for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
-  bossIds.forEach(id => spawnWorldBoss(id)); alert("已強制重生所有 世界 Boss！");
+  bossIds.forEach(id => spawnWorldBoss(id)); 
+  alert("已強制派發生成指令！請注意本地雷達可能會需要幾秒鐘同步。");
 };
 
 window.gmClearQueues = async () => {
@@ -473,7 +483,6 @@ window.addEventListener('resize', resizeCanvas);
 
 function updateFogOfWar() {
   if (!myData) return;
-  // 💡 修復迷霧開關：先將所有格子重置為全黑
   for (let x=0; x<WORLD_COLS; x++) exploredTiles[x].fill(false);
   
   if (godModeFog) { 
@@ -508,7 +517,6 @@ async function savePrivateData() {
     try { await setDoc(doc(db, "players", myUid), myData, { merge: true }); } catch(e){}
 }
 
-// 💡 更新全域野外據點資訊
 window.refreshMap = async function() {
   const snap = await getDocs(collection(db, "world_map"));
   allCastles = []; worldNodes = [];
@@ -581,7 +589,7 @@ function renderGMPlayers() {
 window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
 
 // ==========================================
-// 遊戲心跳與野外資源結算
+// 遊戲心跳
 // ==========================================
 async function localTick() {
   if (!myData || myData.isBanned) return;
@@ -714,7 +722,6 @@ async function localTick() {
       else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
-      // 💡 結算資源佔領戰
       else if (m.type === 'occupy_node') { 
           const res = await resolveOccupyNode(m);
           if (res.isGathering) {
@@ -726,18 +733,16 @@ async function localTick() {
       else { const res = await resolveInteractNPC(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       needSave = true;
     } 
-    // 💡 採集中的狀態判定：期滿自動帶回、或被別人打飛
     else if (m.type === 'gathering') {
       if (now >= m.finishesAt) {
           m.type = 'return'; m.loot = { wood:0, iron:0, food:0 }; m.loot[m.resType] = m.capacity;
-          m.finishesAt = now + (now - m.startTime); // 回程時間
+          m.finishesAt = now + (now - m.startTime); 
           try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); }catch(e){}
           myData.logs.unshift(`[採集完成] 駐紮部隊滿載而歸！`);
           newMarches.push(m);
           needSave = true;
       } else {
           newMarches.push(m);
-          // 每 10 秒檢查一次自己是否還擁有該據點
           if (Math.floor(now/1000) % 10 === 0) {
               getDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)).then(snap => {
                   if (snap.exists() && snap.data().uid !== myUid) {
@@ -745,7 +750,7 @@ async function localTick() {
                       if (idx !== -1) {
                           myData.marches[idx].type = 'return';
                           myData.marches[idx].loot = { wood:0, iron:0, food:0 };
-                          myData.marches[idx].troops.infantry = Math.floor(myData.marches[idx].troops.infantry * 0.3); // 戰敗損失部隊
+                          myData.marches[idx].troops.infantry = Math.floor(myData.marches[idx].troops.infantry * 0.3);
                           myData.marches[idx].finishesAt = Date.now() + (Date.now() - myData.marches[idx].startTime);
                           myData.logs.unshift(`🚨 [資源爭奪] 您在 (${m.targetX}, ${m.targetY}) 的部隊遭到敵軍擊敗，已撤退！`);
                           savePrivateData();
@@ -772,7 +777,6 @@ function getPwrByTech(troops, tech) {
          (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
 }
 
-// 💡 解決野外資源點佔領戰 (PVP)
 async function resolveOccupyNode(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, isGathering: false, cap: m.entity.cap, resType: m.entity.res };
   try {
@@ -780,13 +784,11 @@ async function resolveOccupyNode(m) {
       const nodeRef = doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`);
       const snap = await transaction.get(nodeRef);
       let defender = snap.exists() ? snap.data() : null;
-      
       const attPwr = getPwrByTech(m.troops, m.techs);
       
       if (defender && defender.uid !== myUid) {
           const defPwr = getPwrByTech(defender.troops, defender.techs || {});
           if (attPwr > defPwr) {
-              // 攻打成功，寫入新的佔領者
               transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: m.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
               res.isGathering = true;
               myData.logs.unshift(`[佔領成功] 擊退了敵方佔領軍！部隊開始採集資源。`);
@@ -795,7 +797,6 @@ async function resolveOccupyNode(m) {
               myData.logs.unshift(`[佔領失敗] 遭遇強大的敵軍防守，我方部隊全數陣亡！`);
           }
       } else {
-          // 空地，直接佔領
           transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: m.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
           res.isGathering = true;
           myData.logs.unshift(`[抵達據點] 部隊已駐紮並開始採集資源。`);
@@ -922,7 +923,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 (200x200 靜態中世紀畫風)
+// 🎨 渲染世界地圖 (巨幅 200x200，移除浮動，加入資源點)
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -948,7 +949,6 @@ function drawWorldMap() {
       if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
       const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
-      // 💡 中心點改為 100,100
       const dist = Math.hypot(x-100, y-100);
       const isCore = dist <= 28, isMid = dist > 28 && dist <= 64;
 
@@ -985,6 +985,7 @@ function drawWorldMap() {
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
         ctx.strokeStyle = isCore ? 'rgba(220,38,38,0.2)' : 'rgba(255,255,255,0.3)'; 
         ctx.lineWidth = 1.5;
+        // 💡 水波紋保持非常微弱的動態，其餘皆靜止
         const wave = Math.sin(t/500 + x + y) * 2;
         ctx.beginPath(); ctx.moveTo(px+10, py+20+wave); ctx.quadraticCurveTo(px+15, py+15+wave, px+20, py+20+wave); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(px+30, py+35-wave); ctx.quadraticCurveTo(px+35, py+30-wave, px+40, py+35-wave); ctx.stroke();
@@ -1000,60 +1001,58 @@ function drawWorldMap() {
           continue; 
       }
 
-      const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 1 && x <= b.x + 2 && y >= b.y - 1 && y <= b.y + 2);
+      const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 2 && x <= b.x + 3 && y >= b.y - 2 && y <= b.y + 3);
 
       if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
         const clrInfo = getClearedPOI(x, y);
-        // 💡 移除所有浮動動畫
-        const floatY = 0; 
         
         if (clrInfo) {
           ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
         } else {
+          // 💡 移除所有 floatY 浮動，完全靜止
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
               if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCapital, px - 15, py + floatY - 25, TILE_SIZE + 30, TILE_SIZE + 30);
+                  ctx.drawImage(imgDarkCapital, px - 15, py - 25, TILE_SIZE + 30, TILE_SIZE + 30);
               } else {
                   ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
               }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_fortress') {
               if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkFortress, px - 10, py + floatY - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+                  ctx.drawImage(imgDarkFortress, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
               } else {
                   ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px+6, py+6, TILE_SIZE-12, TILE_SIZE-12);
               }
               ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_castle') {
               if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCastle, px - 5, py + floatY - 10, TILE_SIZE + 10, TILE_SIZE + 10);
+                  ctx.drawImage(imgDarkCastle, px - 5, py - 10, TILE_SIZE + 10, TILE_SIZE + 10);
               } else {
                   ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20);
               }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'npc_outpost') {
               if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkOutpost, px - 5, py + floatY - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+                  ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
               } else {
                   ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24);
               }
               ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'barbarian') {
             if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) {
-                ctx.drawImage(imgBarbarian, px - 2, py + floatY - 10, TILE_SIZE + 4, TILE_SIZE + 4);
+                ctx.drawImage(imgBarbarian, px - 2, py - 10, TILE_SIZE + 4, TILE_SIZE + 4);
             } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30+floatY);
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30);
             }
             ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'relic') {
             if (imgRelic.complete && imgRelic.naturalHeight !== 0) {
-                ctx.drawImage(imgRelic, px, py + floatY - 5, TILE_SIZE, TILE_SIZE);
+                ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
             } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30+floatY);
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30);
             }
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type.startsWith('res_')) {
-            // 💡 渲染野外資源佔領點
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid);
             ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
@@ -1071,8 +1070,6 @@ function drawWorldMap() {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
      if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
         const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
-        // 💡 移除 Boss 的彈跳動畫
-        const bounce = 0; 
         const centerBx = bx + TILE_SIZE; 
         
         if (boss.hp <= 0) {
@@ -1086,18 +1083,18 @@ function drawWorldMap() {
             else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
 
             if (targetImg.complete && targetImg.naturalHeight !== 0) {
-                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
+                ctx.drawImage(targetImg, bx, by, TILE_SIZE * 2, TILE_SIZE * 2); // 💡 完全靜止
             } else {
-                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
+                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20);
             }
             
             const barW = TILE_SIZE * 1.5;
             const barX = bx + (TILE_SIZE * 2 - barW) / 2;
-            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
-            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10, barW * (boss.hp/boss.maxHp), 6);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10, barW, 6);
             
             ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
-            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18);
         }
      }
   });
@@ -1145,7 +1142,6 @@ function drawWorldMap() {
     myData.marches.forEach(m => {
       let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
       
-      // 💡 採集部隊靜止顯示
       if (m.type === 'gathering') {
           const cX = m.targetX*TILE_SIZE+TILE_SIZE/2, cY = m.targetY*TILE_SIZE+TILE_SIZE/2;
           ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
@@ -1175,567 +1171,3 @@ function drawWorldMap() {
   }
   ctx.restore();
 }
-
-window.zoomMapBtn = (factor) => {
-  const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
-  if (nZ !== zoom) {
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    const wX = cx / zoom + camX, wY = cy / zoom + camY;
-    zoom = nZ; camX = wX - cx / zoom; camY = wY - cy / zoom; clampCamera();
-    document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
-  }
-};
-
-let isDragging = false, dragSX = 0, dragSY = 0, dragDist = 0;
-let initialPinchDist = null, initialZoom = 1, pinchCenter = null;
-
-function handleDown(e) {
-  if (e.touches && e.touches.length === 2) {
-    isDragging = false;
-    initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    initialZoom = zoom;
-    const r = canvas.getBoundingClientRect();
-    const px = (e.touches[0].clientX + e.touches[1].clientX)/2 - r.left, py = (e.touches[0].clientY + e.touches[1].clientY)/2 - r.top;
-    pinchCenter = { x: px, y: py, wX: px / zoom + camX, wY: py / zoom + camY };
-    return;
-  }
-  isDragging=true; dragDist=0; canvas.style.cursor='grabbing'; document.getElementById("hover-hud").style.display='none';
-  const cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
-  dragSX = cx; dragSY = cy;
-}
-
-function handleMove(e) {
-  if (e.touches && e.touches.length === 2 && initialPinchDist) {
-    e.preventDefault();
-    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, initialZoom * (dist / initialPinchDist)));
-    if (nZ !== zoom) {
-      zoom = nZ; camX = pinchCenter.wX - pinchCenter.x / zoom; camY = pinchCenter.wY - pinchCenter.y / zoom;
-      clampCamera(); document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
-    }
-    return;
-  }
-  if (!isDragging) return;
-  e.preventDefault();
-  const cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
-  const dx = cx - dragSX, dy = cy - dragSY; dragDist += Math.hypot(dx,dy);
-  dragSX = cx; dragSY = cy; camX -= dx/zoom; camY -= dy/zoom; clampCamera(); 
-}
-
-function handleUp(e) { 
-  if (e.touches && e.touches.length < 2) initialPinchDist = null;
-  isDragging = false; canvas.style.cursor='grab'; 
-}
-
-canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.15 : 0.85;
-    const r = canvas.getBoundingClientRect();
-    const px = e.clientX - r.left; const py = e.clientY - r.top;
-    const wX = px / zoom + camX; const wY = py / zoom + camY;
-    const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
-    if (nZ !== zoom) {
-        zoom = nZ; camX = wX - px / zoom; camY = wY - py / zoom; clampCamera();
-        document.getElementById('zoom-indicator').innerText = `${Math.round(zoom*100)}%`; 
-    }
-}, { passive: false });
-
-canvas.addEventListener("mousedown", handleDown); canvas.addEventListener("mousemove", handleMove); window.addEventListener("mouseup", handleUp);
-canvas.addEventListener("touchstart", handleDown, {passive:false}); canvas.addEventListener("touchmove", handleMove, {passive:false}); window.addEventListener("touchend", handleUp);
-
-let targetAction = null;
-window.closeActionModal = () => { document.getElementById("action-modal").style.display='none'; targetAction=null; };
-
-window.syncTroop = (type, source) => {
-    const inputEl = document.getElementById(`send-${type}`);
-    const sliderEl = document.getElementById(`slider-${type}`);
-    let max = parseInt(inputEl.max) || 0;
-    if (source === 'slider') {
-        let val = parseInt(sliderEl.value) || 0;
-        inputEl.value = val;
-    } else {
-        let val = parseInt(inputEl.value) || 0;
-        if (val > max) val = max;
-        if (val < 0) val = 0;
-        inputEl.value = val;
-        sliderEl.value = val;
-    }
-};
-
-canvas.addEventListener("click", (e) => {
-  if (dragDist > 10) return;
-  const r = canvas.getBoundingClientRect();
-  const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0);
-  const cy = e.clientY || (e.changedTouches ? e.changedTouches[0].clientY : 0);
-  const sX = (cx - r.left) * (canvas.width / r.width), sY = (cy - r.top) * (canvas.height / r.height);
-  const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
-  
-  const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
-  
-  const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x && tX <= b.x + 1 && tY >= b.y && tY <= b.y + 1);
-  const isNearBoss = worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x - 1 && tX <= b.x + 2 && tY >= b.y - 1 && tY <= b.y + 2);
-
-  if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
-
-  // 💡 加入隊列上限標示
-  const queueStatus = `<span style="font-size:0.8rem; color:#facc15;">(行軍隊列: ${myData.marches.length}/3)</span>`;
-
-  if (tC && tC.id!==myUid) {
-    if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
-    targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
-    document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 ${queueStatus}`; 
-    document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】 (Lv.${tC.castleLevel||1})<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
-    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
-  } 
-  else if (wBoss) {
-    if (wBoss.hp <= 0) return alert("☠️ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
-    
-    const suggestPwr = wBoss.mult === 20 ? 150000 : (wBoss.mult === 8 ? 50000 : 15000); 
-    targetAction = { type: 'attack_boss', targetUid: wBoss.id, name: wBoss.name, x: tX, y: tY, dist, techs: myData.research };
-    document.getElementById("modal-title").innerHTML = `🐉 討伐首領 ${queueStatus}`; 
-    document.getElementById("modal-desc").innerHTML = `目標：【${wBoss.name}】<br>距離：${Math.ceil(dist)} 格<br>建議部隊戰力：<span style="color:#f87171;">${formatCompact(suggestPwr)}</span><br><span style="color:#10b981; font-weight:bold;">🎁 掉落大量加速道具與物資！</span><br><span style="color:#facc15; font-size:0.8rem;">🩸 獎勵將於首領倒下後統一根據貢獻度結算</span>`;
-    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動討伐"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
-  }
-  else if (cell && cell.entity && !getClearedPOI(tX,tY) && !isNearBoss) { 
-    const ent = cell.entity;
-    let actionTitle = '⚔️ 討伐敵陣';
-    // 💡 若為資源點，更改文字與出征類型
-    if (ent.type.startsWith('res_')) {
-        actionTitle = '🚩 佔領資源點';
-        const isMine = worldNodes.some(n => n.x === tX && n.y === tY && n.uid === myUid);
-        if (isMine) return alert("🛡️ 您的部隊已經佔領此地，正在採集中！");
-    } else if (ent.type === 'relic') actionTitle = '🏛️ 奇蹟探險';
-    else if (ent.type === 'npc_capital' || ent.type === 'npc_super_castle') actionTitle = '😈 攻略巨城';
-
-    let lootStr = '';
-    if (ent.type.startsWith('res_')) {
-       lootStr = `<br><span style="color:#38bdf8; font-weight:bold;">🕒 佔領採集：需駐守 1 小時</span><br><span style="color:#10b981; font-weight:bold;">🎁 滿載收益: ${formatCompact(ent.cap)} ${ent.res==='wood'?'木材':(ent.res==='iron'?'鐵礦':'糧草')}</span>`;
-    } else if (ent.loot) {
-       lootStr = `<br><span style="color:#10b981; font-weight:bold;">🎁 戰利品: 🌲${formatCompact(ent.loot.wood||0)} ⛏️${formatCompact(ent.loot.iron||0)} 🌾${formatCompact(ent.loot.food||0)}`;
-       if (ent.loot.speedup1h) lootStr += ` | ⚡1hx${ent.loot.speedup1h}`;
-       else if (ent.loot.speedup30m) lootStr += ` | ⚡30mx${ent.loot.speedup30m}`;
-       else if (ent.loot.speedup5m) lootStr += ` | ⚡5mx${ent.loot.speedup5m}`;
-       if (ent.loot.resourceCard) lootStr += ` | 📦x${ent.loot.resourceCard}`;
-       lootStr += `</span>`;
-    }
-
-    targetAction = { 
-        type: ent.type.startsWith('res_') ? 'occupy_node' : (ent.type==='relic'?'relic':(ent.type==='npc_capital'||ent.type==='npc_super_castle'?'attack_capital':'attack_npc')), 
-        entity: ent, x: tX, y: tY, dist, techs: myData.research 
-    };
-    
-    document.getElementById("modal-title").innerHTML = `${actionTitle} ${queueStatus}`;
-    document.getElementById("modal-desc").innerHTML = ent.type==='relic'? `探索需消耗 ${ent.reqFood} 糧食。${lootStr}`:`距離：${Math.ceil(dist)} 格<br>建議兵力戰力：${ent.reqPwr}${lootStr}`;
-    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; 
-    document.getElementById("btn-confirm-action").innerText = ent.type.startsWith('res_') ? "發兵佔領" : "發動行軍"; 
-    document.getElementById("btn-confirm-action").style.background = ent.type.startsWith('res_') ? '#8b5cf6' : '#dc2626';
-  }
-  else if (!tC && cell && cell.type !== 'water') {
-    const timeSince = Date.now() - (myData.lastRelocateTime || 0);
-    const remainMs = isAdmin ? 0 : RELOCATE_COOLDOWN - timeSince;
-    const moveCost = Math.max(100, Math.ceil(dist * 50));
-    
-    if (remainMs > 0) {
-        targetAction = null;
-        document.getElementById("modal-title").innerHTML = `📍 領地搬遷 (冷卻中)`;
-        document.getElementById("modal-desc").innerHTML = `傳送矩陣冷卻中，需等待 <span style="color:#ef4444; font-weight:bold;">${formatTime(Math.ceil(remainMs/1000))}</span> 後方可再次搬遷。`;
-        document.getElementById("btn-confirm-action").style.display = 'none';
-    } else {
-        targetAction = { type: 'relocate', x: tX, y: tY, cost: moveCost };
-        document.getElementById("modal-title").innerHTML = `📍 領地搬遷`;
-        document.getElementById("modal-desc").innerHTML = `傳送至 (${tX}, ${tY})<br>距離：${Math.ceil(dist)} 格<br>消耗：${formatCompact(moveCost)}木, ${formatCompact(moveCost)}鐵, ${formatCompact(moveCost)}糧`;
-        document.getElementById("btn-confirm-action").style.display = 'block';
-        document.getElementById("btn-confirm-action").innerText = "確認遷城"; 
-        document.getElementById("btn-confirm-action").style.background = '#0ea5e9';
-    }
-    document.getElementById("troop-selector").style.display = 'none'; 
-  } else return;
-
-  const bLvl = myData.buildings.barracks || 1; let unlockCount = 0;
-  ['inf','arc','cav'].forEach(t => { 
-    const full = t==='inf'?'infantry':(t==='arc'?'archer':'cavalry');
-    if (bLvl >= CFG.troops[full].reqLvl) {
-      document.getElementById(`row-${t}`).style.display = 'flex';
-      const maxTroops = myData.troops[full] || 0;
-      document.getElementById(`avail-${t}`).innerText = formatCompact(maxTroops); 
-      document.getElementById(`send-${t}`).max = maxTroops; 
-      document.getElementById(`send-${t}`).value = 0; 
-      document.getElementById(`slider-${t}`).max = maxTroops; 
-      document.getElementById(`slider-${t}`).value = 0; 
-      unlockCount++;
-    } else { document.getElementById(`row-${t}`).style.display = 'none'; }
-  });
-  document.getElementById('troop-lock-msg').style.display = unlockCount < 3 ? 'block' : 'none';
-  document.getElementById("action-modal").style.display='flex';
-});
-
-document.getElementById("btn-confirm-action").addEventListener('click', () => {
-  if (!targetAction) return;
-
-  if (targetAction.type === 'relocate') {
-    if (myData.wood < targetAction.cost || myData.iron < targetAction.cost || myData.food < targetAction.cost) return alert(`資源不足！需要各 ${targetAction.cost} 資源。`);
-    myData.wood -= targetAction.cost; myData.iron -= targetAction.cost; myData.food -= targetAction.cost;
-    myData.x = targetAction.x; myData.y = targetAction.y;
-    myData.lastRelocateTime = Date.now();
-    myData.logs.unshift(`[遷城] 傳送至 (${targetAction.x}, ${targetAction.y})`);
-    savePrivateData(); try{setDoc(doc(db, "world_map", myUid), { x: myData.x, y: myData.y }, { merge: true });}catch(e){}
-    window.closeActionModal(); updateFogOfWar(); centerCameraOn(myData.x, myData.y); try{window.renderSelf();}catch(e){} window.refreshMap(); return;
-  }
-
-  // 💡 隊列上限防護
-  if (myData.marches && myData.marches.length >= 3) {
-      return alert("⚔️ 您的行軍隊列已滿 (最多 3 隊)！請等待部隊返回。");
-  }
-
-  const sendInf = document.getElementById('row-inf').style.display==='none' ? 0 : (parseInt(document.getElementById('send-inf').value)||0);
-  const sendArc = document.getElementById('row-arc').style.display==='none' ? 0 : (parseInt(document.getElementById('send-arc').value)||0);
-  const sendCav = document.getElementById('row-cav').style.display==='none' ? 0 : (parseInt(document.getElementById('send-cav').value)||0);
-  
-  if (sendInf===0 && sendArc===0 && sendCav===0) return alert("請派遣部隊！");
-  if (sendInf > myData.troops.infantry || sendArc > myData.troops.archer || sendCav > myData.troops.cavalry) return alert("兵力不足！");
-  
-  let spd = 2; 
-  if (sendInf > 0) spd = Math.max(spd, CFG.troops.infantry.speed);
-  if (sendArc > 0) spd = Math.max(spd, CFG.troops.archer.speed);
-  
-  const timeMs = Math.ceil(targetAction.dist * spd * 1000);
-  myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
-
-  myData.marches.push({
-    id: 'M'+Date.now(), type: targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
-    startTime: Date.now(), finishesAt: Date.now()+timeMs, troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav },
-    targetUid: targetAction.id || targetAction.targetUid, targetName: targetAction.name, entity: targetAction.entity, npcPower: targetAction.npcPower, techs: myData.research
-  });
-
-  myData.logs.unshift(`[出征] 預計 ${formatTime(Math.ceil(timeMs/1000))} 後抵達。`);
-  savePrivateData(); try{setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true });}catch(e){}
-  window.closeActionModal(); try{window.renderSelf();}catch(e){}
-});
-
-window.renderSelf = function() {
-  if (myData.isBanned) return;
-  try {
-      const now = Date.now();
-      const isShielded = myData.shieldEndsAt && myData.shieldEndsAt > now;
-      const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
-      
-      const titleEl = document.getElementById('player-title');
-      if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="color:#fbbf24; font-size:0.95rem;">(Lv.${myData.buildings.castle || 1})</span> <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
-      
-      const hrToSec = 3600;
-      const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
-      const woodProdPerHr = CFG.buildings.lumber.rate * myData.buildings.lumber * hrToSec;
-      const ironProdPerHr = CFG.buildings.mine.rate * myData.buildings.mine * hrToSec;
-      const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
-      const netFood = farmProdPerSec - upkeepPerHr;
-
-      if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = formatCompact(myData.wood); 
-      if(document.getElementById('rate-wood')) document.getElementById('rate-wood').innerText = `+${formatCompact(woodProdPerHr)}/h`;
-      if(document.getElementById('res-iron')) document.getElementById('res-iron').innerText = formatCompact(myData.iron); 
-      if(document.getElementById('rate-iron')) document.getElementById('rate-iron').innerText = `+${formatCompact(ironProdPerHr)}/h`;
-      if(document.getElementById('res-food')) document.getElementById('res-food').innerText = formatCompact(myData.food); 
-      if(document.getElementById('rate-food')) {
-          document.getElementById('rate-food').innerText = `${netFood>=0?'+':''}${formatCompact(Math.abs(netFood))}/h`;
-          document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
-      }
-
-      if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = formatCompact(myData.troops.infantry); 
-      if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = formatCompact(myData.troops.archer); 
-      if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = formatCompact(myData.troops.cavalry);
-
-      const maxQueues = 1 + (myData.buildings.builder || 0);
-      const bqText = document.getElementById('build-queue-text');
-      if(bqText) bqText.innerText = `(${myData.buildQueues.length}/${maxQueues})`;
-
-      const tasksContainer = document.getElementById('active-tasks-container');
-      if (tasksContainer) {
-          let tasksHtml = '';
-          myData.buildQueues.forEach((q, idx) => {
-             if (!q || !CFG.buildings[q.target]) return;
-             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
-             const totalSec = getUpgradeTime(q.target, myData.buildings[q.target]);
-             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
-             tasksHtml += `
-                <div class="task-row" style="flex-direction: column; align-items: stretch;">
-                   <div style="display:flex; justify-content:space-between;">
-                       <span class="task-title" style="flex:1;">🏗️ 升級: ${CFG.buildings[q.target].name}</span>
-                       <span class="task-time">倒數: ${formatTime(remainSec)}</span>
-                   </div>
-                   <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
-                   <div class="speed-btn-group">
-                       <button onclick="window.useSpeedUp('build', ${idx}, '5m')" style="background:#10b981;">⚡5分</button>
-                       <button onclick="window.useSpeedUp('build', ${idx}, '30m')" style="background:#059669;">⚡30分</button>
-                       <button onclick="window.useSpeedUp('build', ${idx}, '1h')" style="background:#047857;">⚡1小時</button>
-                   </div>
-                </div>
-             `;
-          });
-          if (myData.researchQueue && myData.researchQueue.target && CFG.techs[myData.researchQueue.target]) {
-             const q = myData.researchQueue;
-             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
-             const totalSec = getUpgradeTime(q.target, myData.research[q.target] || 0, true);
-             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
-             tasksHtml += `
-                <div class="task-row" style="flex-direction: column; align-items: stretch;">
-                   <div style="display:flex; justify-content:space-between;">
-                       <span class="task-title" style="flex:1;">🧪 研發: ${CFG.techs[q.target].name}</span>
-                       <span class="task-time">倒數: ${formatTime(remainSec)}</span>
-                   </div>
-                   <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
-                   <div class="speed-btn-group">
-                       <button onclick="window.useSpeedUp('research', 0, '5m')" style="background:#10b981;">⚡5分</button>
-                       <button onclick="window.useSpeedUp('research', 0, '30m')" style="background:#059669;">⚡30分</button>
-                       <button onclick="window.useSpeedUp('research', 0, '1h')" style="background:#047857;">⚡1小時</button>
-                   </div>
-                </div>
-             `;
-          }
-          if (myData.trainQueue && myData.trainQueue.type && CFG.troops[myData.trainQueue.type]) {
-             const q = myData.trainQueue;
-             const remainSec = Math.max(0, Math.ceil((q.finishesAt - now) / 1000));
-             const totalSec = CFG.troops[q.type].time * q.count;
-             const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100)));
-             tasksHtml += `
-                <div class="task-row" style="flex-direction: column; align-items: stretch;">
-                   <div style="display:flex; justify-content:space-between;">
-                       <span class="task-title" style="flex:1;">⚔️ 招募: ${CFG.troops[q.type].name}</span>
-                       <span class="task-time">倒數: ${formatTime(remainSec)}</span>
-                   </div>
-                   <div class="task-bar-bg"><div class="task-bar-fill" style="width:${pct}%;"></div></div>
-                   <div class="speed-btn-group">
-                       <button onclick="window.useSpeedUp('train', 0, '5m')" style="background:#10b981;">⚡5分</button>
-                       <button onclick="window.useSpeedUp('train', 0, '30m')" style="background:#059669;">⚡30分</button>
-                       <button onclick="window.useSpeedUp('train', 0, '1h')" style="background:#047857;">⚡1小時</button>
-                   </div>
-                </div>
-             `;
-          }
-          if (tasksHtml === '') tasksHtml = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無進行中的任務</p>';
-          tasksContainer.innerHTML = tasksHtml;
-      }
-
-      if(document.getElementById('inv-shield')) document.getElementById('inv-shield').innerText = myData.items.shieldCard || 0;
-      if(document.getElementById('inv-speed5m')) document.getElementById('inv-speed5m').innerText = myData.items.speedup5m || 0;
-      if(document.getElementById('inv-speed30m')) document.getElementById('inv-speed30m').innerText = myData.items.speedup30m || 0;
-      if(document.getElementById('inv-speed1h')) document.getElementById('inv-speed1h').innerText = myData.items.speedup1h || 0;
-      if(document.getElementById('inv-rename')) document.getElementById('inv-rename').innerText = myData.items.renameCard || 0;
-      if(document.getElementById('inv-resource')) document.getElementById('inv-resource').innerText = myData.items.resourceCard || 0;
-
-      const bContainer = document.getElementById('building-container');
-      if (bContainer) {
-          bContainer.innerHTML = Object.keys(CFG.buildings).map(key => {
-            const lvl = myData.buildings[key] || 0;
-            const cost = getUpgradeCost(key, lvl);
-            const timeSec = getUpgradeTime(key, lvl);
-            const queueObj = myData.buildQueues.find(q => q && q.target === key);
-            const isMax = (key === 'builder' && lvl >= CFG.buildings.builder.maxLevel);
-            const disabled = isMax || queueObj || myData.buildQueues.length >= maxQueues;
-            
-            let btnHtml = ''; let progressHtml = '';
-            if (queueObj) {
-                const remainSec = Math.max(0, Math.ceil((queueObj.finishesAt - now) / 1000));
-                const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
-                btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">升級中 (${formatTime(remainSec)})</span>`;
-                progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
-            } else {
-                btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
-            }
-
-            return `
-            <div class="item-card">
-                <div>
-                <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
-                </div>
-                ${progressHtml}
-                ${btnHtml}
-            </div>`;
-          }).join('');
-      }
-
-      const rContainer = document.getElementById('research-container');
-      if (rContainer) {
-          if (myData.buildings.academy < 1) {
-              rContainer.innerHTML = '<p style="color:#94a3b8; font-size:0.9rem; padding:10px;">請先建造並升級【學院】來解鎖科技研發。</p>';
-          } else {
-              rContainer.innerHTML = Object.keys(CFG.techs).map(key => {
-                  const d = CFG.techs[key];
-                  const lvl = myData.research[key] || 0;
-                  const cost = getUpgradeCost(key, lvl, true);
-                  const timeSec = getUpgradeTime(key, lvl, true);
-                  const isResearching = myData.researchQueue && myData.researchQueue.target === key;
-                  const isMax = lvl >= myData.buildings.academy * 2;
-                  
-                  let btnHtml = ''; let progressHtml = '';
-                  if (isResearching) {
-                      const remainSec = Math.max(0, Math.ceil((myData.researchQueue.finishesAt - now) / 1000));
-                      const pct = Math.min(100, Math.max(0, 100 - (remainSec / timeSec * 100)));
-                      btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">研發中 (${formatTime(remainSec)})</span>`;
-                      progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
-                  } else {
-                      btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
-                  }
-
-                  return `
-                  <div class="item-card">
-                      <div>
-                      <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong> <span style="color:#fbbf24;">(Lv.${lvl})</span>
-                      <div class="item-info">附加戰力: +${lvl}</div>
-                      <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
-                      </div>
-                      ${progressHtml}
-                      ${btnHtml}
-                  </div>`;
-              }).join('');
-          }
-      }
-
-      const tContainer = document.getElementById('train-container');
-      if (tContainer) {
-          const bLvl = myData.buildings.barracks || 1;
-          tContainer.innerHTML = Object.keys(CFG.troops).map(key => {
-              const d = CFG.troops[key];
-              if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div class="item-info">需 兵營 Lv.${d.reqLvl}</div></div><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div>`;
-              
-              const buff = myData.research[`${key}_atk`] || 0;
-              const isTraining = myData.trainQueue && myData.trainQueue.type === key;
-              
-              const trainCount = bLvl * 5; 
-              const totalTime = d.time * trainCount;
-              
-              let btnHtml = ''; let progressHtml = '';
-              
-              if (isTraining) {
-                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
-                  const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
-                  btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">招募中 (${formatTime(remainSec)})</span>`;
-                  progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
-              } else {
-                  btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
-              }
-
-              return `
-              <div class="item-card" style="justify-content:flex-start;">
-                  <div>
-                  <strong style="font-size:1.05rem;">${d.icon} ${d.name}</strong>
-                  <div class="item-info">戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h</div>
-                  <div class="item-cost"><span>🌲${formatCompact(d.w * trainCount)}</span><span>⛏️${formatCompact(d.i * trainCount)}</span><span>🌾${formatCompact(d.f * trainCount)}</span></div>
-                  </div>
-                  ${progressHtml}
-                  ${btnHtml}
-              </div>`;
-          }).join('');
-      }
-
-      const logList = document.getElementById('log-list');
-      if (logList && myData.logs) logList.innerHTML = myData.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
-
-  } catch (e) {
-      console.error("UI 渲染嚴重錯誤:", e);
-  }
-}
-
-window.useResourceCard = async () => {
-    if (!myData || myData.items.resourceCard <= 0) return alert("背包中沒有足夠的軍用物資卡！");
-    myData.items.resourceCard--;
-    const gain = 100000; 
-    myData.wood += gain;
-    myData.iron += gain;
-    myData.food += gain;
-    myData.logs.unshift(`[後勤補給] 成功開啟物資卡，獲得各項資源 ${formatCompact(gain)}！`);
-    await savePrivateData();
-    alert(`📦 開啟成功！\n獲得 木材/鐵礦/糧草 各 ${formatCompact(gain)}`);
-    try { window.renderSelf(); } catch(e){}
-};
-
-window.useSpeedUp = async (type, idx = 0, speedType = '5m') => {
-  if (!myData) return;
-  const timeReduce = speedType === '1h' ? 3600000 : (speedType === '30m' ? 1800000 : 300000);
-  const itemKey = speedType === '1h' ? 'speedup1h' : (speedType === '30m' ? 'speedup30m' : 'speedup5m');
-
-  if (myData.items[itemKey] <= 0) return alert(`您沒有足夠的 [${speedType}] 加速道具！`);
-  
-  if (type === 'build') {
-    if (myData.buildQueues.length === 0 || !myData.buildQueues[idx]) return alert("沒有進行中的建築隊列！");
-    myData.items[itemKey]--;
-    myData.buildQueues[idx].finishesAt -= timeReduce; 
-    if (myData.buildQueues[idx].finishesAt < Date.now()) myData.buildQueues[idx].finishesAt = Date.now();
-  } else if (type === 'research') {
-    if (!myData.researchQueue) return alert("沒有進行中的研發隊列！");
-    myData.items[itemKey]--;
-    myData.researchQueue.finishesAt -= timeReduce; 
-    if (myData.researchQueue.finishesAt < Date.now()) myData.researchQueue.finishesAt = Date.now();
-  } else {
-    if (!myData.trainQueue) return alert("該項目沒有進行中的隊列！");
-    myData.items[itemKey]--;
-    myData.trainQueue.finishesAt -= timeReduce; 
-    if (myData.trainQueue.finishesAt < Date.now()) myData.trainQueue.finishesAt = Date.now();
-  }
-  await savePrivateData();
-};
-
-window.useShield = async () => {
-  if (myData.items.shieldCard <= 0) return alert('背包中沒有和平護盾！');
-  const now = Date.now();
-  if (myData.shieldEndsAt && myData.shieldEndsAt > now) {
-     if(!confirm('目前護盾依然有效，確定要覆蓋並重新計算 6 小時嗎？')) return;
-  }
-  myData.items.shieldCard--;
-  myData.shieldEndsAt = now + 6 * 3600 * 1000;
-  myData.logs.unshift(`[防禦系統] 啟動和平護盾，領地 6 小時內將免受攻擊！`);
-  await savePrivateData();
-  try{ await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true }); }catch(e){}
-  alert('🛡️ 護盾已啟動！');
-  try{ window.renderSelf(); }catch(e){} window.refreshMap();
-};
-
-window.openRenameModal = () => { document.getElementById("rename-modal").style.display='flex'; };
-window.closeRenameModal = () => { document.getElementById("rename-modal").style.display='none'; };
-window.confirmRename = async () => {
-  const newName = document.getElementById('rename-input').value.trim();
-  if(newName.length < 2 || newName.length > 8) return alert('名字長度需為 2~8 字元！');
-  if (!myData.freeRenameUsed) myData.freeRenameUsed = true;
-  else if (myData.items.renameCard > 0) myData.items.renameCard--; else return alert('需要改名卡！');
-  myData.name = newName; await savePrivateData(); try{await setDoc(doc(db, "world_map", myUid), { name: newName }, { merge: true });}catch(e){}
-  alert("✅ 名稱已更改！"); window.closeRenameModal(); try{ window.renderSelf(); }catch(e){} window.refreshMap();
-};
-
-window.locateHome = () => { if (myData) { centerCameraOn(myData.x, myData.y); window.switchTab('world'); }};
-
-window.upgradeBuilding = async (key) => {
-  const maxQueues = 1 + (myData.buildings.builder || 0);
-  if (myData.buildQueues.some(q => q && q.target === key)) return alert('該設施正在升級中！');
-  if (myData.buildQueues.length >= maxQueues) return alert('建築隊列已滿！請升級工匠小屋。');
-  
-  const lvl = myData.buildings[key], cost = getUpgradeCost(key, lvl);
-  if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
-  const timeSec = getUpgradeTime(key, lvl);
-  myData.wood -= cost.w; myData.iron -= cost.i; 
-  myData.buildQueues.push({ target: key, finishesAt: Date.now() + timeSec * 1000 }); 
-  await savePrivateData();
-};
-
-window.startResearch = async (key) => {
-  if (myData.researchQueue) return alert('已有科技正在研發！');
-  const lvl = myData.research[key] || 0;
-  const cost = getUpgradeCost(key, lvl, true);
-  if (myData.wood < cost.w || myData.iron < cost.i) return alert('資源不足！');
-  const timeSec = getUpgradeTime(key, lvl, true);
-  myData.wood -= cost.w; myData.iron -= cost.i;
-  myData.researchQueue = { target: key, finishesAt: Date.now() + timeSec * 1000 };
-  await savePrivateData();
-};
-
-window.trainTroopType = async (typeKey) => {
-  if (myData.trainQueue) return alert('已有部隊正在招募！');
-  const req = CFG.troops[typeKey];
-  const bLvl = myData.buildings.barracks || 1;
-  const trainCount = bLvl * 5;
-  const costW = req.w * trainCount, costI = req.i * trainCount, costF = req.f * trainCount;
-
-  if (myData.buildings.barracks < req.reqLvl) return alert('兵營等級不足！');
-  if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
-  myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
-  myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
-  await savePrivateData();
-};
