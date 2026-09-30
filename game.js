@@ -27,6 +27,9 @@ const canvas = document.getElementById("worldCanvas"), ctx = canvas.getContext("
 let MAP_CACHE = [];
 const exploredTiles = Array.from({ length: WORLD_COLS }, () => Array(WORLD_ROWS).fill(false));
 
+// ==========================================
+// 🖼️ 載入外部材質圖片
+// ==========================================
 const castleImgs = [];
 for (let i = 1; i <= 7; i++) {
     const img = new Image();
@@ -62,7 +65,7 @@ const CFG = {
     cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 }
   },
   troops: {
-    infantry: { icon: '🛡️️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
+    infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
     archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 30, reqLvl: 3, upkeep: 25 },
     cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 45, reqLvl: 5, upkeep: 45 }
   }
@@ -105,7 +108,7 @@ function getStaticEntity(x, y, type) {
   if (dist <= 14) {
     if (rand < 0.015) return { type: 'npc_fortress', name: '🏯 黑暗要塞', reqPwr: 5000, loot: { wood: 50000, iron: 50000, food: 50000, speedup30m: 3, resourceCard: 1 } };
     if (rand < 0.035) return { type: 'npc_super_castle', name: '🏰 夢魘巨城', reqPwr: 8000, loot: { iron: 100000, wood: 100000, food: 100000, speedup1h: 1 } };
-    if (rand < 0.090) return { type: 'relic', name: '🏛️ 奇蹟遺跡', reqFood: 200, loot: { wood: 3000, iron: 3000, food: 3000 } };
+    if (rand < 0.090) return { type: 'relic', name: '🏛️️ 奇蹟遺跡', reqFood: 200, loot: { wood: 3000, iron: 3000, food: 3000 } };
     return null;
   }
   if (dist <= 32) {
@@ -131,8 +134,10 @@ function sanitizeData() {
   if (!myData) return;
   if (typeof myData.troops !== 'object') myData.troops = { infantry: 10, archer: 0, cavalry: 0 };
   ['infantry', 'archer', 'cavalry'].forEach(k => { if(isNaN(myData.troops[k]) || myData.troops[k]===null) myData.troops[k] = 0; });
+  
   if (!myData.buildings || typeof myData.buildings !== 'object') myData.buildings = {};
   Object.keys(CFG.buildings).forEach(k => { if(isNaN(myData.buildings[k]) || myData.buildings[k]===null) myData.buildings[k] = (k==='builder'||k==='academy'||k==='wall'||k==='warehouse') ? 0 : 1; });
+  
   if (!myData.research || typeof myData.research !== 'object') myData.research = {};
   Object.keys(CFG.techs).forEach(k => { if(isNaN(myData.research[k]) || myData.research[k]===null) myData.research[k] = 0; });
 
@@ -284,6 +289,7 @@ onAuthStateChanged(auth, async (user) => {
         } else { 
           await setDoc(worldRef, { castleLevel: myData.buildings.castle, shieldEndsAt: myData.shieldEndsAt }, {merge:true}); 
         }
+
     } catch (err) { console.error("雲端資料庫初始化遭拒絕:", err); if (titleEl) titleEl.innerHTML = `<span style="color:#ef4444; font-size:0.85rem;">🚨 伺服器拒絕存取！請確認已更新 Firebase 規則。</span>`; }
 
     onSnapshot(playerRef, (docSnap) => {
@@ -554,7 +560,7 @@ function renderGMPlayers() {
 window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
 
 // ==========================================
-// 遊戲心跳與系統更新
+// 遊戲心跳
 // ==========================================
 async function localTick() {
   if (!myData || myData.isBanned) return;
@@ -822,7 +828,7 @@ async function resolveAttackPlayer(m) {
 }
 
 // ==========================================
-// 🎨 渲染世界地圖 - 全新【中世紀羊皮紙油畫風】
+// 🎨 渲染世界地圖 - 全新【中世紀三階腐化地貌】
 // ==========================================
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
@@ -845,68 +851,62 @@ function drawWorldMap() {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
       const px = x*TILE_SIZE, py = y*TILE_SIZE;
       
-      // 未探索的黑色塊 (迷霧外的底色)
       if (!exploredTiles[x][y]) { ctx.fillStyle='#050811'; ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); continue; }
 
       const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
       const dist = Math.hypot(x-50, y-50);
       const isCore = dist <= 14, isMid = dist > 14 && dist <= 32;
 
-      // 🎨 中世紀風：地貌繪製
+      // 🎨 腐化平原
       if (cell.type === 'plains') { 
-        // 復古平原：羊皮紙綠色系
-        ctx.fillStyle = isCore ? '#4a5d23' : (isMid ? '#6b8e23' : '#8f9779'); 
+        ctx.fillStyle = isCore ? '#3b1c1c' : (isMid ? '#544238' : '#8f9779'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        // 墨水感草叢筆觸
-        ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = isCore ? 'rgba(239, 68, 68, 0.15)' : 'rgba(0,0,0,0.2)'; 
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(px+10, py+20); ctx.lineTo(px+15, py+12); ctx.lineTo(px+20, py+20);
         ctx.moveTo(px+35, py+40); ctx.lineTo(px+40, py+32); ctx.lineTo(px+45, py+40);
         ctx.stroke();
       }
+      // 🎨 腐化森林
       else if (cell.type === 'forest') { 
-        // 復古森林：暗黑松林
-        ctx.fillStyle = isCore ? '#1b2910' : (isMid ? '#2e401e' : '#3e522d'); 
+        ctx.fillStyle = isCore ? '#1a0d0d' : (isMid ? '#33271e' : '#3e522d'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        // 尖刺狀松樹形狀
-        ctx.fillStyle = isCore ? '#0f1a07' : (isMid ? '#1a260f' : '#233318');
+        ctx.fillStyle = isCore ? '#0a0505' : (isMid ? '#1c1611' : '#233318');
         ctx.beginPath(); ctx.moveTo(px+27, py+10); ctx.lineTo(px+15, py+35); ctx.lineTo(px+40, py+35); ctx.fill();
         ctx.beginPath(); ctx.moveTo(px+15, py+20); ctx.lineTo(px+5, py+45); ctx.lineTo(px+25, py+45); ctx.fill();
         ctx.beginPath(); ctx.moveTo(px+40, py+25); ctx.lineTo(px+30, py+45); ctx.lineTo(px+50, py+45); ctx.fill();
       }
+      // 🎨 腐化山脈
       else if (cell.type === 'mountain') { 
-        // 復古山脈：帶有光影的岩石與雪頂
-        ctx.fillStyle = isCore ? '#36312d' : (isMid ? '#4a423a' : '#5c544d'); 
+        ctx.fillStyle = isCore ? '#1f1313' : (isMid ? '#3a3430' : '#5c544d'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        // 山峰陰影面
-        ctx.fillStyle = '#2b2724'; 
+        ctx.fillStyle = isCore ? '#0f0a0a' : (isMid ? '#241f1c' : '#2b2724'); 
         ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+5, py+45); ctx.lineTo(px+27, py+45); ctx.fill();
-        // 山峰受光面
-        ctx.fillStyle = '#6e655c'; 
+        ctx.fillStyle = isCore ? '#2e1c1c' : (isMid ? '#4f4741' : '#6e655c'); 
         ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+27, py+45); ctx.lineTo(px+50, py+45); ctx.fill();
-        // 雪頂
-        ctx.fillStyle = '#dcd7d4';
+        ctx.fillStyle = isCore ? '#7f1d1d' : (isMid ? '#9ca3af' : '#dcd7d4');
         ctx.beginPath(); ctx.moveTo(px+27, py+8); ctx.lineTo(px+18, py+23); ctx.lineTo(px+27, py+28); ctx.lineTo(px+35, py+23); ctx.fill();
       }
+      // 🎨 腐化水域
       else { 
-        // 復古水域：古典航海圖藍色
-        ctx.fillStyle = '#4a6b8c'; 
+        ctx.fillStyle = isCore ? '#2b1116' : (isMid ? '#2f3b4c' : '#4a6b8c'); 
         ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-        // 手繪風格浪花線條
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isCore ? 'rgba(220,38,38,0.2)' : 'rgba(255,255,255,0.3)'; 
+        ctx.lineWidth = 1.5;
         const wave = Math.sin(t/500 + x + y) * 2;
         ctx.beginPath(); ctx.moveTo(px+10, py+20+wave); ctx.quadraticCurveTo(px+15, py+15+wave, px+20, py+20+wave); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(px+30, py+35-wave); ctx.quadraticCurveTo(px+35, py+30-wave, px+40, py+35-wave); ctx.stroke();
       }
 
-      // 🎨 中世紀風：復古網格線 (深色半透明墨水感)
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = isCore ? 'rgba(153, 27, 27, 0.15)' : 'rgba(0, 0, 0, 0.15)'; 
+      ctx.lineWidth = 1;
       ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
       const isExplored = exploredTiles[x][y] || godModeFog;
       if (!isExplored) { 
-          // 🎨 中世紀風：深邃的羊皮紙棕褐迷霧
-          ctx.fillStyle='rgba(30, 20, 15, 0.7)'; 
+          // 🌫️ 三階迷霧：核心血紅 / 中間灰燼 / 外圍羊皮紙
+          ctx.fillStyle = isCore ? 'rgba(20, 5, 5, 0.75)' : (isMid ? 'rgba(25, 20, 20, 0.7)' : 'rgba(30, 20, 15, 0.7)');
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
           continue; 
       }
@@ -1272,9 +1272,6 @@ document.getElementById("btn-confirm-action").addEventListener('click', () => {
   window.closeActionModal(); try{window.renderSelf();}catch(e){}
 });
 
-// ==========================================
-// 渲染 UI
-// ==========================================
 window.renderSelf = function() {
   if (myData.isBanned) return;
   try {
@@ -1408,7 +1405,7 @@ window.renderSelf = function() {
             <div class="item-card">
                 <div>
                 <strong style="font-size:1.05rem;">${CFG.buildings[key].name}</strong> <span style="color:#fbbf24;">Lv.${lvl}</span>
-                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️${formatCompact(cost.i)}</span></div>
+                <div class="item-cost"><span>🌲${formatCompact(cost.w)}</span><span>⛏️️${formatCompact(cost.i)}</span></div>
                 </div>
                 ${progressHtml}
                 ${btnHtml}
