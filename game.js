@@ -37,6 +37,9 @@ const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
 const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
 const imgBarbarian = new Image(); imgBarbarian.src = 'ico_buildings_stronghold_cyclopsMound.png';
 const imgRelic = new Image(); imgRelic.src = 'relic.png'; 
+const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
+const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
+const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
 
 const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
@@ -1059,11 +1062,27 @@ function drawWorldMap() {
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid);
-            ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
-            let emoji = cell.entity.type === 'res_farm' ? '🌾' : (cell.entity.type === 'res_lumber' ? '🌲' : '⛏️');
-            ctx.fillText(emoji, px+TILE_SIZE/2, py+35);
+            
+            // 💡 判斷對應的圖片與備用 Emoji
+            let resImg = null; let fallbackEmoji = '';
+            if (cell.entity.type === 'res_farm') { resImg = imgResFarm; fallbackEmoji = '🌾'; }
+            else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
+            else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
+
+            // 💡 如果圖片載入成功就畫圖，否則顯示備用的 Emoji
+            if (resImg && resImg.complete && resImg.naturalHeight !== 0) {
+                // 這裡的 px, py - 5 還有 TILE_SIZE 可以根據你的圖片實際長寬比稍微加減微調
+                ctx.drawImage(resImg, px, py - 5, TILE_SIZE, TILE_SIZE);
+            } else {
+                ctx.font = '24px sans-serif'; ctx.textAlign='center'; 
+                ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+35);
+            }
+
+            // 💡 底部狀態文字
+            ctx.textAlign='center'; 
             ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
-            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '資源點'), px+TILE_SIZE/2, py+48);
+            ctx.font = 'bold 10px sans-serif'; 
+            ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '資源點'), px+TILE_SIZE/2, py+48);
           }
         }
       }
