@@ -113,28 +113,50 @@ function getStaticEntity(x, y, type) {
   if (x === 145 && y === 165) return { type: 'npc_fortress', name: '👁️ 迷霧監視塔', reqPwr: 20000, loot: { wood: 150000, iron: 150000, food: 150000, speedup30m: 5 } };
   if (x === 65 && y === 185) return { type: 'npc_fortress', name: '🏜️ 砂海要塞', reqPwr: 15000, loot: { wood: 100000, iron: 100000, food: 100000, speedup30m: 3 } };
 
-  // 🛡️ 2. 地標周邊 6 格以內的「聯盟禁衛軍陣地」(會觸發連鎖反撲)
+  if (type === 'water') return null;
+
   const landmarks = [
     { name: '中央王都', x: 115, y: 95, pwr: 25000 },
     { name: '猩紅法師塔', x: 148, y: 32, pwr: 18000 },
     { name: '迷霧監視塔', x: 145, y: 165, pwr: 12000 },
     { name: '砂海要塞', x: 65, y: 185, pwr: 10000 }
   ];
+
+  const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
+
+  // 🛡️ 2. 地標周邊專屬生態圈 (漸進式資源與巡邏分佈)
   for (let lm of landmarks) {
-      if (Math.hypot(x - lm.x, y - lm.y) <= 6 && (x !== lm.x || y !== lm.y)) {
-          return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·禁衛哨所`, reqPwr: lm.pwr, faction: lm.name, pwr: lm.pwr, loot: { wood: 10000, iron: 10000, food: 10000, speedup5m: 5 } };
+      const dist = Math.hypot(x - lm.x, y - lm.y);
+      if (dist > 0 && dist <= 10) {
+          // 核心區 (距離 1~3)：極少數內衛，大量超稀有資源 (需要高戰力才能採集)
+          if (dist <= 3) {
+              if (r < 0.10) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·內衛`, faction: lm.name, pwr: Math.floor(lm.pwr*1.2), reqPwr: Math.floor(lm.pwr*1.2), loot: { wood: 20000, iron: 20000, speedup30m: 1 } };
+              if (r < 0.35) return { type: 'res_mine', name: '💎 皇家晶礦脈', res: 'iron', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
+              if (r < 0.60) return { type: 'res_farm', name: '🌾 皇家御用農莊', res: 'food', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
+              if (r < 0.85) return { type: 'res_lumber', name: '🌲 神木林', res: 'wood', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
+          } 
+          // 中層區 (距離 4~6)：中等密度哨所，高級資源
+          else if (dist <= 6) {
+              if (r < 0.08) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·哨所`, faction: lm.name, pwr: lm.pwr, reqPwr: lm.pwr, loot: { wood: 10000, iron: 10000, speedup5m: 5 } };
+              if (r < 0.20) return { type: 'res_mine', name: '⛏️ 富脈鐵礦', res: 'iron', cap: 200000, reqPwr: Math.floor(lm.pwr*0.2) };
+              if (r < 0.35) return { type: 'res_lumber', name: '🌲 豐饒古木林', res: 'wood', cap: 200000, reqPwr: Math.floor(lm.pwr*0.2) };
+          }
+          // 外圍區 (距離 7~10)：稀疏巡邏，一般資源
+          else {
+              if (r < 0.04) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·巡邏`, faction: lm.name, pwr: Math.floor(lm.pwr*0.7), reqPwr: Math.floor(lm.pwr*0.7), loot: { wood: 5000, iron: 5000 } };
+              if (r < 0.15) return { type: 'res_farm', name: '🌾 邊境屯田', res: 'food', cap: 100000, reqPwr: 2000 };
+          }
+          // 💡 保持空曠感，生態圈範圍內未生成的空地，不要被普通野蠻人填滿
+          return null; 
       }
   }
 
-  if (type === 'water') return null;
-
   // 🌲 3. 一般野外隨機物件
-  const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
   if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
   if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
   if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
-  if (r < 0.080) return { type: 'relic', name: '🏛️️ 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
+  if (r < 0.080) return { type: 'relic', name: '🏛 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
   return null;
 }
 
@@ -1247,6 +1269,38 @@ function drawWorldMap() {
     ctx.textAlign='start'; // 重置
   });
 
+  // 💡 4.5 繪製地標 NPC 的「動態採集運輸隊」 (純視覺動態，不佔用資料庫效能)
+  const lms = [{x: 115, y: 95, c:'#facc15'}, {x: 148, y: 32, c:'#ef4444'}, {x: 145, y: 165, c:'#a855f7'}, {x: 65, y: 185, c:'#f97316'}];
+  lms.forEach((lm, idx) => {
+      const cycle = 15000; // 每 15 秒一趟來回
+      const phase = (t + idx * 4321) % (cycle * 2); 
+      const isReturning = phase > cycle;
+      const p = isReturning ? (1 - (phase - cycle)/cycle) : (phase / cycle);
+      
+      // 利用時間戳決定採集的目標資源方位，讓它看起來是隨機出發
+      const periodId = Math.floor((t + idx * 4321) / (cycle * 2));
+      const r1 = Math.sin(periodId * 12.9898 + idx) * 43758.5453;
+      const angle = (r1 - Math.floor(r1)) * Math.PI * 2;
+      const dist = 3 + ((r1 * 7) - Math.floor(r1 * 7)) * 4; // 距離 3~7 格
+      
+      const tgX = lm.x + Math.cos(angle) * dist;
+      const tgY = lm.y + Math.sin(angle) * dist;
+      
+      const sX = lm.x*TILE_SIZE + TILE_SIZE/2, sY = lm.y*TILE_SIZE + TILE_SIZE/2;
+      const eX = tgX*TILE_SIZE + TILE_SIZE/2, eY = tgY*TILE_SIZE + TILE_SIZE/2;
+      const cX = sX + (eX - sX) * p, cY = sY + (eY - sY) * p;
+
+      // 只有當運輸隊在玩家視野內時才繪製，節省效能
+      if (cX > camX-TILE_SIZE && cX < camX+vW+TILE_SIZE && cY > camY-TILE_SIZE && cY < camY+vH+TILE_SIZE) {
+          ctx.beginPath(); ctx.setLineDash([4,4]); ctx.moveTo(sX, sY); ctx.lineTo(eX, eY);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
+          
+          // 畫出小小的發光採集隊
+          ctx.fillStyle = lm.c; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; 
+          ctx.fillText(isReturning ? '📦' : '⛏️', cX, cY+3); // 回程顯示包裹，去程顯示十字鎬
+      }
+  });
   // 💡 5. 繪製行軍路線
   if (myData.marches && myData.marches.length > 0) {
     myData.marches.forEach(m => {
