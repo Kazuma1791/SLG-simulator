@@ -134,6 +134,9 @@ function getStaticEntity(x, y, type) {
       }
   }
 
+  // 🌲 3. 一般野外隨機物件
+  // 💡 新增：全地圖極低機率(0.2%)生成「荒野營地」，為玩家帶來隨機的襲擊威脅
+  if (r < 0.002) return { type: 'npc_outpost', name: '🏕️ 荒野外圍營地', reqPwr: 3000, loot: { wood: 15000, iron: 15000, food: 15000, speedup5m: 5 } };
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
   if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
   if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
@@ -995,26 +998,39 @@ async function localTick() {
      if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
   });
 
+  // 💡 野外勢力隨機攻城系統 (每秒 0.5% 機率觸發，約每 3 分鐘偵測一次)
   if (Math.random() < 0.005) {
     if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
       let nearestNPC = null, minDist = 15;
+      
+      // 掃描玩家周圍 15 格，尋找是否有任何 NPC 據點或外圍營地
       for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
         for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
           const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+          // 如果發現 npc 開頭的實體 (包含剛加入的 npc_outpost)，且還沒被玩家通關摧毀
           if (cell && cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
             const dist = Math.hypot(tx - myData.x, ty - myData.y);
             if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
           }
         }
       }
+      
+      // 如果附近有外圍營地，而且目前沒有「正在抵禦該營地」的隊列，就發動攻擊！
       if (nearestNPC && !myData.marches.some(m => m.type === 'defend_npc' && m.startX === nearestNPC.x && m.startY === nearestNPC.y)) {
         const timeMs = Math.ceil(minDist * 4 * 1000); 
-        const enemyPwr = Math.floor(10 + myData.buildings.castle * 15);
+        // 💡 敵軍強度會根據玩家的「主城等級」動態微調，確保有一點威脅感但不會秒殺新手
+        const enemyPwr = Math.floor(200 + myData.buildings.castle * 250);
+        
         myData.marches.push({
           id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
           startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
         });
-        myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
+        
+        // 觸發紅色警告日誌與戰報
+        myData.logs.unshift(`🚨 [警報] 【${nearestNPC.ent.name}】的劫掠部隊正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
+        if(window.addReport) {
+            window.addReport(`🚨 敵襲警報`, `發現來自【${nearestNPC.ent.name}】的敵軍正朝主城進發！\n預估敵軍戰力：${formatCompact(enemyPwr)}\n\n(💡 請盡快招募士兵防禦，或在內政面板使用和平護盾！)`, false);
+        }
         needSave = true;
       }
     }
