@@ -1103,6 +1103,9 @@ function getPwrByTech(troops, tech) {
          (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
 }
 
+// ==========================================
+// 💡 據點佔領結算系統 (修復 1 兵佔領 Bug)
+// ==========================================
 async function resolveOccupyNode(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, isGathering: false, cap: m.entity.cap, resType: m.entity.res };
   try {
@@ -1111,25 +1114,48 @@ async function resolveOccupyNode(m) {
       const snap = await transaction.get(nodeRef);
       let defender = snap.exists() ? snap.data() : null;
       
-      const attPwr = getPwrByTech(m.troops, m.techs);
+      // 我方真實戰力
+      const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
       
       if (defender && defender.uid !== myUid) {
+          // 🆚 玩家對抗玩家 (PVP 爭奪資源點)
           const defPwr = getPwrByTech(defender.troops, defender.techs || {});
           if (attPwr > defPwr) {
               transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: m.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
               res.isGathering = true;
               myData.logs.unshift(`[佔領成功] 擊退了敵方佔領軍！部隊開始採集資源。`);
+              if(window.addReport) window.addReport(`⚔️️ 掠奪資源點`, `成功擊敗敵方部隊並佔據資源點！`, true);
           } else {
-              res.survived = false;
+              res.survived = false; // 戰敗全滅
+              res.troops = {infantry:0, archer:0, cavalry:0};
               myData.logs.unshift(`[佔領失敗] 遭遇強大的敵軍防守，我方部隊全數陣亡！`);
+              if(window.addReport) window.addReport(`☠️ 資源點爭奪失敗`, `力量懸殊，出征部隊已全數陣亡！`, false);
           }
       } else {
-          transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: m.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
-          res.isGathering = true;
-          myData.logs.unshift(`[抵達據點] 部隊已駐紮並開始採集資源。`);
+          // ⚔️ 對抗野生守軍 (PVE 戰鬥判定)
+          const reqPwr = m.entity.reqPwr || 100; // 取得該資源點的戰力要求
+          
+          // 💡 關鍵修復：檢查我方戰力是否大於等於守軍
+          if (attPwr >= reqPwr) {
+              // ✅ 戰鬥勝利，計算輕微戰損 (戰力越碾壓，死越少兵)
+              let lossRate = reqPwr > 0 ? (reqPwr / (attPwr + 1)) * 0.1 : 0; 
+              res.troops.infantry = Math.max(0, m.troops.infantry - Math.floor(m.troops.infantry * lossRate));
+              res.troops.archer = Math.max(0, m.troops.archer - Math.floor(m.troops.archer * lossRate));
+              res.troops.cavalry = Math.max(0, m.troops.cavalry - Math.floor(m.troops.cavalry * lossRate));
+
+              transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: res.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
+              res.isGathering = true;
+              myData.logs.unshift(`[抵達據點] 擊退野生守軍，部隊已駐紮並開始採集資源。`);
+          } else {
+              // ❌ 戰鬥失敗 (1兵流會直接死在這裡)
+              res.survived = false;
+              res.troops = {infantry:0, archer:0, cavalry:0}; // 部隊全軍覆沒
+              myData.logs.unshift(`[佔領慘敗] 戰力不足以擊敗野生守軍，部隊全軍覆沒！`);
+              if(window.addReport) window.addReport(`☠️ 佔領失敗`, `資源點守備戰力高達 ${formatCompact(reqPwr)}，我方戰鬥力 ${formatCompact(attPwr)} 不敵，全軍覆沒！`, false);
+          }
       }
     });
-    window.refreshMap();
+    if (res.isGathering) window.refreshMap();
   } catch (e) { console.error(e); }
   return res;
 }
