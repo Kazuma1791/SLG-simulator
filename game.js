@@ -367,11 +367,23 @@ onAuthStateChanged(auth, async (user) => {
       if (docSnap.exists()) {
         myData = docSnap.data();
         sanitizeData();
-        if (myData.triggerDeviceBan) {
-            localStorage.setItem('SLG_DEATH_MARK', 'true'); // 遠端引爆設備封鎖
+        // 💡 1. 如果收到管理員的「特赦令」，立刻清除瀏覽器裡的死刑印記！
+        if (myData.clearDeviceBan) {
+            localStorage.removeItem('SLG_DEATH_MARK');
         }
-        if (myData.isBanned) { document.getElementById('ban-screen').style.display = 'flex'; document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章"; return; }
-        else { document.getElementById('ban-screen').style.display = 'none'; }
+        // 💀 2. 如果收到封鎖指令，植入死刑印記
+        else if (myData.triggerDeviceBan) {
+            localStorage.setItem('SLG_DEATH_MARK', 'true');
+        }
+
+        // 3. 處理畫面顯示
+        if (myData.isBanned) { 
+            document.getElementById('ban-screen').style.display = 'flex'; 
+            document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章"; 
+            return; // 被封鎖者停止後續渲染
+        } else { 
+            document.getElementById('ban-screen').style.display = 'none'; 
+        }
 
         isAdmin = (user.email === 'topacoau@gmail.com');
         document.getElementById('btn-tab-gm').style.display = isAdmin ? 'block' : 'none';
@@ -539,10 +551,15 @@ window.gmTargetAction = async (action) => {
     if (action === 'ban') { 
         tData.isBanned = true; 
         tData.banReason = "管理員手動永久封鎖"; 
-        // 寫入一個特殊標記，目標玩家下次登入時會自動觸發設備死刑印記
-        tData.triggerDeviceBan = true; 
+        tData.triggerDeviceBan = true;  // 發送封鎖信號
+        tData.clearDeviceBan = false; 
     }
-    if (action === 'unban') { tData.isBanned = false; tData.banReason = ""; }
+    if (action === 'unban') { 
+        tData.isBanned = false; 
+        tData.banReason = ""; 
+        tData.triggerDeviceBan = false; 
+        tData.clearDeviceBan = true;    // 💡 核心：發送「遠端特赦」信號，要求玩家瀏覽器刪除黑名單印記
+    }
     if (action === 'addRes') { tData.wood += 1000000; tData.iron += 1000000; tData.food += 1000000; }
     if (action === 'addTroops') { tData.troops.infantry += 100000; tData.troops.archer += 100000; tData.troops.cavalry += 100000; }
     if (action === 'addItems') { tData.items.shieldCard += 100; tData.items.speedup5m += 100; tData.items.speedup1h += 10; }
