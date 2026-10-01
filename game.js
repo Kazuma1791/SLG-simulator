@@ -716,8 +716,11 @@ async function localTick() {
       window.renderMarchHUD();
   }
 
-  // 💡 【行軍安全與護盾修復中樞】
-  myData.marches.forEach(m => {
+  // 💡 【行軍安全、護盾修復與部隊歸還中樞】
+  let cleanedMarches = [];
+  let marchesChanged = false;
+
+  for (let m of myData.marches) {
       // 1. 修復護盾 Bug
       if (m.type === 'attack_player' && now >= m.finishesAt) {
           const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
@@ -725,6 +728,7 @@ async function localTick() {
               myData.logs.unshift(`🛡️ [戰報] 目標【${tC.name}】已開啟護盾，部隊無法攻擊，自動折返！`);
               m.type = 'return'; m.startX = m.targetX; m.startY = m.targetY;
               m.targetX = myData.x; m.targetY = myData.y; m.startTime = now;
+              marchesChanged = true;
           }
       }
       
@@ -732,9 +736,39 @@ async function localTick() {
       if (m.type === 'return' && !m.timeFixed) {
           const dist = Math.hypot(myData.x - m.startX, myData.y - m.startY);
           m.finishesAt = m.startTime + Math.ceil(dist * 3 * 1000); 
-          m.timeFixed = true; // 標記為已修復，不再重複計算
+          m.timeFixed = true;
+          marchesChanged = true;
       }
-  });
+
+      // 3. ⛺ 士兵到家解散與資源歸還 (修復 0 秒卡死)
+      if (m.type === 'return' && now >= m.finishesAt) {
+          if (m.troops) {
+              myData.troops.infantry = (myData.troops.infantry || 0) + (m.troops.infantry || 0);
+              myData.troops.archer = (myData.troops.archer || 0) + (m.troops.archer || 0);
+              myData.troops.cavalry = (myData.troops.cavalry || 0) + (m.troops.cavalry || 0);
+          }
+          if (m.payload) {
+              myData.wood += (m.payload.wood || 0);
+              myData.iron += (m.payload.iron || 0);
+              myData.food += (m.payload.food || 0);
+              myData.logs.unshift(`⛺ [部隊返鄉] 滿載而歸！帶回資源 🌲${formatCompact(m.payload.wood||0)} ⛏️${formatCompact(m.payload.iron||0)} 🌾${formatCompact(m.payload.food||0)}`);
+          } else {
+              myData.logs.unshift(`⛺ [部隊返鄉] 您的部隊已安全返回主城。`);
+          }
+          marchesChanged = true;
+          continue; // 💡 成功進城！直接跳過，不放進清單裡，讓它從畫面上消失！
+      }
+      
+      cleanedMarches.push(m);
+  }
+  
+  // 更新部隊清單並自動存檔
+  if (myData.marches.length !== cleanedMarches.length) {
+      myData.marches = cleanedMarches;
+      marchesChanged = true;
+  }
+  if (marchesChanged) savePrivateData();
+
 
   const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
   const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
