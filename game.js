@@ -124,29 +124,25 @@ function getStaticEntity(x, y, type) {
 
   const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
 
-  // 🛡️ 2. 地標周邊專屬生態圈 (漸進式資源與巡邏分佈)
+  // 🛡️ 2. 地標周邊專屬生態圈 (漸進式資源與階級化 NPC 城堡)
   for (let lm of landmarks) {
       const dist = Math.hypot(x - lm.x, y - lm.y);
       if (dist > 0 && dist <= 10) {
-          // 核心區 (距離 1~3)：極少數內衛，大量超稀有資源 (需要高戰力才能採集)
           if (dist <= 3) {
-              if (r < 0.10) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·內衛`, faction: lm.name, pwr: Math.floor(lm.pwr*1.2), reqPwr: Math.floor(lm.pwr*1.2), loot: { wood: 20000, iron: 20000, speedup30m: 1 } };
+              if (r < 0.10) return { type: 'npc_faction_guard', name: `🏰 ${lm.name}·禁衛城堡 (Lv.3)`, faction: lm.name, pwr: Math.floor(lm.pwr*1.5), reqPwr: Math.floor(lm.pwr*1.5), loot: { wood: 30000, iron: 30000, speedup1h: 1 } };
               if (r < 0.35) return { type: 'res_mine', name: '💎 皇家晶礦脈', res: 'iron', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
               if (r < 0.60) return { type: 'res_farm', name: '🌾 皇家御用農莊', res: 'food', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
               if (r < 0.85) return { type: 'res_lumber', name: '🌲 神木林', res: 'wood', cap: 500000, reqPwr: Math.floor(lm.pwr*0.5) };
           } 
-          // 中層區 (距離 4~6)：中等密度哨所，高級資源
           else if (dist <= 6) {
-              if (r < 0.08) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·哨所`, faction: lm.name, pwr: lm.pwr, reqPwr: lm.pwr, loot: { wood: 10000, iron: 10000, speedup5m: 5 } };
+              if (r < 0.08) return { type: 'npc_faction_guard', name: `🏯 ${lm.name}·前線要塞 (Lv.2)`, faction: lm.name, pwr: lm.pwr, reqPwr: lm.pwr, loot: { wood: 10000, iron: 10000, speedup5m: 5 } };
               if (r < 0.20) return { type: 'res_mine', name: '⛏️ 富脈鐵礦', res: 'iron', cap: 200000, reqPwr: Math.floor(lm.pwr*0.2) };
               if (r < 0.35) return { type: 'res_lumber', name: '🌲 豐饒古木林', res: 'wood', cap: 200000, reqPwr: Math.floor(lm.pwr*0.2) };
           }
-          // 外圍區 (距離 7~10)：稀疏巡邏，一般資源
           else {
-              if (r < 0.04) return { type: 'npc_faction_guard', name: `🛡️ ${lm.name}·巡邏`, faction: lm.name, pwr: Math.floor(lm.pwr*0.7), reqPwr: Math.floor(lm.pwr*0.7), loot: { wood: 5000, iron: 5000 } };
+              if (r < 0.04) return { type: 'npc_faction_guard', name: `🏕️ ${lm.name}·外圍營地 (Lv.1)`, faction: lm.name, pwr: Math.floor(lm.pwr*0.7), reqPwr: Math.floor(lm.pwr*0.7), loot: { wood: 5000, iron: 5000 } };
               if (r < 0.15) return { type: 'res_farm', name: '🌾 邊境屯田', res: 'food', cap: 100000, reqPwr: 2000 };
           }
-          // 💡 保持空曠感，生態圈範圍內未生成的空地，不要被普通野蠻人填滿
           return null; 
       }
   }
@@ -724,6 +720,39 @@ async function localTick() {
   if (myData.food < 0) myData.food = 0;
 
   let needSave = false;
+  const landmarks = [{ name: '中央王都', x: 115, y: 95 }, { name: '猩紅法師塔', x: 148, y: 32 }, { name: '迷霧監視塔', x: 145, y: 165 }, { name: '砂海要塞', x: 65, y: 185 }];
+  
+  // 💡 系統 AI：NPC 勢力隨機佔領周邊資源點
+  if (Math.random() < 0.05) {
+      let lm = landmarks[Math.floor(Math.random() * landmarks.length)];
+      let rx = lm.x + Math.floor(Math.random()*20 - 10), ry = lm.y + Math.floor(Math.random()*20 - 10);
+      let cell = MAP_CACHE[rx] && MAP_CACHE[rx][ry];
+      if (cell && cell.entity && cell.entity.type.startsWith('res_') && !allCastles.some(c=>c.x===rx&&c.y===ry)) {
+          let nodeStr = `NODE_${rx}_${ry}`;
+          getDoc(doc(db, "world_map", nodeStr)).then(snap => {
+              if (!snap.exists()) setDoc(doc(db, "world_map", nodeStr), { isNode: true, uid: 'NPC', name: `🛡️ ${lm.name}軍團`, x: rx, y: ry, type: cell.entity.type });
+          });
+      }
+  }
+
+  // 💡 系統 AI：偵測玩家在勢力範圍內採集，隨機發動驅逐攻擊！
+  for (let m of myData.marches) {
+      if (m.type === 'gathering') {
+          let nearLm = landmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
+          if (nearLm && Math.random() < 0.02) { // 每秒 2% 機率被巡邏軍發現
+              if (!myData.marches.some(mx => mx.type === 'npc_attack_node' && mx.targetX === m.targetX && mx.targetY === m.targetY)) {
+                  myData.marches.push({
+                      id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
+                      startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
+                      startTime: now, finishesAt: now + 12000, // 敵軍 12 秒後抵達
+                      npcName: nearLm.name, pwr: 15000 
+                  });
+                  myData.logs.unshift(`🚨 [領地警告] 您在 (${m.targetX}, ${m.targetY}) 的採集部隊驚動了 ${nearLm.name}，敵方驅逐軍正趕往該地！`);
+                  needSave = true;
+              }
+          }
+      }
+  }
   
   let newCleared = [];
   for (let poi of myData.clearedPOI) {
@@ -836,6 +865,23 @@ async function localTick() {
         } else { myData.logs.unshift(`[歸城] 遠征軍安全返回城池。`); }
         try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
       } 
+      else if (m.type === 'npc_attack_node') {
+          let gMarchIdx = myData.marches.findIndex(mx => mx.type === 'gathering' && mx.targetX === m.targetX && mx.targetY === m.targetY);
+          if (gMarchIdx !== -1) {
+              let gMarch = myData.marches[gMarchIdx];
+              let pwr = getPwrByTech(gMarch.troops, myData.research);
+              if (pwr >= m.pwr) {
+                  myData.logs.unshift(`⚔️️ [採集防衛] 您的部隊成功擊退了 ${m.npcName} 的驅逐軍！`);
+              } else {
+                  myData.marches[gMarchIdx].type = 'return';
+                  myData.marches[gMarchIdx].finishesAt = now + (now - gMarch.startTime);
+                  myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.5); // 損失一半步兵
+                  myData.logs.unshift(`☠️ [採集失敗] 您的部隊在 (${m.targetX}, ${m.targetY}) 被 ${m.npcName} 擊潰，丟棄物資撤退！`);
+                  try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); } catch(e){}
+              }
+          }
+          needSave = true; continue; // 結算完直接剔除，不推入新的陣列
+      }
       else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
@@ -1262,8 +1308,13 @@ function drawWorldMap() {
     }
 
     if (zoom>0.5) {
-      ctx.fillStyle=isMe?'#fef08a':'#fff'; ctx.font=isMe?'bold 12px sans-serif':'11px sans-serif'; ctx.textAlign='center';
-      ctx.fillText(p.name, px+TILE_SIZE/2, py+60 + floatY); 
+      // 如果是自己顯示黃色，如果是盟友顯示綠色，其他玩家顯示白色
+      ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
+      ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; ctx.textAlign='center';
+      
+      // 顯示 [聯盟標籤] 玩家名稱
+      let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
+      ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
       ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
     ctx.textAlign='start'; // 重置
@@ -1440,12 +1491,22 @@ canvas.addEventListener("click", (e) => {
   const queueStatus = `<span style="font-size:0.8rem; color:#facc15;">(行軍隊列: ${myData.marches.length}/3)</span>`;
 
   if (tC && tC.id!==myUid) {
+    // 1. 檢查是否有和平護盾
     if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
-    targetAction = { type: 'attack_player', id: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
+    
+    // 💡 2. 檢查是否為同聯盟盟友 (這行是新加的)
+    if (tC.allianceName && myData.allianceName && tC.allianceName === myData.allianceName) {
+        return alert("🛡️ 目標是您的歃血盟友，無法發起攻擊！"); 
+    }
+
+    targetAction = { type: 'attack_player', targetUid: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
     document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 ${queueStatus}`; 
     document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】 (Lv.${tC.castleLevel||1})<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🎁 預期掠奪: 敵方30%庫存資源</span>`;
-    document.getElementById("troop-selector").style.display = 'block'; document.getElementById("btn-confirm-action").style.display = 'block'; document.getElementById("btn-confirm-action").innerText = "發動行軍"; document.getElementById("btn-confirm-action").style.background = '#dc2626';
-  } 
+    document.getElementById("troop-selector").style.display = 'block'; 
+    document.getElementById("btn-confirm-action").style.display = 'block'; 
+    document.getElementById("btn-confirm-action").innerText = "發動行軍"; 
+    document.getElementById("btn-confirm-action").style.background = '#dc2626';
+  }
   else if (wBoss) {
     if (wBoss.hp <= 0) return alert("☠️ 此首領已被擊殺，目前只剩下遺骸，請等待重生。");
     const suggestPwr = wBoss.mult === 20 ? 150000 : (wBoss.mult === 8 ? 50000 : 15000); 
@@ -1914,19 +1975,24 @@ function checkFactionRetaliation(targetX, targetY) {
 window.createAlliance = async () => {
     const name = document.getElementById('alliance-name-input').value.trim();
     if(name.length < 2 || name.length > 10) return alert("聯盟名稱需為 2~10 字元！");
-    myData.allianceId = 'ALLIANCE_' + Date.now();
-    myData.allianceName = name;
-    await savePrivateData();
-    window.renderAllianceUI();
-    alert(`✅ 成功創建聯盟【${name}】！`);
+    myData.allianceName = name; await savePrivateData();
+    try { await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true }); } catch(e){}
+    window.renderAllianceUI(); alert(`✅ 成功創建聯盟【${name}】！`); window.refreshMap();
+};
+
+window.joinAlliance = async () => {
+    const name = document.getElementById('alliance-name-input').value.trim();
+    if(name.length < 2) return alert("請輸入聯盟名稱！");
+    myData.allianceName = name; await savePrivateData();
+    try { await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true }); } catch(e){}
+    window.renderAllianceUI(); alert(`✅ 成功加入聯盟【${name}】！`); window.refreshMap();
 };
 
 window.leaveAlliance = async () => {
     if(!confirm("確定要退出目前聯盟嗎？")) return;
-    myData.allianceId = null; myData.allianceName = null;
-    await savePrivateData();
-    window.renderAllianceUI();
-    alert("已退出聯盟。");
+    myData.allianceName = null; await savePrivateData();
+    try { await setDoc(doc(db, "world_map", myUid), { allianceName: null }, { merge: true }); } catch(e){}
+    window.renderAllianceUI(); alert("已退出聯盟。"); window.refreshMap();
 };
 
 window.renderAllianceUI = () => {
@@ -1935,18 +2001,25 @@ window.renderAllianceUI = () => {
     if(!createBox || !mainBox) return;
 
     if (myData && myData.allianceName) {
-        createBox.style.display = 'none';
-        mainBox.style.display = 'block';
-        document.getElementById('my-alliance-title').innerText = `🛡️ ${myData.allianceName}`;
-        document.getElementById('my-alliance-leader').innerText = myData.name + " (盟主)";
-        document.getElementById('alliance-members-list').innerHTML = `<div style="background:#0a0f1d; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#10b981;">👤 ${myData.name} (線上)</div>`;
+        createBox.style.display = 'none'; mainBox.style.display = 'block';
+        document.getElementById('my-alliance-title').innerText = `🛡️ 聯盟：[${myData.allianceName}]`;
+        document.getElementById('my-alliance-leader').innerText = "共享勢力";
+        
+        // 即時抓取線上的盟友列表
+        const allies = allCastles.filter(c => c.allianceName === myData.allianceName);
+        let membersHtml = `<div style="background:#0a0f1d; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#10b981;">👤 ${myData.name} (自己)</div>`;
+        allies.forEach(a => {
+            membersHtml += `<div style="background:#1e293b; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#cbd5e1; display:flex; justify-content:space-between; margin-top:4px;">
+                <span>👤 ${a.name} (Lv.${a.castleLevel||1})</span>
+                <button onclick="window.locatePlayer(${a.x}, ${a.y})" style="background:#2563eb; padding:2px 8px; border-radius:4px; font-size:0.7rem;">📍 尋找</button>
+            </div>`;
+        });
+        document.getElementById('alliance-members-list').innerHTML = membersHtml;
     } else {
-        createBox.style.display = 'block';
-        mainBox.style.display = 'none';
+        createBox.style.display = 'block'; mainBox.style.display = 'none';
     }
 };
 
-// 切換到聯盟分頁時自動刷新介面
 const originalSwitchTab = window.switchTab;
 window.switchTab = (t) => {
     if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
