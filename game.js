@@ -1217,62 +1217,84 @@ async function resolveDefendNPC(m) {
   try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
 }
 
+// ==========================================
+// 💡 野外戰鬥結算系統 (修復 1 兵打贏 Bug)
+// ==========================================
 async function resolveInteractNPC(m) {
-  // 💡 新增 counterMarch 參數來打包回傳復仇軍團
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarch: null };
   let reportText = "";
   
   if (m.entity.type === 'relic') { 
+    // 遺跡探險是和平操作，保證成功
     res.loot = m.entity.loot; 
     myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
     reportText = `探險隊成功發掘【${m.entity.name}】！\n獲得資源：🌲${m.entity.loot.wood||0} ⛏️${m.entity.loot.iron||0} 🌾${m.entity.loot.food||0}`;
-  } else if (m.entity.type.startsWith('npc_') || m.entity.type === 'barbarian') {
-    res.loot = m.entity.loot || {}; 
-    let loss = Math.floor(Math.random() * 5 + 2); 
-    if (m.entity.type === 'npc_super_castle') loss = Math.floor(Math.random() * 50 + 20);
-    else if (m.entity.type === 'npc_capital') loss = Math.floor(Math.random() * 30 + 10);
-    
-    if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
-    myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
-    
-    reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🛡️步兵 -${loss}\n獲得戰利品：🌲${res.loot.wood||0} ⛏️${res.loot.iron||0} 🌾${res.loot.food||0}`;
-    if(myData.quests) myData.quests.daily.kills++;
+    if(window.addReport) window.addReport(`🏺 發掘成功`, reportText, true);
+  } else {
+    // ⚔️ 進入真實戰鬥環節
+    const attPwr = getPwrByTech(m.troops, m.techs || myData.research); // 我方總戰力
+    const defPwr = m.entity.reqPwr || 100; // 敵方總戰力
 
-    let factionName = m.entity.faction;
-    if (!factionName) {
-        if (m.entity.name.includes('中央王都')) factionName = '中央王都';
-        else if (m.entity.name.includes('猩紅法師塔')) factionName = '猩紅法師塔';
-        else if (m.entity.name.includes('迷霧監視塔')) factionName = '迷霧監視塔';
-        else if (m.entity.name.includes('砂海要塞')) factionName = '砂海要塞';
+    if (attPwr >= defPwr) {
+        // ✅ 戰鬥勝利
+        // 計算戰損比例 (敵方戰力 / 我方戰力，再乘上 15% 的最高戰損係數)
+        // 代表：戰力剛好平手時最多死 15%，如果戰力碾壓 10 倍，只會死 1.5%
+        let lossRate = (defPwr / (attPwr + 1)) * 0.15; 
+        
+        const lossInf = Math.floor(m.troops.infantry * lossRate);
+        const lossArc = Math.floor(m.troops.archer * lossRate);
+        const lossCav = Math.floor(m.troops.cavalry * lossRate);
+        
+        res.troops.infantry = Math.max(0, m.troops.infantry - lossInf);
+        res.troops.archer = Math.max(0, m.troops.archer - lossArc);
+        res.troops.cavalry = Math.max(0, m.troops.cavalry - lossCav);
+        
+        res.loot = m.entity.loot || {}; 
+        myData.logs.unshift(`[遠征大捷] 成功剿滅 ${m.entity.name}！滿載戰利品返航。`); 
+        
+        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🛡️-${lossInf} 🏹-${lossArc} 🐎-${lossCav}\n獲得戰利品：🌲${res.loot.wood||0} ⛏️${res.loot.iron||0} 🌾${res.loot.food||0}`;
+        if(myData.quests) myData.quests.daily.kills++;
+
+        // 💡 判斷是否激怒地標勢力引發反撲
+        let factionName = m.entity.faction;
+        if (!factionName) {
+            if (m.entity.name.includes('中央王都')) factionName = '中央王都';
+            else if (m.entity.name.includes('猩紅法師塔')) factionName = '猩紅法師塔';
+            else if (m.entity.name.includes('迷霧監視塔')) factionName = '迷霧監視塔';
+            else if (m.entity.name.includes('砂海要塞')) factionName = '砂海要塞';
+        }
+
+        if (factionName) {
+            myData.logs.unshift(`⚠️ 【${factionName}】遭受挑釁！守備軍已集結大軍朝您的主城反撲！`);
+            const lmCoords = { '中央王都': {x:115, y:95}, '猩紅法師塔': {x:148, y:32}, '迷霧監視塔': {x:145, y:165}, '砂海要塞': {x:65, y:185} };
+            const fPos = lmCoords[factionName] || {x: m.targetX, y: m.targetY};
+            const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
+            const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
+
+            res.counterMarch = {
+                id: 'COUNTER_' + Date.now(),
+                type: 'defend_npc',
+                startX: fPos.x, startY: fPos.y, targetX: myData.x, targetY: myData.y,
+                startTime: Date.now(), finishesAt: Date.now() + counterTimeMs,
+                npcPower: (m.entity.reqPwr || 15000) * 1.2, npcName: `${factionName} 復仇軍團`
+            };
+        }
+        if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
+        
+    } else {
+        // ❌ 戰鬥失敗
+        res.survived = false; 
+        res.troops = {infantry:0, archer:0, cavalry:0}; // 部隊全軍覆沒
+        myData.logs.unshift(`[遠征慘敗] 討伐 ${m.entity.name} 失敗，部隊全軍覆沒！`);
+        
+        reportText = `討伐【${m.entity.name}】遭遇慘敗！\n敵方戰力：${formatCompact(defPwr)}\n我方戰力：${formatCompact(attPwr)}\n力量過於懸殊，出征部隊已全軍覆沒！`;
+        if(window.addReport) window.addReport(`☠️ 遠征失敗`, reportText, false);
+        return res; // 直接返回，不給予任何獎勵與標記
     }
-
-    if (factionName) {
-        myData.logs.unshift(`⚠️ 【${factionName}】遭受挑釁！守備軍已集結大軍朝您的主城反撲！`);
-        const lmCoords = { '中央王都': {x:115, y:95}, '猩紅法師塔': {x:148, y:32}, '迷霧監視塔': {x:145, y:165}, '砂海要塞': {x:65, y:185} };
-        const fPos = lmCoords[factionName] || {x: m.targetX, y: m.targetY};
-        const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
-        const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
-
-        // 💡 關鍵修復：不要直接塞進 myData.marches，而是打包進 res 讓主系統接手
-        res.counterMarch = {
-            id: 'COUNTER_' + Date.now(),
-            type: 'defend_npc',
-            startX: fPos.x, startY: fPos.y, targetX: myData.x, targetY: myData.y,
-            startTime: Date.now(), finishesAt: Date.now() + counterTimeMs,
-            npcPower: (m.entity.reqPwr || 15000) * 1.2, npcName: `${factionName} 復仇軍團`
-        };
-    }
-
-  } else { 
-    res.loot = m.entity.loot || {}; 
-    if (res.troops.infantry > 0) res.troops.infantry -= Math.floor(Math.random() * 2); 
-    myData.logs.unshift(`[討伐] 成功剿滅 ${m.entity.name}！準備返航。`); 
-    reportText = `成功討伐【${m.entity.name}】！`;
-    if(myData.quests) myData.quests.daily.kills++;
   }
   
+  // 記錄該座標已通關，避免重複刷
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
-  if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
   return res;
 }
 
