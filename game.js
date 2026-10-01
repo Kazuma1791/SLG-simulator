@@ -1349,73 +1349,123 @@ async function resolveInteractNPC(m) {
   let reportText = "";
   
   if (m.entity.type === 'relic') { 
-    // 遺跡探險是和平操作，保證成功
     res.loot = m.entity.loot; 
     myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
-    reportText = `探險隊成功發掘【${m.entity.name}】！\n獲得資源：🌲${m.entity.loot.wood||0} ⛏️${m.entity.loot.iron||0} 🌾${m.entity.loot.food||0}`;
-    if(window.addReport) window.addReport(`🏺 發掘成功`, reportText, true);
+    reportText = `探險隊成功發掘【${m.entity.name}】！`;
   } else {
-    // ⚔️ 進入真實戰鬥環節
-    const attPwr = getPwrByTech(m.troops, m.techs || myData.research); // 我方總戰力
-    const defPwr = m.entity.reqPwr || 100; // 敵方總戰力
+    const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
+    const defPwr = m.entity.reqPwr || 100;
 
     if (attPwr >= defPwr) {
         // ✅ 戰鬥勝利
-        // 計算戰損比例 (敵方戰力 / 我方戰力，再乘上 15% 的最高戰損係數)
-        // 代表：戰力剛好平手時最多死 15%，如果戰力碾壓 10 倍，只會死 1.5%
-        let lossRate = (defPwr / (attPwr + 1)) * 0.15; 
+        let lossRate = (defPwr / (attPwr + 1)) * 0.15;
         
-        const lossInf = Math.floor(m.troops.infantry * lossRate);
-        const lossArc = Math.floor(m.troops.archer * lossRate);
-        const lossCav = Math.floor(m.troops.cavalry * lossRate);
+        // 🏥 PVE 戰損：90% 送進醫療所，10% 陣亡
+        let lInf = Math.floor(m.troops.infantry * lossRate); let wInf = Math.floor(lInf * 0.9);
+        let lArc = Math.floor(m.troops.archer * lossRate); let wArc = Math.floor(lArc * 0.9);
+        let lCav = Math.floor(m.troops.cavalry * lossRate); let wCav = Math.floor(lCav * 0.9);
+        let overflow = window.addWounded(wInf, wArc, wCav); // 寫入傷兵
         
-        res.troops.infantry = Math.max(0, m.troops.infantry - lossInf);
-        res.troops.archer = Math.max(0, m.troops.archer - lossArc);
-        res.troops.cavalry = Math.max(0, m.troops.cavalry - lossCav);
+        res.troops.infantry = Math.max(0, m.troops.infantry - lInf);
+        res.troops.archer = Math.max(0, m.troops.archer - lArc);
+        res.troops.cavalry = Math.max(0, m.troops.cavalry - lCav);
         
-        res.loot = m.entity.loot || {}; 
-        myData.logs.unshift(`[遠征大捷] 成功剿滅 ${m.entity.name}！滿載戰利品返航。`); 
-        
-        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🛡️-${lossInf} 🏹-${lossArc} 🐎-${lossCav}\n獲得戰利品：🌲${res.loot.wood||0} ⛏️${res.loot.iron||0} 🌾${res.loot.food||0}`;
+        // 🎒 負重系統介入 (依照兵種負重計算能帶走多少戰利品)
+        let maxLoad = window.getLoadCapacity(res.troops);
+        let currentLoad = 0;
+        ['food', 'wood', 'iron'].forEach(k => {
+            let amt = m.entity.loot[k] || 0;
+            if (currentLoad + amt > maxLoad) amt = maxLoad - currentLoad; // 裝不下的丟棄
+            res.loot[k] = amt; currentLoad += amt;
+        });
+
+        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠️陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
         if(myData.quests) myData.quests.daily.kills++;
 
-        // 💡 判斷是否激怒地標勢力引發反撲
+        // 勢力反擊邏輯 (保留不變)
         let factionName = m.entity.faction;
-        if (!factionName) {
-            if (m.entity.name.includes('中央王都')) factionName = '中央王都';
-            else if (m.entity.name.includes('猩紅法師塔')) factionName = '猩紅法師塔';
-            else if (m.entity.name.includes('迷霧監視塔')) factionName = '迷霧監視塔';
-            else if (m.entity.name.includes('砂海要塞')) factionName = '砂海要塞';
+        if (!factionName && ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].some(n => m.entity.name.includes(n))) {
+            factionName = ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n));
         }
-
         if (factionName) {
-            myData.logs.unshift(`⚠️ 【${factionName}】遭受挑釁！守備軍已集結大軍朝您的主城反撲！`);
-            const lmCoords = { '中央王都': {x:115, y:95}, '猩紅法師塔': {x:148, y:32}, '迷霧監視塔': {x:145, y:165}, '砂海要塞': {x:65, y:185} };
-            const fPos = lmCoords[factionName] || {x: m.targetX, y: m.targetY};
-            const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
-            const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
-
-            res.counterMarch = {
-                id: 'COUNTER_' + Date.now(),
-                type: 'defend_npc',
-                startX: fPos.x, startY: fPos.y, targetX: myData.x, targetY: myData.y,
-                startTime: Date.now(), finishesAt: Date.now() + counterTimeMs,
-                npcPower: (m.entity.reqPwr || 15000) * 1.2, npcName: `${factionName} 復仇軍團`
-            };
+            myData.logs.unshift(`⚠️ 【${factionName}】守備軍已集結大軍朝您的主城反撲！`);
+            res.counterMarch = { id: 'COUNTER_'+Date.now(), type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 復仇軍團` };
         }
-        if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
-        
     } else {
-        // ❌ 戰鬥失敗
-        res.survived = false; 
-        res.troops = {infantry:0, archer:0, cavalry:0}; // 部隊全軍覆沒
-        myData.logs.unshift(`[遠征慘敗] 討伐 ${m.entity.name} 失敗，部隊全軍覆沒！`);
-        
-        reportText = `討伐【${m.entity.name}】遭遇慘敗！\n敵方戰力：${formatCompact(defPwr)}\n我方戰力：${formatCompact(attPwr)}\n力量過於懸殊，出征部隊已全軍覆沒！`;
+        // ❌ 戰鬥失敗 (全軍潰散，但 70% 保留重傷進醫院)
+        let wInf = Math.floor(m.troops.infantry * 0.7); let wArc = Math.floor(m.troops.archer * 0.7); let wCav = Math.floor(m.troops.cavalry * 0.7);
+        window.addWounded(wInf, wArc, wCav);
+        res.survived = false; res.troops = {infantry:0, archer:0, cavalry:0};
+        reportText = `討伐遭遇慘敗！部隊潰散 (🏥 ${wInf+wArc+wCav} 人已送往醫療所)`;
         if(window.addReport) window.addReport(`☠️ 遠征失敗`, reportText, false);
-        return res; // 直接返回，不給予任何獎勵與標記
+        return res;
     }
   }
+  myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
+  if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
+  return res;
+}
+
+async function resolveAttackPlayer(m) {
+  let res = { survived: false, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  try {
+    await runTransaction(db, async (transaction) => {
+      const tPrivRef = doc(db, "players", m.targetUid), tPubRef = doc(db, "world_map", m.targetUid);
+      const tDoc = await transaction.get(tPrivRef);
+      if (!tDoc.exists()) throw new Error("城池空");
+      const target = tDoc.data();
+      if (target.shieldEndsAt && target.shieldEndsAt > Date.now()) throw new Error("Shielded"); 
+      
+      const attPwr = getPwrByTech(m.troops, m.techs);
+      const defTroops = target.troops || {infantry:0, archer:0, cavalry:0};
+      const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + (target.buildings.wall || 0) * 0.05);
+
+      if (attPwr > defPwr) {
+        // ✅ 攻擊方勝利
+        // 1. 防守方傷兵結算 (70% 兵力進防守方醫院，不降級建築)
+        let tWounded = target.wounded || {infantry:0, archer:0, cavalry:0};
+        let tHospMax = 10000 + (target.buildings.castle || 1) * 5000;
+        let tCurHosp = tWounded.infantry + tWounded.archer + tWounded.cavalry;
+        ['infantry', 'archer', 'cavalry'].forEach(k => {
+            let w = Math.floor(defTroops[k] * 0.7);
+            let toAdd = Math.min(w, Math.max(0, tHospMax - tCurHosp));
+            tWounded[k] += toAdd; tCurHosp += toAdd;
+        });
+
+        // 2. 攻擊方負重限制搶劫
+        const maxLoad = window.getLoadCapacity(m.troops);
+        const protectAmt = (target.buildings.warehouse || 0) * 2000;
+        let currentLoad = 0;
+        let steal = (resType) => {
+            let available = Math.max(0, Math.floor((target[resType] - protectAmt) * 0.3));
+            let take = Math.min(available, maxLoad - currentLoad);
+            currentLoad += take; return take;
+        };
+        let lF = steal('food'); let lW = steal('wood'); let lI = steal('iron');
+
+        // 3. 攻擊方自身戰損 (10% 傷兵送醫)
+        let attLossRate = (defPwr / (attPwr + 1)) * 0.1;
+        let wInf = Math.floor(m.troops.infantry * attLossRate); let wArc = Math.floor(m.troops.archer * attLossRate); let wCav = Math.floor(m.troops.cavalry * attLossRate);
+        window.addWounded(wInf, wArc, wCav); // 寫入自己醫院
+        res.troops.infantry -= wInf; res.troops.archer -= wArc; res.troops.cavalry -= wCav;
+        
+        transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
+        transaction.set(tPubRef, { troops: 0 }, { merge: true }); // 💡 拔除降級程式碼！
+        
+        res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
+        if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
+      } else {
+        // ❌ 攻擊方失敗 (60% 進自己醫院)
+        let wInf = Math.floor(m.troops.infantry * 0.6); let wArc = Math.floor(m.troops.archer * 0.6); let wCav = Math.floor(m.troops.cavalry * 0.6);
+        window.addWounded(wInf, wArc, wCav);
+        transaction.set(tPrivRef, { logs: [`[堅壁清野] 成功擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
+        if(window.addReport) window.addReport(`☠️ 突擊失敗`, `進攻遭遇重創！我方不敵，殘兵已送醫 (🏥 ${wInf+wArc+wCav} 人)！`, false);
+      }
+    });
+    window.refreshMap();
+  } catch (err) { res.survived = true; }
+  return res;
+}
   
   // 記錄該座標已通關，避免重複刷
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
@@ -2565,6 +2615,7 @@ window.renderSideMenu = function() {
     div.id = 'side-menu-hud';
     div.style.cssText = 'position:fixed; left:10px; top:80px; z-index:9990; display:flex; flex-direction:column; gap:10px;';
     div.innerHTML = `
+        <button id="btn-float-hospital" onclick="window.openHospitalModal()" style="background:#1e293b; border:1px solid #ef4444; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🏥 醫療所</button>
         <button id="btn-float-report" onclick="window.openReportModal()" style="background:#1e293b; border:1px solid #3b82f6; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">📬 戰報</button>
         <button id="btn-float-quest" onclick="window.openQuestModal()" style="background:#1e293b; border:1px solid #10b981; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🎯 任務</button>
     `;
@@ -2682,4 +2733,81 @@ window.claimQuest = async (qid) => {
     await savePrivateData();
     window.openQuestModal();
     try{ window.renderSelf(); }catch(e){}
+};
+// ==========================================
+// 💡 傷兵醫療與部隊負重核心系統
+// ==========================================
+window.addWounded = function(wInf, wArc, wCav) {
+    if (!myData.wounded) myData.wounded = { infantry: 0, archer: 0, cavalry: 0 };
+    // 預設醫院容量：10,000 + (主城等級 * 5,000)
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000;
+    let curHosp = (myData.wounded.infantry||0) + (myData.wounded.archer||0) + (myData.wounded.cavalry||0);
+    let overflow = 0; // 因醫院爆滿而陣亡的數量
+
+    let addTroop = (type, amount) => {
+        let space = Math.max(0, maxHosp - curHosp);
+        let toAdd = Math.min(amount, space);
+        myData.wounded[type] = (myData.wounded[type] || 0) + toAdd;
+        curHosp += toAdd;
+        overflow += (amount - toAdd); // 裝不下的直接死亡
+    };
+    addTroop('infantry', wInf); addTroop('archer', wArc); addTroop('cavalry', wCav);
+    return overflow; 
+};
+
+// 🎒 步兵負重 10, 弓兵負重 5, 騎兵負重 8
+window.getLoadCapacity = function(troops) {
+    return (troops.infantry||0)*10 + (troops.archer||0)*5 + (troops.cavalry||0)*8;
+};
+
+window.openHospitalModal = () => {
+    let modal = document.getElementById('hospital-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'hospital-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+    
+    if (!myData.wounded) myData.wounded = {infantry:0, archer:0, cavalry:0};
+    let w = myData.wounded;
+    let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000;
+
+    // 治療成本：每人 10 木材、15 糧食
+    let costWood = totalW * 10; let costFood = totalW * 15;
+    let canHeal = totalW > 0 && myData.wood >= costWood && myData.food >= costFood;
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #ef4444; border-radius:10px; width:300px; padding:20px; color:white;">
+        <h2 style="color:#ef4444; margin-top:0;">🏥 醫療所</h2>
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
+            <div style="color:#94a3b8; font-size:0.85rem;">傷兵收容：${totalW} / ${maxHosp}</div>
+            <div style="margin-top:10px; color:#fca5a5;">🛡️ 重傷步兵：${w.infantry||0}</div>
+            <div style="color:#fca5a5;">🏹 重傷弓兵：${w.archer||0}</div>
+            <div style="color:#fca5a5;">🐎 重傷騎兵：${w.cavalry||0}</div>
+        </div>
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
+            <div style="font-weight:bold; color:#fbbf24;">治療所需物資：</div>
+            <div>🌲 木材：${formatCompact(costWood)} ${myData.wood < costWood ? '❌' : '✅'}</div>
+            <div>🌾 糧食：${formatCompact(costFood)} ${myData.food < costFood ? '❌' : '✅'}</div>
+        </div>
+        ${canHeal ? '<button onclick="window.healAllWounded()" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:10px; cursor:pointer; border:none; color:white;">✨ 立即治療全部傷兵</button>' : '<button disabled style="background:#475569; width:100%; font-weight:bold; border-radius:4px; padding:10px; border:none; color:#94a3b8;">物資不足或無傷兵</button>'}
+        <button onclick="document.getElementById('hospital-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+window.healAllWounded = async () => {
+    let w = myData.wounded;
+    let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
+    let costWood = totalW * 10; let costFood = totalW * 15;
+    if (myData.wood >= costWood && myData.food >= costFood) {
+        myData.wood -= costWood; myData.food -= costFood;
+        myData.troops.infantry += w.infantry; myData.troops.archer += w.archer; myData.troops.cavalry += w.cavalry;
+        myData.wounded = {infantry:0, archer:0, cavalry:0};
+        myData.logs.unshift(`[醫療] 成功治癒了 ${totalW} 名重傷士兵，部隊已歸隊！`);
+        await savePrivateData(); window.openHospitalModal();
+        try { window.renderSelf(); } catch(e){}
+    }
 };
