@@ -710,9 +710,10 @@ async function localTick() {
   sanitizeData(); 
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
+  
   // 💡 【行軍安全與護盾修復中樞】
   myData.marches.forEach(m => {
-      // 1. 修復護盾 Bug：如果抵達目標時，對方剛好開了護盾，強制部隊安全折返，避免卡死
+      // 1. 修復護盾 Bug
       if (m.type === 'attack_player' && now >= m.finishesAt) {
           const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
           if (tC && tC.shieldEndsAt && tC.shieldEndsAt > now) {
@@ -722,7 +723,7 @@ async function localTick() {
           }
       }
       
-      // 2. 修復返回時間過長 Bug：強制所有返回部隊以「真實距離」重新計算時間 (1格=3秒)
+      // 2. 修復返回時間過長 Bug
       if (m.type === 'return' && !m.timeFixed) {
           const dist = Math.hypot(myData.x - m.startX, myData.y - m.startY);
           m.finishesAt = m.startTime + Math.ceil(dist * 3 * 1000); 
@@ -741,26 +742,12 @@ async function localTick() {
   let needSave = false;
   const landmarks = [{ name: '中央王都', x: 115, y: 95 }, { name: '猩紅法師塔', x: 148, y: 32 }, { name: '迷霧監視塔', x: 145, y: 165 }, { name: '砂海要塞', x: 65, y: 185 }];
   
-  // 💡 系統 AI：NPC 勢力隨機佔領周邊資源點
-  if (Math.random() < 0.05) {
-      let lm = landmarks[Math.floor(Math.random() * landmarks.length)];
-      let rx = lm.x + Math.floor(Math.random()*20 - 10), ry = lm.y + Math.floor(Math.random()*20 - 10);
-      let cell = MAP_CACHE[rx] && MAP_CACHE[rx][ry];
-      if (cell && cell.entity && cell.entity.type.startsWith('res_') && !allCastles.some(c=>c.x===rx&&c.y===ry)) {
-          let nodeStr = `NODE_${rx}_${ry}`;
-          getDoc(doc(db, "world_map", nodeStr)).then(snap => {
-              if (!snap.exists()) setDoc(doc(db, "world_map", nodeStr), { isNode: true, uid: 'NPC', name: `🛡️ ${lm.name}軍團`, x: rx, y: ry, type: cell.entity.type });
-          });
-      }
-  }
-
   // 💡 系統 AI：偵測玩家在勢力範圍內採集 (單次警告機制，不再死纏爛打)
   for (let m of myData.marches) {
-      // 加入 !m.npcWarned 標記，確保一趟採集只會被 NPC 警告一次！
       if (m.type === 'gathering' && !m.npcWarned) {
           let nearLm = landmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
           if (nearLm && Math.random() < 0.02) { 
-              m.npcWarned = true; // ⚠️ 貼上標籤，這趟採集安全了
+              m.npcWarned = true; // ⚠️ 貼上標籤，一趟採集只會被警告一次
               myData.marches.push({
                   id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
                   startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
@@ -2284,4 +2271,100 @@ window.renderRadar = function() {
     }
 
     radarTab.innerHTML = html;
+};
+// ==========================================
+// 💡 主畫面浮動行軍面板 (HUD)
+// ==========================================
+window.renderMarchHUD = function() {
+    if (!myData || !myData.marches) return;
+    
+    // 動態在畫面上生成一個浮動的面板 (不用去改 HTML)
+    let hud = document.getElementById('march-hud');
+    if (!hud) {
+        hud = document.createElement('div');
+        hud.id = 'march-hud';
+        hud.style.cssText = 'position: absolute; right: 10px; top: 60px; z-index: 1000; width: 220px; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
+        const mapCont = document.getElementById('map-container');
+        if (mapCont) mapCont.appendChild(hud);
+        else return;
+    }
+    
+    const now = Date.now();
+    let html = '';
+    
+    myData.marches.forEach(m => {
+        const isReturning = m.type === 'return';
+        let stateText = '🛡️ 行軍中'; let bgColor = 'rgba(30, 41, 59, 0.85)'; let icon = '🛡️';
+        
+        if (m.type === 'defend_npc' || m.type === 'npc_attack_node') {
+            stateText = '🚨 敵軍來襲'; bgColor = 'rgba(69, 10, 10, 0.85)'; icon = '☠️';
+        } else if (m.type === 'gathering') {
+            stateText = '⛏️ 採集中'; icon = '⛏️'; bgColor = 'rgba(6, 78, 59, 0.85)';
+        } else if (isReturning) {
+            stateText = '⛺ 返回中'; icon = '⛺';
+        } else if (m.type === 'attack_player') {
+            stateText = '⚔️ 攻擊中'; icon = '⚔️️'; bgColor = 'rgba(127, 29, 29, 0.85)';
+        }
+
+        const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
+        // 敵軍來襲與返回中無法召回
+        const canRecall = (m.type !== 'return' && m.type !== 'defend_npc' && m.type !== 'npc_attack_node');
+
+        html += `
+        <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                <span style="font-size:0.9rem; font-weight:bold; color:#38bdf8;">${icon} ${stateText}</span>
+                <span style="font-size:0.9rem; color:#facc15; font-weight:bold;">${formatTime(remain)}</span>
+            </div>
+            <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom: 8px;">目標座標: (${m.targetX}, ${m.targetY})</div>
+            <div style="display:flex; gap:6px;">
+                <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="flex:1; background:#2563eb; border:none; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold;">📍 鎖定</button>
+                ${canRecall ? `<button onclick="window.recallMarch('${m.id}')" style="flex:1; background:#d97706; border:none; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold;">🎺 召回</button>` : ''}
+            </div>
+        </div>`;
+    });
+    
+    hud.innerHTML = html;
+};
+
+// ==========================================
+// 💡 強制召回部隊 (防崩潰保護版)
+// ==========================================
+window.recallMarch = async (marchId) => {
+    const mIdx = myData.marches.findIndex(x => x.id === marchId);
+    if (mIdx === -1) return;
+    
+    let m = myData.marches[mIdx];
+    if (!confirm("確定要立即召回這支部隊嗎？")) return;
+
+    const now = Date.now();
+    const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
+    let returnTimeMs = 0;
+    
+    if (m.type === 'gathering') {
+        returnTimeMs = Math.ceil(dist * 3 * 1000); 
+        // ⚠️ 這裡用 try-catch 包起來，就算 deleteDoc 沒載入，也不會阻擋部隊回家！
+        try { 
+            if (typeof deleteDoc !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
+        } catch(e) { console.warn("資源點釋放略過"); }
+    } else if (m.finishesAt > now) {
+        returnTimeMs = now - m.startTime; // 走到一半折返
+    } else {
+        returnTimeMs = Math.ceil(dist * 3 * 1000); 
+    }
+
+    // 強制轉換為返回狀態
+    m.type = 'return';
+    m.isGathering = false; 
+    m.startX = m.targetX;
+    m.startY = m.targetY;
+    m.targetX = myData.x;
+    m.targetY = myData.y;
+    m.startTime = now;
+    m.finishesAt = now + returnTimeMs;
+    m.timeFixed = true; 
+
+    myData.logs.unshift(`🎺 [軍事] 已下達召回指令，部隊返回中！`);
+    await savePrivateData();
+    window.renderMarchHUD(); // 瞬間更新 UI
 };
