@@ -2160,3 +2160,101 @@ window.useShieldCard = async () => {
     window.renderSelf();
     alert("🛡️ 和平護盾已啟動！您的城池在接下來的 8 小時內將免受攻擊！");
 };
+window.recallMarch = async (marchId) => {
+    const mIdx = myData.marches.findIndex(x => x.id === marchId);
+    if (mIdx === -1) return;
+    
+    let m = myData.marches[mIdx];
+    
+    if (m.type === 'return') return alert("部隊已經在返回途中！");
+    if (m.type === 'defend_npc' || m.type === 'npc_attack_node') return alert("無法召回敵軍部隊！");
+
+    if (!confirm("確定要立即召回這支部隊嗎？\n(若在行軍途中召回，返航時間將依據已走的距離計算)")) return;
+
+    const now = Date.now();
+    let returnTimeMs = 0;
+    
+    if (m.finishesAt > now && m.type !== 'gathering') {
+        const timeSpent = now - m.startTime;
+        returnTimeMs = timeSpent; 
+    } else {
+        const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
+        returnTimeMs = Math.ceil(dist * 3 * 1000); 
+    }
+
+    m.type = 'return';
+    m.startX = m.targetX;
+    m.startY = m.targetY;
+    m.targetX = myData.x;
+    m.targetY = myData.y;
+    m.startTime = now;
+    m.finishesAt = now + returnTimeMs;
+    m.timeFixed = true; 
+
+    myData.logs.unshift(`🎺 [軍事] 您已下達緊急召回指令，部隊正加速返回主城！`);
+    await savePrivateData();
+    if(typeof window.renderRadar === 'function') window.renderRadar();
+    alert("部隊已開始折返！");
+};
+
+// ==========================================
+// 💡 戰況雷達渲染邏輯 (安全附加版)
+// ==========================================
+window.renderRadar = function() {
+    const radarTab = document.getElementById('tab-radar');
+    if (!radarTab) return;
+    
+    const now = Date.now();
+    let html = '<h3 style="color:#38bdf8; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">📡 戰況雷達</h3>';
+    
+    html += '<h4 style="color:#facc15; margin-bottom: 8px;">⚔️ 軍事動態</h4>';
+    if (myData.marches && myData.marches.length > 0) {
+        myData.marches.forEach(m => {
+            if (m.type === 'defend_npc' || m.type === 'npc_attack_node') {
+                const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
+                html += `<div style="background:#450a0a; padding:10px; margin-bottom:8px; border-radius:4px; border:1px solid #7f1d1d;">
+                    <div style="color:#f87171; font-weight:bold;">🚨 敵軍來襲: ${m.npcName}</div>
+                    <div style="font-size:0.85rem; color:#fca5a5;">目標: 您的主城 | 抵達: ${formatTime(remain)}</div>
+                    <button onclick="window.locatePlayer(${m.startX}, ${m.startY})" style="background:#dc2626; padding:4px 8px; font-size:0.8rem; margin-top:5px; border-radius:4px; width:100%;">📍 鎖定敵軍位置</button>
+                </div>`;
+                return;
+            }
+
+            const isReturning = m.type === 'return';
+            let stateText = '';
+            if (m.type === 'gathering') stateText = '⛏️ 採集中';
+            else if (isReturning) stateText = '⛺ 返回中';
+            else if (m.type === 'attack_player') stateText = '⚔️ 攻擊玩家';
+            else stateText = '🛡️ 遠征中';
+
+            const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
+            
+            html += `<div style="background:#1e293b; padding:10px; margin-bottom:8px; border-radius:4px; border:1px solid #334155;">
+                <div style="color:#38bdf8; font-weight:bold;">${stateText}</div>
+                <div style="font-size:0.85rem; color:#94a3b8; margin: 4px 0;">座標: (${m.targetX}, ${m.targetY}) | 倒數: <span style="color:#facc15;">${formatTime(remain)}</span></div>
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                    <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="background:#2563eb; padding:6px 8px; font-size:0.8rem; flex:1; border-radius:4px; font-weight:bold;">📍 鎖定目標</button>
+                    ${!isReturning ? `<button onclick="window.recallMarch('${m.id}')" style="background:#d97706; padding:6px 8px; font-size:0.8rem; flex:1; border-radius:4px; font-weight:bold;">🎺 召回部隊</button>` : ''}
+                </div>
+            </div>`;
+        });
+    } else {
+        html += '<p style="color:#94a3b8; font-size:0.85rem; margin-bottom:15px; text-align:center; padding: 10px;">目前無任何行軍部隊。</p>';
+    }
+
+    html += '<h4 style="color:#facc15; margin-bottom: 8px; margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px;">🐉 附近的世界首領</h4>';
+    const activeBosses = worldBosses.filter(b => b.hp > 0 && b.despawnAt > now);
+    if (activeBosses.length > 0) {
+        activeBosses.forEach(b => {
+            html += `<div style="background:#1e2c40; padding:10px; margin-bottom:6px; border-radius:4px; border:1px solid #475569;">
+                <div style="color:#ef4444; font-weight:bold;">${b.name}</div>
+                <div style="font-size:0.85rem; color:#cbd5e1; margin:4px 0;">血量: ${formatCompact(b.hp)} / ${formatCompact(b.maxHp)}</div>
+                <button onclick="window.locatePlayer(${b.x}, ${b.y})" style="background:#b91c1c; padding:4px 8px; font-size:0.8rem; border-radius:4px; width:100%; font-weight:bold;">📍 鎖定位置</button>
+            </div>`;
+        });
+    } else {
+        html += '<p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無首領現蹤。</p>';
+    }
+
+    radarTab.innerHTML = html;
+};
