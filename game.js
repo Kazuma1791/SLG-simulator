@@ -135,8 +135,8 @@ function getStaticEntity(x, y, type) {
   }
 
   // 🌲 3. 一般野外隨機物件
-  // 💡 新增：全地圖極低機率(0.2%)生成「荒野營地」，為玩家帶來隨機的襲擊威脅
-  if (r < 0.002) return { type: 'npc_outpost', name: '🏕️ 荒野外圍營地', reqPwr: 3000, loot: { wood: 15000, iron: 15000, food: 15000, speedup5m: 5 } };
+  // 💡 新增：全地圖極低機率(0.2%)生成「黑暗前哨」，不僅會駐守，還會隨機發兵襲擊周圍玩家！
+  if (r < 0.002) return { type: 'npc_outpost', name: '🏕️ 黑暗前哨', reqPwr: 3000, loot: { wood: 15000, iron: 15000, food: 15000, speedup5m: 5 } };
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
   if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
   if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
