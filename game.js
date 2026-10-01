@@ -1128,7 +1128,10 @@ async function localTick() {
           }
           needSave = true; continue; 
       }
-      else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
+      else if (m.type === 'attack_player') { 
+            const res = await resolveAttackPlayer_NEW(m); // 👈 這裡加上 _NEW
+            if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
+        }
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
       else if (m.type === 'occupy_node') { 
@@ -1403,7 +1406,7 @@ async function resolveInteractNPC(m) {
   return res; // 這裡的 return 也是合法的
 }
 
-async function resolveAttackPlayer(m) {
+async function resolveAttackPlayer_NEW(m) {
   let res = { survived: false, troops: m.troops, loot: {wood:0, iron:0, food:0} };
   try {
     await runTransaction(db, async (transaction) => {
