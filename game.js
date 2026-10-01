@@ -1833,7 +1833,11 @@ window.renderSelf = function() {
           const bLvl = myData.buildings.barracks || 1;
           tContainer.innerHTML = Object.keys(CFG.troops).map(key => {
               const d = CFG.troops[key];
-              if (bLvl < d.reqLvl) return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div class="item-info">需 兵營 Lv.${d.reqLvl}</div></div><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div>`;
+              
+              // 若兵營等級不足，顯示未解鎖狀態
+              if (bLvl < d.reqLvl) {
+                  return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">需 兵營 Lv.${d.reqLvl}</div></div><div style="width:100px;text-align:right"><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div></div>`;
+              }
               
               const buff = myData.research[`${key}_atk`] || 0;
               const isTraining = myData.trainQueue && myData.trainQueue.type === key;
@@ -1844,7 +1848,7 @@ window.renderSelf = function() {
               let btnHtml = ''; let progressHtml = '';
               
               if (isTraining) {
-                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
+                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - Date.now()) / 1000));
                   const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
                   btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">招募中 (${formatTime(remainSec)})</span>`;
                   progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
@@ -1852,7 +1856,7 @@ window.renderSelf = function() {
                   btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
               }
 
-              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.costW * trainCount)} ⛏️${formatCompact(d.costI * trainCount)} 🌾${formatCompact(d.costF * trainCount)}`, progressHtml, btnHtml);
+              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.w * trainCount)} ⛏️${formatCompact(d.i * trainCount)} 🌾${formatCompact(d.f * trainCount)}`, progressHtml, btnHtml);
           }).join('');
       }
 
