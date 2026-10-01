@@ -1714,6 +1714,7 @@ window.syncTroop = (type, source) => {
 };
 
 canvas.addEventListener("click", (e) => {
+  if (myData && myData.isBanned) return; // 👈 加上這行：被封鎖者禁止點擊地圖
   if (dragDist > 10) return;
   const r = canvas.getBoundingClientRect();
   const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0);
@@ -1821,6 +1822,7 @@ canvas.addEventListener("click", (e) => {
 });
 
 document.getElementById("btn-confirm-action").addEventListener('click', async () => {
+  if (myData && myData.isBanned) return; // 👈 加上這行：被封鎖者禁止發送部隊
   if (!targetAction) return;
     if (targetAction.type.startsWith('attack')) {
         if (myData.shieldEndsAt && myData.shieldEndsAt > Date.now()) {
