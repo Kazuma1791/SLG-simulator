@@ -1084,6 +1084,59 @@ async function resolveOccupyNode(m) {
   } catch (e) { console.error(e); }
   return res;
 }
+// ==========================================
+// 💡 世界 Boss 攻擊與傷害結算系統
+// ==========================================
+async function resolveAttackBoss(m) {
+  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  try {
+    await runTransaction(db, async (transaction) => {
+      const bossRef = doc(db, "world_map", m.targetUid);
+      const bossSnap = await transaction.get(bossRef);
+      if (!bossSnap.exists()) throw new Error("BossNotExist");
+      
+      let bossData = bossSnap.data();
+      if (bossData.hp <= 0) throw new Error("BossDead");
+
+      // 1. 計算我方部隊的總攻擊力
+      const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
+      
+      // 2. 造成傷害 (加上 90%~110% 的傷害浮動，更有真實感)
+      let dmg = Math.floor(attPwr * (Math.random() * 0.2 + 0.9)); 
+      if (dmg > bossData.hp) dmg = bossData.hp; // 不能超過殘血
+      
+      // 3. 扣除 Boss 血量，並記錄你的貢獻度 (打多少痛多少)
+      bossData.hp -= dmg;
+      bossData.contributors = bossData.contributors || {};
+      bossData.contributors[myUid] = (bossData.contributors[myUid] || 0) + dmg;
+
+      // 將傷害寫入雲端同步給所有玩家
+      transaction.set(bossRef, bossData, { merge: true });
+
+      // 4. 計算玩家戰損 (與史詩巨獸戰鬥，損失約 2% ~ 5% 的兵力)
+      const lossRate = 0.02 + Math.random() * 0.03;
+      res.troops.infantry = Math.floor(res.troops.infantry * (1 - lossRate));
+      res.troops.archer = Math.floor(res.troops.archer * (1 - lossRate));
+      res.troops.cavalry = Math.floor(res.troops.cavalry * (1 - lossRate));
+
+      // 5. 寫入日誌與戰報信箱
+      myData.logs.unshift(`[首領戰] 對 ${m.targetName} 造成了 ${formatCompact(dmg)} 點傷害！`);
+      if(window.addReport) {
+          window.addReport(`⚔️ 首領討伐戰報`, `部隊成功襲擊了【${m.targetName}】！\n造成傷害：💥 ${formatCompact(dmg)}\n戰鬥損失：約 ${Math.floor(lossRate*100)}% 兵力受傷陣亡。\n\n(💡 最終擊殺獎勵將於首領倒下時，系統會依據您的總貢獻度自動發放！)`, true);
+      }
+    });
+    window.refreshMap();
+  } catch (err) {
+    res.survived = true;
+    if (err.message === "BossDead") {
+        myData.logs.unshift(`[撲空] ${m.targetName} 已經被擊殺，部隊折返。`);
+        if(window.addReport) window.addReport(`💨 討伐撲空`, `目標【${m.targetName}】已經被其他領主搶先擊殺，部隊無功而返。`, false);
+    } else {
+        myData.logs.unshift(`[錯誤] 尋找 ${m.targetName} 失敗，部隊折返。`);
+    }
+  }
+  return res;
+}
 
 async function resolveDefendNPC(m) {
   const wallBuff = 1 + (myData.buildings.wall || 0) * 0.05;
