@@ -189,8 +189,23 @@ function sanitizeData() {
   if (typeof myData.isBanned !== 'boolean') myData.isBanned = false;
 }
 
+// 💡 終極防外掛系統：數值驗證 + 設備連坐封鎖 (Device Ban)
 function runAntiCheat() {
-    if (isAdmin || myData.isBanned) return false;
+    if (isAdmin) return false;
+    
+    // 💀 1. 設備連坐檢查：如果這台裝置曾經被抓過，不管換什麼新帳號，一律瞬間死刑！
+    if (localStorage.getItem('SLG_DEATH_MARK') === 'true') {
+        if (!myData.isBanned) {
+            myData.isBanned = true; myData.banReason = "使用被封鎖的違規設備登入 (連坐處分)";
+            setDoc(doc(db, "players", myUid), { isBanned: true, banReason: myData.banReason }, { merge: true });
+        }
+        document.getElementById('ban-screen').style.display = 'flex';
+        document.getElementById('ban-reason').innerText = "該設備已列入永久黑名單，禁止遊玩。";
+        return true;
+    }
+
+    if (myData.isBanned) return true;
+
     let cheatDetected = false; let reason = "";
     const MAX_RESOURCE = 500000000; const MAX_TROOPS = 50000000; const MAX_ITEMS = 10000;
 
@@ -201,19 +216,22 @@ function runAntiCheat() {
     const resKeys = ['wood', 'iron', 'food'];
     resKeys.forEach(k => { 
         if (!isFinite(myData[k]) || isNaN(myData[k]) || myData[k] < 0) myData[k] = 0; 
-        if (myData[k] > MAX_RESOURCE) { cheatDetected = true; reason = `資源數量異常(${k})`; }
+        if (myData[k] > MAX_RESOURCE) { cheatDetected = true; reason = `資源數量嚴重異常(${k})`; }
     });
 
     ['infantry', 'archer', 'cavalry'].forEach(k => {
         if (!isFinite(myData.troops[k]) || isNaN(myData.troops[k]) || myData.troops[k] < 0) myData.troops[k] = 0;
-        if (myData.troops[k] > MAX_TROOPS) { cheatDetected = true; reason = `兵力數量異常(${k})`; }
+        if (myData.troops[k] > MAX_TROOPS) { cheatDetected = true; reason = `兵力數量嚴重異常(${k})`; }
     });
 
     if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { cheatDetected = true; reason = "道具數量超出硬上限"; }
     if (myData.buildings.castle > 100 || myData.buildings.builder > 5) { cheatDetected = true; reason = "建築等級異常"; }
-    if (myData.buildQueues.length > 5 || myData.marches.length > 10) { cheatDetected = true; reason = "佇列資料篡改"; }
+    if (myData.buildQueues.length > 5 || myData.marches.length > 10) { cheatDetected = true; reason = "佇列資料惡意篡改"; }
 
     if (cheatDetected) {
+        // 💀 2. 抓到作弊，立刻在設備植入「死刑印記」
+        localStorage.setItem('SLG_DEATH_MARK', 'true');
+        
         myData.isBanned = true; myData.banReason = reason;
         myData.cheatLog.unshift(`[${new Date().toLocaleString()}] 查獲: ${reason}`);
         setDoc(doc(db, "players", myUid), { isBanned: true, banReason: reason, cheatLog: myData.cheatLog }, { merge: true });
@@ -349,7 +367,10 @@ onAuthStateChanged(auth, async (user) => {
       if (docSnap.exists()) {
         myData = docSnap.data();
         sanitizeData();
-        if (myData.isBanned) { document.getElementById('ban-screen').style.display = 'flex'; document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章"; return; } 
+        if (myData.triggerDeviceBan) {
+            localStorage.setItem('SLG_DEATH_MARK', 'true'); // 遠端引爆設備封鎖
+        }
+        if (myData.isBanned) { document.getElementById('ban-screen').style.display = 'flex'; document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章"; return; }
         else { document.getElementById('ban-screen').style.display = 'none'; }
 
         isAdmin = (user.email === 'topacoau@gmail.com');
@@ -515,7 +536,12 @@ window.gmTargetAction = async (action) => {
     if (!targetSnap.exists()) return alert("找不到該名玩家！");
     let tData = targetSnap.data();
     
-    if (action === 'ban') { tData.isBanned = true; tData.banReason = "管理員手動永久封鎖"; }
+    if (action === 'ban') { 
+        tData.isBanned = true; 
+        tData.banReason = "管理員手動永久封鎖"; 
+        // 寫入一個特殊標記，目標玩家下次登入時會自動觸發設備死刑印記
+        tData.triggerDeviceBan = true; 
+    }
     if (action === 'unban') { tData.isBanned = false; tData.banReason = ""; }
     if (action === 'addRes') { tData.wood += 1000000; tData.iron += 1000000; tData.food += 1000000; }
     if (action === 'addTroops') { tData.troops.infantry += 100000; tData.troops.archer += 100000; tData.troops.cavalry += 100000; }
