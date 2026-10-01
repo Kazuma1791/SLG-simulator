@@ -13,7 +13,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let currentAlliance = null;
-// 💡 地圖擴大四倍：200 x 200，中心點為 100, 100
 let myUid = null, myData = null, allCastles = [], worldBosses = [], worldNodes = [], hasCentered = false;
 let godModeFog = false, isAdmin = false, currentAnnouncement = null; 
 
@@ -43,16 +42,20 @@ const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
 const imgBossOuter = new Image(); imgBossOuter.src = 'boss_outer.png';
 
-// 💡 載入野外資源點圖片
 const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
 const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
 const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
+const imgWorldMap = new Image(); imgWorldMap.src = 'map.jpg';
 
-// 👇 新增這兩行載入世界大圖
-const imgWorldMap = new Image(); 
-imgWorldMap.src = 'map.jpg';
+// 💡 效能優化：地標常數外提，避免迴圈內重複創建
+const currentHourSeed = Math.floor(Date.now() / 3600000);
+const epicLandmarks = [
+    {name:'中央王都', x:115, y:95, pwr: 25000, c:'#facc15'}, 
+    {name:'猩紅法師塔', x:148, y:32, pwr: 18000, c:'#ef4444'}, 
+    {name:'迷霧監視塔', x:145, y:165, pwr: 12000, c:'#a855f7'}, 
+    {name:'砂海要塞', x:65, y:185, pwr: 10000, c:'#f97316'}
+];
 
-// 💡 恢復完整的參數設定，防止變數讀取為 undefined 或 NaN
 const CFG = {
   buildings: { 
     castle:    { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 1200, maxLevel: 99 },
@@ -100,14 +103,9 @@ function formatTime(sec) {
   return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm';
 }
 
-function getTileTypeRaw(x, y) {
-  // 💡 統一回傳 plains，讓新圖片上的任何區域都能自由行走與搬遷
-  return 'plains';
-}
+function getTileTypeRaw(x, y) { return 'plains'; }
 
-// 💡 野外資源與 NPC 生成
 function getStaticEntity(x, y, type) {
-  // 👑 1. 四大史詩地標中心點 (擁有極高強度)
   if (x === 115 && y === 95) return { type: 'npc_capital', name: '👑 中央王都', reqPwr: 50000, loot: { wood: 1000000, iron: 1000000, food: 1000000, speedup1h: 10, resourceCard: 5 } };
   if (x === 148 && y === 32) return { type: 'npc_super_castle', name: '🗼 猩紅法師塔', reqPwr: 35000, loot: { iron: 300000, wood: 300000, food: 300000, speedup1h: 3 } };
   if (x === 145 && y === 165) return { type: 'npc_fortress', name: '👁️ 迷霧監視塔', reqPwr: 20000, loot: { wood: 150000, iron: 150000, food: 150000, speedup30m: 5 } };
@@ -115,17 +113,9 @@ function getStaticEntity(x, y, type) {
 
   if (type === 'water') return null;
 
-  const landmarks = [
-    { name: '中央王都', x: 115, y: 95, pwr: 25000 },
-    { name: '猩紅法師塔', x: 148, y: 32, pwr: 18000 },
-    { name: '迷霧監視塔', x: 145, y: 165, pwr: 12000 },
-    { name: '砂海要塞', x: 65, y: 185, pwr: 10000 }
-  ];
-
   const v = Math.sin(x * 45.123 + y * 89.456) * 98765.4321; const r = v - Math.floor(v); 
 
-  // 🛡️ 2. 地標周邊專屬生態圈 (漸進式資源與階級化 NPC 城堡)
-  for (let lm of landmarks) {
+  for (let lm of epicLandmarks) {
       const dist = Math.hypot(x - lm.x, y - lm.y);
       if (dist > 0 && dist <= 10) {
           if (dist <= 3) {
@@ -147,7 +137,6 @@ function getStaticEntity(x, y, type) {
       }
   }
 
-  // 🌲 3. 一般野外隨機物件
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
   if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
   if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
@@ -161,7 +150,6 @@ function initMapCache() {
 }
 initMapCache();
 
-// 💡 強制補齊缺失的變數，防止出現 NaN
 function sanitizeData() {
   if (!myData.allianceId) myData.allianceId = null;
   if (!myData.allianceName) myData.allianceName = null;
@@ -225,28 +213,24 @@ function getClearedPOI(x, y) {
   if (!found) return null; const pts = found.split(','); return { x: parseInt(pts[0]), y: parseInt(pts[1]), time: pts[2] ? parseInt(pts[2]) : 0, type: pts[3] || 'unknown' };
 }
 
-// 💡 絕對淨空領域：嚴格防重疊的 Boss 生成器
 async function spawnWorldBoss(id) {
   let bx, by, n, hp, m;
-
-  // 🌋 根據地貌硬派綁定 Boss 降臨點
   if (id === 'BOSS_CORE') {
-      bx = 28; by = 135; // 左下方的巨大火山區
+      bx = 28; by = 135; 
       n = '🌋 熔岩滅世魔龍'; hp = 500000; m = 20;
   } else if (id === 'BOSS_MID_1') {
-      bx = 55; by = 120; // 左側海域大漩渦附近
+      bx = 55; by = 120; 
       n = '🌪️ 深海漩渦巨妖'; hp = 150000; m = 8;
   } else if (id === 'BOSS_MID_2') {
-      bx = 45; by = 35;  // 左上方雪山區
+      bx = 45; by = 35;  
       n = '❄️ 凜冬風暴巨鷹'; hp = 150000; m = 8;
   } else if (id === 'BOSS_MID_3') {
-      bx = 160; by = 45; // 右上方紅樹林區
+      bx = 160; by = 45; 
       n = '🩸 猩紅樹魔'; hp = 150000; m = 8;
   } else if (id === 'BOSS_MID_4') {
-      bx = 160; by = 145; // 右下方暗黑山脈
+      bx = 160; by = 145; 
       n = '🌑 腐化岩魔'; hp = 150000; m = 8;
   } else {
-      // 🗿 其餘 10 隻 Outer Boss 隨機散布，並執行嚴格防重疊
       let overlap, tries = 0;
       do {
           overlap = false; tries++;
@@ -265,7 +249,6 @@ async function spawnWorldBoss(id) {
   }
 
   const bObj = { name: n, isBoss: true, x: bx, y: by, hp: hp, maxHp: hp, mult: m, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
-  
   const idx = worldBosses.findIndex(x=>x.id===id); 
   if(idx>=0) worldBosses[idx]={id,...bObj}; else worldBosses.push({id,...bObj});
   await setDoc(doc(db, "world_map", id), bObj);
@@ -284,6 +267,12 @@ window.switchTab = (tabName) => {
   if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
   if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
   if (tabName === 'mail') { window.renderAnnouncement(); }
+};
+
+const originalSwitchTab = window.switchTab;
+window.switchTab = (t) => {
+    if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
+    if(t === 'alliance') window.renderAllianceUI();
 };
 
 window.registerUser = () => {
@@ -358,7 +347,6 @@ onAuthStateChanged(auth, async (user) => {
       }
     });
 
-    // 💡 監聽全服公告系統
     onSnapshot(doc(db, "world_map", "announcement"), (snap) => {
         if(snap.exists()) {
             currentAnnouncement = snap.data();
@@ -389,7 +377,6 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// 💡 渲染公告系統 (信箱與地圖浮動橫幅)
 window.renderAnnouncement = () => {
     const cont = document.getElementById('announcement-container'); 
     const mapBar = document.getElementById('map-announcement-bar');
@@ -414,7 +401,7 @@ window.renderAnnouncement = () => {
     if(a.iron) rStr.push(`⛏️${formatCompact(a.iron)}`);
     if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); 
     if(a.speed) rStr.push(`⚡1hx${a.speed}`);
-    if(a.shield) rStr.push(`🛡️x${a.shield}`); // 💡 在公告面板顯示護盾獎勵圖示
+    if(a.shield) rStr.push(`🛡️x${a.shield}`); 
     
     let btnHtml = '';
     if (rStr.length > 0) {
@@ -431,7 +418,7 @@ window.claimAnnouncement = async (id) => {
     if(a.iron) myData.iron += a.iron; 
     if(a.food) myData.food += a.food; 
     if(a.speed) myData.items.speedup1h += a.speed;
-    if(a.shield) myData.items.shieldCard += a.shield; // 💡 實際將護盾卡加進玩家背包
+    if(a.shield) myData.items.shieldCard += a.shield;
     
     myData.claimedAnnouncements.push(id); 
     myData.logs.unshift(`[系統] 成功領取全服公告補給！`);
@@ -451,7 +438,7 @@ window.gmSendAnnouncement = async () => {
         iron: parseInt(document.getElementById('gm-ann-iron').value)||0, 
         food: parseInt(document.getElementById('gm-ann-food').value)||0, 
         speed: parseInt(document.getElementById('gm-ann-speed').value)||0, 
-        shield: parseInt(document.getElementById('gm-ann-shield').value)||0, // 💡 新增護盾卡獎勵
+        shield: parseInt(document.getElementById('gm-ann-shield').value)||0,
         timestamp: Date.now() 
     };
     await setDoc(doc(db, "world_map", "announcement"), ann); 
@@ -514,7 +501,7 @@ window.gmTargetAction = async (action) => {
     if (!targetSnap.exists()) return alert("找不到該名玩家！");
     let tData = targetSnap.data();
     
-    if (action === 'ban') { tData.isBanned = true; tData.banReason = "管理員手動永久封鎖"; }
+    if (action === 'ban') { tData.isBanned = true; tData.banReason = "管理員手手動永久封鎖"; }
     if (action === 'unban') { tData.isBanned = false; tData.banReason = ""; }
     if (action === 'addRes') { tData.wood += 1000000; tData.iron += 1000000; tData.food += 1000000; }
     if (action === 'addTroops') { tData.troops.infantry += 100000; tData.troops.archer += 100000; tData.troops.cavalry += 100000; }
@@ -574,7 +561,7 @@ window.gmAuditPlayer = async () => {
     if(d.wood > 50000000) { report += `⚠️ 木材異常高: ${formatCompact(d.wood)}\n`; isSus = true; }
     if(d.iron > 50000000) { report += `⚠️ 鐵礦異常高: ${formatCompact(d.iron)}\n`; isSus = true; }
     if(d.food > 50000000) { report += `⚠️ 糧草異常高: ${formatCompact(d.food)}\n`; isSus = true; }
-    if(d.troops && (d.troops.infantry > 5000000 || d.troops.archer > 5000000 || d.troops.cavalry > 5000000)) { report += `⚠️ 兵力數量異常！\n`; isSus = true; }
+    if(d.troops && (d.troops.infantry > 5000000 || d.troops.archer > 5000000 || d.troops.cavalry > 5000000)) { report += `⚠️️ 兵力數量異常！\n`; isSus = true; }
     if(d.items && (d.items.speedup1h > 10000 || d.items.shieldCard > 10000)) { report += `⚠️ 道具數量異常！\n`; isSus = true; }
     if(!isSus) report += `✅ 當前數值無明顯異常\n`;
     report += `\n--- 外掛查緝紀錄 ---\n`;
@@ -582,9 +569,6 @@ window.gmAuditPlayer = async () => {
     alert(report);
 }
 
-// ==========================================
-// 地圖與視圖更新
-// ==========================================
 function resizeCanvas() {
   const frame = document.getElementById('map-frame');
   if(frame && canvas) { canvas.width = frame.clientWidth; canvas.height = frame.clientHeight; clampCamera(); }
@@ -711,7 +695,7 @@ async function localTick() {
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
   
-  // 👇 把這三行貼在這裡！(遊戲每一秒進來都會立刻更新面板)
+  // 💡 每秒更新右上角 HUD
   if (typeof window.renderMarchHUD === 'function') {
       window.renderMarchHUD();
   }
@@ -721,7 +705,6 @@ async function localTick() {
   let marchesChanged = false;
 
   for (let m of myData.marches) {
-      // 1. 修復護盾 Bug
       if (m.type === 'attack_player' && now >= m.finishesAt) {
           const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
           if (tC && tC.shieldEndsAt && tC.shieldEndsAt > now) {
@@ -732,7 +715,6 @@ async function localTick() {
           }
       }
       
-      // 2. 修復返回時間過長 Bug
       if (m.type === 'return' && !m.timeFixed) {
           const dist = Math.hypot(myData.x - m.startX, myData.y - m.startY);
           m.finishesAt = m.startTime + Math.ceil(dist * 3 * 1000); 
@@ -740,35 +722,44 @@ async function localTick() {
           marchesChanged = true;
       }
 
-      // 3. ⛺ 士兵到家解散與資源歸還 (修復 0 秒卡死)
+      // 💡 修正 1：到家解散，兵力歸還，並修復物資蒸發 Bug (改為 m.loot)
       if (m.type === 'return' && now >= m.finishesAt) {
           if (m.troops) {
               myData.troops.infantry = (myData.troops.infantry || 0) + (m.troops.infantry || 0);
               myData.troops.archer = (myData.troops.archer || 0) + (m.troops.archer || 0);
               myData.troops.cavalry = (myData.troops.cavalry || 0) + (m.troops.cavalry || 0);
           }
-          if (m.payload) {
-              myData.wood += (m.payload.wood || 0);
-              myData.iron += (m.payload.iron || 0);
-              myData.food += (m.payload.food || 0);
-              myData.logs.unshift(`⛺ [部隊返鄉] 滿載而歸！帶回資源 🌲${formatCompact(m.payload.wood||0)} ⛏️${formatCompact(m.payload.iron||0)} 🌾${formatCompact(m.payload.food||0)}`);
+          if (m.loot && (m.loot.wood > 0 || m.loot.iron > 0 || m.loot.food > 0 || m.loot.speedup1h > 0 || m.loot.speedup30m > 0 || m.loot.speedup5m > 0 || m.loot.resourceCard > 0)) {
+              myData.wood += (m.loot.wood || 0);
+              myData.iron += (m.loot.iron || 0);
+              myData.food += (m.loot.food || 0);
+              if (m.loot.speedup5m) myData.items.speedup5m += m.loot.speedup5m;
+              if (m.loot.speedup30m) myData.items.speedup30m += m.loot.speedup30m;
+              if (m.loot.speedup1h) myData.items.speedup1h += m.loot.speedup1h;
+              if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
+
+              let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
+              if (m.loot.speedup1h) lootStr += ` | ⚡1hx${m.loot.speedup1h}`;
+              else if (m.loot.speedup30m) lootStr += ` | ⚡30mx${m.loot.speedup30m}`;
+              else if (m.loot.speedup5m) lootStr += ` | ⚡5mx${m.loot.speedup5m}`;
+              if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
+
+              myData.logs.unshift(`⛺ [部隊返鄉] 滿載而歸！帶回戰利品: ${lootStr}`);
           } else {
-              myData.logs.unshift(`⛺ [部隊返鄉] 您的部隊已安全返回主城。`);
+              myData.logs.unshift(`⛺ [部隊返鄉] 您的遠征軍已安全返回主城。`);
           }
           marchesChanged = true;
-          continue; // 💡 成功進城！直接跳過，不放進清單裡，讓它從畫面上消失！
+          try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
+          continue; // 成功進城！直接剔除
       }
-      
       cleanedMarches.push(m);
   }
   
-  // 更新部隊清單並自動存檔
   if (myData.marches.length !== cleanedMarches.length) {
       myData.marches = cleanedMarches;
       marchesChanged = true;
   }
   if (marchesChanged) savePrivateData();
-
 
   const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
   const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
@@ -779,14 +770,13 @@ async function localTick() {
   if (myData.food < 0) myData.food = 0;
 
   let needSave = false;
-  const landmarks = [{ name: '中央王都', x: 115, y: 95 }, { name: '猩紅法師塔', x: 148, y: 32 }, { name: '迷霧監視塔', x: 145, y: 165 }, { name: '砂海要塞', x: 65, y: 185 }];
   
-  // 💡 系統 AI：偵測玩家在勢力範圍內採集 (單次警告機制，不再死纏爛打)
+  // 💡 系統 AI：單次警告機制
   for (let m of myData.marches) {
       if (m.type === 'gathering' && !m.npcWarned) {
-          let nearLm = landmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
+          let nearLm = epicLandmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
           if (nearLm && Math.random() < 0.02) { 
-              m.npcWarned = true; // ⚠️ 貼上標籤，一趟採集只會被警告一次
+              m.npcWarned = true; 
               myData.marches.push({
                   id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
                   startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
@@ -856,7 +846,7 @@ async function localTick() {
 
              let lootStr = `木:${formatCompact(lW)} 鐵:${formatCompact(lI)} 糧:${formatCompact(lF)}`;
              if (s1h) lootStr += ` | ⚡1hx${s1h}`; else if (s30) lootStr += ` | ⚡30mx${s30}`; else if (s5) lootStr += ` | ⚡5mx${s5}`;
-             myData.logs.unshift(`🏆 [首領討伐成功] ${boss.name} 被擊殺！您造成的傷害貢獻為 ${myDmg}，分得戰利品: ${lootStr}`);
+             myData.logs.unshift(`🏆 [首領討伐成功] ${boss.name} 被擊殺！貢獻度 ${myDmg}，分得戰利品: ${lootStr}`);
              needSave = true;
          }
      }
@@ -891,39 +881,20 @@ async function localTick() {
   let newMarches = [];
   for (let m of myData.marches) {
     if (now >= m.finishesAt && m.type !== 'gathering') {
-      if (m.type === 'return') {
-        myData.troops.infantry += m.troops.infantry; myData.troops.archer += m.troops.archer; myData.troops.cavalry += m.troops.cavalry;
-        myData.wood += (m.loot.wood || 0); myData.iron += (m.loot.iron || 0); myData.food += (m.loot.food || 0);
-        if (m.loot.speedup5m) myData.items.speedup5m += m.loot.speedup5m;
-        if (m.loot.speedup30m) myData.items.speedup30m += m.loot.speedup30m;
-        if (m.loot.speedup1h) myData.items.speedup1h += m.loot.speedup1h;
-        if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
-        
-        let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
-        if (m.loot.speedup1h) lootStr += ` | ⚡1hx${m.loot.speedup1h}`;
-        else if (m.loot.speedup30m) lootStr += ` | ⚡30mx${m.loot.speedup30m}`;
-        else if (m.loot.speedup5m) lootStr += ` | ⚡5mx${m.loot.speedup5m}`;
-        if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
-        
-        if (m.loot.wood > 0 || m.loot.speedup5m > 0 || m.loot.resourceCard > 0) {
-            myData.logs.unshift(`[歸城] 遠征軍安全返回。帶回 ${lootStr}`);
-        } else { myData.logs.unshift(`[歸城] 遠征軍安全返回城池。`); }
-        try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
-      } 
-      else if (m.type === 'npc_attack_node') {
+      // 💡 修正 2：舊的 Return 已經被上方中樞處理，這裡只處理戰鬥結算
+      if (m.type === 'npc_attack_node') {
           let gMarchIdx = myData.marches.findIndex(mx => mx.type === 'gathering' && mx.targetX === m.targetX && mx.targetY === m.targetY);
           if (gMarchIdx !== -1) {
               let gMarch = myData.marches[gMarchIdx];
               let pwr = getPwrByTech(gMarch.troops, myData.research);
               if (pwr >= m.pwr) {
-                  myData.logs.unshift(`⚔️️ [採集防衛] 成功擊退 ${m.npcName} 的驅逐軍！部隊可繼續安心採集。`);
+                  myData.logs.unshift(`⚔ [採集防衛] 成功擊退 ${m.npcName} 的驅逐軍！部隊可繼續安心採集。`);
               } else {
-                  // 💡 警告機制：不強制撤退，只扣除 10% 兵力讓玩家知道危險
                   myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.9); 
                   myData.logs.unshift(`☠️ [驅逐警告] 您遭到 ${m.npcName} 襲擊，損失少量兵力！請斟酌是否繼續採集。`);
               }
           }
-          needSave = true; continue; // 結算完直接剔除，不推入新的陣列
+          needSave = true; continue; 
       }
       else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
@@ -970,6 +941,16 @@ async function localTick() {
   }
   
   if (needSave) { myData.marches = newMarches; await savePrivateData(); }
+  
+  // 🧹 靜默掃地機器人：清理遺留的雲端 NPC 幽靈佔領點
+  if (typeof worldNodes !== 'undefined') {
+      worldNodes.forEach(n => {
+          if (n.uid === 'NPC' && typeof deleteDoc !== 'undefined') {
+              try { deleteDoc(doc(db, "world_map", `NODE_${n.x}_${n.y}`)); } catch(e){}
+          }
+      });
+  }
+
   try { window.renderSelf(); } catch(e){}
 }
 
@@ -1057,10 +1038,8 @@ async function resolveInteractNPC(m) {
     if (res.troops.infantry > 0) res.troops.infantry = Math.max(0, res.troops.infantry - loss);
     myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
 
-    // 💡 只有當玩家攻擊「地標聯盟禁衛軍」時，才會激怒該勢力進行集體反撲！
     if (m.entity.type === 'npc_faction_guard' && m.entity.faction) {
         myData.logs.unshift(`⚠️ 【${m.entity.faction}禁衛軍】遭受挑釁！該勢力已集結大軍朝您的主城反撲！`);
-        
         const lmCoords = { '中央王都': {x:115, y:95}, '猩紅法師塔': {x:148, y:32}, '迷霧監視塔': {x:145, y:165}, '砂海要塞': {x:65, y:185} };
         const fPos = lmCoords[m.entity.faction] || {x: m.targetX, y: m.targetY};
         const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
@@ -1149,7 +1128,6 @@ function drawWorldMap() {
   const sR = Math.max(0, Math.floor(camY/TILE_SIZE)-1), eR = Math.min(WORLD_ROWS, Math.ceil((camY+vH)/TILE_SIZE)+1);
   const t = Date.now();
 
-  // 💡 1. 動態視角裁切繪製背景圖 (解決過大圖片導致的 GPU 渲染黑屏問題)
   const mapPixelW = WORLD_COLS * TILE_SIZE;
   const mapPixelH = WORLD_ROWS * TILE_SIZE;
   
@@ -1161,16 +1139,13 @@ function drawWorldMap() {
       if (cW > 0 && cH > 0) {
           const scaleX = imgWorldMap.naturalWidth / mapPixelW;
           const scaleY = imgWorldMap.naturalHeight / mapPixelH;
-          // 裁切原圖並繪製，確保不會觸發瀏覽器 8192px 的繪圖上限
           ctx.drawImage(imgWorldMap, vLeft * scaleX, vTop * scaleY, cW * scaleX, cH * scaleY, vLeft, vTop, cW, cH);
       }
   } else {
-      // 備用底色：如果圖片還在載入或檔案遺失，會顯示暗灰藍色而不是全黑
       ctx.fillStyle = '#1e293b'; 
       ctx.fillRect(camX, camY, vW, vH);
   }
 
-  // 💡 2. 繪製迷霧、網格與動態物件
   for (let x = sC; x < eC; x++) {
     for (let y = sR; y < eR; y++) {
       if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
@@ -1178,13 +1153,11 @@ function drawWorldMap() {
       
       const isExplored = exploredTiles[x][y] || godModeFog;
       if (!isExplored) { 
-          // 未探索區域：繪製高濃度迷霧
           ctx.fillStyle='rgba(5, 8, 17, 0.9)'; 
           ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
           continue; 
       }
 
-      // 繪製淡淡的網格線，幫助玩家對齊座標，但不會遮擋漂亮的底圖
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; 
       ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
 
@@ -1223,7 +1196,6 @@ function drawWorldMap() {
             const isLv3 = cell.entity.name.includes('Lv.3');
             const isLv2 = cell.entity.name.includes('Lv.2');
             
-            // 💡 根據階級給予不同的大小、圖片與光暈
             if (isLv3) {
                 ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10;
                 if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 15, py - 15, TILE_SIZE + 30, TILE_SIZE + 30);
@@ -1239,11 +1211,9 @@ function drawWorldMap() {
                 else { ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏕️', px+TILE_SIZE/2, py+30); }
             }
 
-            // 💡 文字顏色依照階級區分 (紅 > 橘 > 藍)
             ctx.fillStyle = isLv3 ? '#ef4444' : (isLv2 ? '#f97316' : '#38bdf8'); 
             ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
             
-            // 擷取名稱後半段 (把 "🏰 中央王都·禁衛城堡 (Lv.3)" 變成只顯示 "禁衛城堡 (Lv.3)")
             const shortName = cell.entity.name.split('·')[1] || cell.entity.name;
             ctx.fillText(shortName, px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_castle') {
@@ -1266,15 +1236,13 @@ function drawWorldMap() {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
             
-            // 💡 精準算出是「哪一座史詩地標」離這個資源點最近
-            const landmarks = [{name:'中央王都',x:115,y:95}, {name:'猩紅法師塔',x:148,y:32}, {name:'迷霧監視塔',x:145,y:165}, {name:'砂海要塞',x:65,y:185}];
             let nearLm = null; let minDist = 999;
-            landmarks.forEach(lm => {
+            epicLandmarks.forEach(lm => {
                 let d = Math.hypot(x - lm.x, y - lm.y);
                 if (d <= 10 && d < minDist) { minDist = d; nearLm = lm; }
             });
             
-            const seed = x * 123 + y * 456 + Math.floor(Date.now() / 3600000); 
+            const seed = x * 123 + y * 456 + currentHourSeed; 
             const isNpcOccupied = !isMine && !isEnemy && nearLm && (seed % 100 < 40); 
 
             let resImg = null; let fallbackEmoji = '';
@@ -1293,7 +1261,6 @@ function drawWorldMap() {
             } else if (isEnemy) {
                 ctx.fillStyle = '#ef4444'; ctx.fillText('敵方佔領', px+TILE_SIZE/2, py+54);
             } else if (isNpcOccupied) {
-                // 💡 具體顯示是哪個勢力佔據了這個資源點
                 ctx.fillStyle = '#f97316'; ctx.fillText(`⚠️ ${nearLm.name}駐守`, px+TILE_SIZE/2, py+54); 
             } else {
                 ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
@@ -1303,7 +1270,7 @@ function drawWorldMap() {
       } 
     } 
   } 
-  // 💡 3. 繪製世界首領
+
   worldBosses.forEach(boss => {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
      if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
@@ -1338,51 +1305,40 @@ function drawWorldMap() {
      }
   });
 
-  // 💡 4. 繪製玩家城池 (加入呼吸浮動與專屬聖光)
   allCastles.forEach(p => {
     const isMe = (p.id === myUid);
     const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
     if (!godModeFog && !isMe && !isExplored) return;
     
     const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
-    // 稍微擴大剔除邊界，避免光柱在畫面邊緣突然消失
     if (px<camX-TILE_SIZE*2 || px>camX+vW+TILE_SIZE*2 || py<camY-TILE_SIZE*2 || py>camY+vH+TILE_SIZE*2) return;
 
-    // 💡 讓城池有像呼吸一樣的微幅上下浮動感
     const floatY = Math.sin(t / 250 + p.x) * 4;
 
-    // 🛡️ 繪製超顯眼的全息能量護盾
     if (p.shieldEndsAt && p.shieldEndsAt > Date.now()) {
         ctx.save();
-        // 發光藍色光暈
         ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15 + Math.sin(Date.now()/150)*5; 
         ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 35, 0, Math.PI*2);
         ctx.fillStyle = 'rgba(6, 182, 212, 0.25)'; ctx.fill();
         
-        // 科技感虛線外框
         ctx.strokeStyle = 'rgba(34, 211, 238, 0.9)'; ctx.lineWidth = 3; 
         ctx.setLineDash([8, 4]); ctx.stroke();
         
-        // 城堡頭頂懸浮盾牌標記
         ctx.shadowBlur = 0; ctx.setLineDash([]);
         ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('🛡️', px+TILE_SIZE/2, py - 35 + floatY);
         ctx.restore();
     }
-    // 💡 如果是自己的城堡，畫出超明顯的金色聖光光柱與指引箭頭！
     if (isMe) { 
-        // 底部金色光圈
         ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
         ctx.beginPath(); ctx.ellipse(px + TILE_SIZE/2, py + TILE_SIZE - 5 + floatY, 35, 15, 0, 0, Math.PI*2); ctx.fill();
         
-        // 沖天光柱 (由下往上漸層透明)
         const grd = ctx.createLinearGradient(0, py - 120, 0, py + TILE_SIZE);
         grd.addColorStop(0, 'rgba(250, 204, 21, 0)');
         grd.addColorStop(1, 'rgba(250, 204, 21, 0.5)');
         ctx.fillStyle = grd;
         ctx.fillRect(px + TILE_SIZE/2 - 20, py - 120 + floatY, 40, 120 + TILE_SIZE/2);
         
-        // 浮動手指/箭頭 (彈跳幅度更大)
         ctx.font = '35px sans-serif'; ctx.textAlign='center'; 
         ctx.fillText('👇', px + TILE_SIZE/2, py - 30 + floatY * 2.5);
     }
@@ -1394,7 +1350,6 @@ function drawWorldMap() {
     let currentCastleImg = castleImgs[imgIdx];
     
     if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-        // 💡 玩家城堡稍微放大一點點，並套用浮動
         ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
     } else {
         ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16+floatY,31,26);
@@ -1402,31 +1357,26 @@ function drawWorldMap() {
     }
 
     if (zoom>0.5) {
-      // 如果是自己顯示黃色，如果是盟友顯示綠色，其他玩家顯示白色
       ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
       ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; ctx.textAlign='center';
       
-      // 顯示 [聯盟標籤] 玩家名稱
       let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
       ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
       ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
-    ctx.textAlign='start'; // 重置
+    ctx.textAlign='start';
   });
 
-  // 💡 4.5 繪製地標 NPC 的「動態採集運輸隊」 (純視覺動態，不佔用資料庫效能)
-  const lms = [{x: 115, y: 95, c:'#facc15'}, {x: 148, y: 32, c:'#ef4444'}, {x: 145, y: 165, c:'#a855f7'}, {x: 65, y: 185, c:'#f97316'}];
-  lms.forEach((lm, idx) => {
-      const cycle = 15000; // 每 15 秒一趟來回
+  epicLandmarks.forEach((lm, idx) => {
+      const cycle = 15000; 
       const phase = (t + idx * 4321) % (cycle * 2); 
       const isReturning = phase > cycle;
       const p = isReturning ? (1 - (phase - cycle)/cycle) : (phase / cycle);
       
-      // 利用時間戳決定採集的目標資源方位，讓它看起來是隨機出發
       const periodId = Math.floor((t + idx * 4321) / (cycle * 2));
       const r1 = Math.sin(periodId * 12.9898 + idx) * 43758.5453;
       const angle = (r1 - Math.floor(r1)) * Math.PI * 2;
-      const dist = 3 + ((r1 * 7) - Math.floor(r1 * 7)) * 4; // 距離 3~7 格
+      const dist = 3 + ((r1 * 7) - Math.floor(r1 * 7)) * 4;
       
       const tgX = lm.x + Math.cos(angle) * dist;
       const tgY = lm.y + Math.sin(angle) * dist;
@@ -1435,18 +1385,16 @@ function drawWorldMap() {
       const eX = tgX*TILE_SIZE + TILE_SIZE/2, eY = tgY*TILE_SIZE + TILE_SIZE/2;
       const cX = sX + (eX - sX) * p, cY = sY + (eY - sY) * p;
 
-      // 只有當運輸隊在玩家視野內時才繪製，節省效能
       if (cX > camX-TILE_SIZE && cX < camX+vW+TILE_SIZE && cY > camY-TILE_SIZE && cY < camY+vH+TILE_SIZE) {
           ctx.beginPath(); ctx.setLineDash([4,4]); ctx.moveTo(sX, sY); ctx.lineTo(eX, eY);
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
           
-          // 畫出小小的發光採集隊
           ctx.fillStyle = lm.c; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI*2); ctx.fill();
           ctx.fillStyle = '#fff'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; 
-          ctx.fillText(isReturning ? '📦' : '⛏️', cX, cY+3); // 回程顯示包裹，去程顯示十字鎬
+          ctx.fillText(isReturning ? '📦' : '⛏️', cX, cY+3);
       }
   });
-  // 💡 5. 繪製行軍路線
+
   if (myData.marches && myData.marches.length > 0) {
     myData.marches.forEach(m => {
       let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
@@ -1576,22 +1524,15 @@ canvas.addEventListener("click", (e) => {
   const tX = Math.floor((sX/zoom+camX)/TILE_SIZE), tY = Math.floor((sY/zoom+camY)/TILE_SIZE);
   
   const tC = allCastles.find(p=>p.x===tX&&p.y===tY), cell = MAP_CACHE[tX] && MAP_CACHE[tX][tY], dist = Math.hypot(tX-myData.x, tY-myData.y);
-  
   const wBoss = worldBosses.find(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x && tX <= b.x + 1 && tY >= b.y && tY <= b.y + 1);
   const isNearBoss = worldBosses.some(b => (b.hp > 0 || b.despawnAt > Date.now()) && tX >= b.x - 1 && tX <= b.x + 2 && tY >= b.y - 1 && tY <= b.y + 2);
 
   if (!godModeFog && dist > BASE_VISION_RADIUS+currentVisionBonus) return alert("🌫️ 迷霧區域無法鎖定目標！請派遣斥候或遷城靠近。");
-
   const queueStatus = `<span style="font-size:0.8rem; color:#facc15;">(行軍隊列: ${myData.marches.length}/3)</span>`;
 
   if (tC && tC.id!==myUid) {
-    // 1. 檢查是否有和平護盾
     if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
-    
-    // 💡 2. 檢查是否為同聯盟盟友 (這行是新加的)
-    if (tC.allianceName && myData.allianceName && tC.allianceName === myData.allianceName) {
-        return alert("🛡️ 目標是您的歃血盟友，無法發起攻擊！"); 
-    }
+    if (tC.allianceName && myData.allianceName && tC.allianceName === myData.allianceName) { return alert("🛡️ 目標是您的歃血盟友，無法發起攻擊！"); }
 
     targetAction = { type: 'attack_player', targetUid: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
     document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 ${queueStatus}`; 
@@ -1683,12 +1624,11 @@ canvas.addEventListener("click", (e) => {
 
 document.getElementById("btn-confirm-action").addEventListener('click', async () => {
   if (!targetAction) return;
-  // 💡 修復：發動攻擊時，強制解除自身的和平護盾
     if (targetAction.type.startsWith('attack')) {
         if (myData.shieldEndsAt && myData.shieldEndsAt > Date.now()) {
             const confirmBreak = confirm("⚠️ 警告：發動軍事行動將會【立刻解除】您的和平護盾！確定要出兵嗎？");
             if (!confirmBreak) return;
-            myData.shieldEndsAt = 0; // 破盾
+            myData.shieldEndsAt = 0;
             await savePrivateData();
             window.renderSelf();
         }
@@ -1757,7 +1697,7 @@ window.renderSelf = function() {
   try {
       const now = Date.now();
       const isShielded = myData.shieldEndsAt && myData.shieldEndsAt > now;
-      const shieldText = isShielded ? `🛡️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
+      const shieldText = isShielded ? `🛡️️ 護盾中 (${formatTime(Math.ceil((myData.shieldEndsAt - now)/1000))})` : '';
       
       const titleEl = document.getElementById('player-title');
       if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="color:#fbbf24; font-size:0.95rem;">(Lv.${myData.buildings.castle || 1})</span> <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
@@ -2019,7 +1959,6 @@ window.confirmRename = async () => {
 window.locateHome = () => { 
   if (myData) { 
       window.switchTab('world'); 
-      // 💡 延遲 60 毫秒，等待切換分頁、畫布完全展開後，再進行置中計算
       setTimeout(() => { centerCameraOn(myData.x, myData.y); }, 60); 
   }
 };
@@ -2053,7 +1992,6 @@ window.trainTroopType = async (typeKey) => {
   const bLvl = myData.buildings.barracks || 1;
   const trainCount = bLvl * 5;
   
-  // 💡 修復變數名稱：讀取設定檔中的 w, i, f 屬性
   const costW = req.w * trainCount;
   const costI = req.i * trainCount;
   const costF = req.f * trainCount;
@@ -2066,23 +2004,6 @@ window.trainTroopType = async (typeKey) => {
   await savePrivateData(); 
   window.renderSelf();
 };
-// 💡 定義各大史詩地標的勢力範圍與反擊戰力
-function checkFactionRetaliation(targetX, targetY) {
-  const factions = [
-    { name: '👑 中央王都禁衛軍', x: 115, y: 95, pwr: 30000 },
-    { name: '🗼 猩紅法師塔議會', x: 148, y: 32, pwr: 20000 },
-    { name: '👁️ 迷霧監視軍團', x: 145, y: 165, pwr: 15000 },
-    { name: '🏜️ 砂海要塞聯軍', x: 65, y: 185, pwr: 15000 }
-  ];
-
-  for (let fac of factions) {
-    // 如果玩家攻擊的座標距離該地標 12 格以內，判定進入其勢力範圍，觸發集體反抗！
-    if (Math.hypot(targetX - fac.x, targetY - fac.y) <= 12) {
-      return fac;
-    }
-  }
-  return null;
-}
 
 window.createAlliance = async () => {
     const name = document.getElementById('alliance-name-input').value.trim();
@@ -2093,7 +2014,6 @@ window.createAlliance = async () => {
 };
 
 window.joinAlliance = async (targetName = null) => {
-    // 💡 支援直接點擊列表按鈕傳入名稱，或從輸入框讀取
     const name = targetName || document.getElementById('alliance-name-input').value.trim();
     if(!name || name.length < 2) return alert("請輸入或選擇有效的聯盟名稱！");
     myData.allianceName = name; await savePrivateData();
@@ -2130,7 +2050,6 @@ window.renderAllianceUI = () => {
     } else {
         createBox.style.display = 'block'; mainBox.style.display = 'none';
         
-        // 💡 核心：動態掃描全服地圖，統計各聯盟人數
         const allianceCounts = {};
         allCastles.forEach(c => {
             if (c.allianceName) {
@@ -2140,7 +2059,6 @@ window.renderAllianceUI = () => {
         
         const pubList = document.getElementById('public-alliances-list');
         if (pubList) {
-            // 依照人數多寡，由大到小排序
             const sortedAlliances = Object.keys(allianceCounts).sort((a,b) => allianceCounts[b] - allianceCounts[a]);
             
             if (sortedAlliances.length === 0) {
@@ -2163,77 +2081,29 @@ window.renderAllianceUI = () => {
         }
     }
 };
-const originalSwitchTab = window.switchTab;
-window.switchTab = (t) => {
-    if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
-    if(t === 'alliance') window.renderAllianceUI();
-};
-// 💡 專屬護盾啟動邏輯：確保同步到雲端大地圖
-window.useShieldCard = async () => {
-    if (!myData.items || !myData.items.shieldCard || myData.items.shieldCard <= 0) {
-        return alert("護盾卡數量不足！請留意系統補給或打怪掉落。");
-    }
-    
-    // 扣除 1 張護盾卡，增加 8 小時 (8 * 3600 * 1000 毫秒) 的保護時間
-    myData.items.shieldCard -= 1;
-    const shieldTimeMs = 8 * 3600 * 1000;
-    const now = Date.now();
-    
-    // 如果原本就有護盾，則時間往上疊加；如果沒有，則從現在開始算
-    myData.shieldEndsAt = Math.max(now, myData.shieldEndsAt || 0) + shieldTimeMs;
-    
-    // ⚠️ 核心關鍵：將護盾狀態同步到世界地圖，這樣畫布跟其他玩家才看得到！
-    try {
-        await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true });
-    } catch (e) {
-        console.error("護盾同步到世界地圖失敗", e);
-    }
-    
-    await savePrivateData();
-    window.renderSelf();
-    alert("🛡️ 和平護盾已啟動！您的城池在接下來的 8 小時內將免受攻擊！");
-};
-// ==========================================
-// 💡 玩家手動召回部隊邏輯 (修復採集卡死問題)
-// ==========================================
+
 window.recallMarch = async (marchId) => {
     const mIdx = myData.marches.findIndex(x => x.id === marchId);
     if (mIdx === -1) return;
     
     let m = myData.marches[mIdx];
-    
-    if (m.type === 'return') return alert("部隊已經在返回途中！");
-    if (m.type === 'defend_npc' || m.type === 'npc_attack_node') return alert("無法召回敵軍部隊！");
-
-    if (!confirm("確定要立即召回這支部隊嗎？\n(若在採集中召回，將放棄目前尚未運回的資源)")) return;
+    if (!confirm("確定要立即召回這支部隊嗎？")) return;
 
     const now = Date.now();
-    let returnTimeMs = 0;
     const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
+    let returnTimeMs = 0;
     
-    // 💡 判斷部隊狀態：是「還在路上」還是「已經在採集」
-    if (m.type === 'gathering' && m.isGathering) {
-        // 如果已經抵達並在採集中，折返時間為完整距離
+    if (m.type === 'gathering') {
         returnTimeMs = Math.ceil(dist * 3 * 1000); 
-        
-        // ⚠️ 核心修復：必須把佔領的資源點從資料庫刪除，否則會永久佔用導致卡死！
         try { 
-            if (typeof db !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
-        } catch(e) { console.error("釋放資源點失敗", e); }
-        
-        // 同步清除本地顯示
-        if (typeof worldNodes !== 'undefined') {
-            worldNodes = worldNodes.filter(n => !(n.x === m.targetX && n.y === m.targetY));
-        }
+            if (typeof deleteDoc !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
+        } catch(e) { console.warn("資源點釋放略過"); }
     } else if (m.finishesAt > now) {
-        // 如果還在前往的路上，折返時間 = 已經走的時間
         returnTimeMs = now - m.startTime; 
     } else {
-        // 保底狀態
         returnTimeMs = Math.ceil(dist * 3 * 1000); 
     }
 
-    // 改變部隊狀態為「返回」並解除採集狀態
     m.type = 'return';
     m.isGathering = false; 
     m.startX = m.targetX;
@@ -2244,76 +2114,11 @@ window.recallMarch = async (marchId) => {
     m.finishesAt = now + returnTimeMs;
     m.timeFixed = true; 
 
-    myData.logs.unshift(`🎺 [軍事] 您已下達緊急召回指令，部隊正加速返回主城！`);
+    myData.logs.unshift(`🎺 [軍事] 已下達召回指令，部隊返回中！`);
     await savePrivateData();
-    if(typeof window.renderRadar === 'function') window.renderRadar();
-    alert("部隊已開始折返！");
+    window.renderMarchHUD(); 
 };
 
-// ==========================================
-// 💡 戰況雷達渲染邏輯 (安全附加版)
-// ==========================================
-window.renderRadar = function() {
-    const radarTab = document.getElementById('tab-radar');
-    if (!radarTab) return;
-    
-    const now = Date.now();
-    let html = '<h3 style="color:#38bdf8; border-bottom: 1px solid #1e2c40; padding-bottom: 8px; margin-bottom: 12px;">📡 戰況雷達</h3>';
-    
-    html += '<h4 style="color:#facc15; margin-bottom: 8px;">⚔️ 軍事動態</h4>';
-    if (myData.marches && myData.marches.length > 0) {
-        myData.marches.forEach(m => {
-            if (m.type === 'defend_npc' || m.type === 'npc_attack_node') {
-                const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
-                html += `<div style="background:#450a0a; padding:10px; margin-bottom:8px; border-radius:4px; border:1px solid #7f1d1d;">
-                    <div style="color:#f87171; font-weight:bold;">🚨 敵軍來襲: ${m.npcName}</div>
-                    <div style="font-size:0.85rem; color:#fca5a5;">目標: 您的主城 | 抵達: ${formatTime(remain)}</div>
-                    <button onclick="window.locatePlayer(${m.startX}, ${m.startY})" style="background:#dc2626; padding:4px 8px; font-size:0.8rem; margin-top:5px; border-radius:4px; width:100%;">📍 鎖定敵軍位置</button>
-                </div>`;
-                return;
-            }
-
-            const isReturning = m.type === 'return';
-            let stateText = '';
-            if (m.type === 'gathering') stateText = '⛏️ 採集中';
-            else if (isReturning) stateText = '⛺ 返回中';
-            else if (m.type === 'attack_player') stateText = '⚔️ 攻擊玩家';
-            else stateText = '🛡️ 遠征中';
-
-            const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
-            
-            html += `<div style="background:#1e293b; padding:10px; margin-bottom:8px; border-radius:4px; border:1px solid #334155;">
-                <div style="color:#38bdf8; font-weight:bold;">${stateText}</div>
-                <div style="font-size:0.85rem; color:#94a3b8; margin: 4px 0;">座標: (${m.targetX}, ${m.targetY}) | 倒數: <span style="color:#facc15;">${formatTime(remain)}</span></div>
-                <div style="display:flex; gap:6px; margin-top:6px;">
-                    <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="background:#2563eb; padding:6px 8px; font-size:0.8rem; flex:1; border-radius:4px; font-weight:bold;">📍 鎖定目標</button>
-                    ${!isReturning ? `<button onclick="window.recallMarch('${m.id}')" style="background:#d97706; padding:6px 8px; font-size:0.8rem; flex:1; border-radius:4px; font-weight:bold;">🎺 召回部隊</button>` : ''}
-                </div>
-            </div>`;
-        });
-    } else {
-        html += '<p style="color:#94a3b8; font-size:0.85rem; margin-bottom:15px; text-align:center; padding: 10px;">目前無任何行軍部隊。</p>';
-    }
-
-    html += '<h4 style="color:#facc15; margin-bottom: 8px; margin-top: 15px; border-top: 1px solid #334155; padding-top: 10px;">🐉 附近的世界首領</h4>';
-    const activeBosses = worldBosses.filter(b => b.hp > 0 && b.despawnAt > now);
-    if (activeBosses.length > 0) {
-        activeBosses.forEach(b => {
-            html += `<div style="background:#1e2c40; padding:10px; margin-bottom:6px; border-radius:4px; border:1px solid #475569;">
-                <div style="color:#ef4444; font-weight:bold;">${b.name}</div>
-                <div style="font-size:0.85rem; color:#cbd5e1; margin:4px 0;">血量: ${formatCompact(b.hp)} / ${formatCompact(b.maxHp)}</div>
-                <button onclick="window.locatePlayer(${b.x}, ${b.y})" style="background:#b91c1c; padding:4px 8px; font-size:0.8rem; border-radius:4px; width:100%; font-weight:bold;">📍 鎖定位置</button>
-            </div>`;
-        });
-    } else {
-        html += '<p style="color:#94a3b8; font-size:0.85rem; text-align:center;">目前無首領現蹤。</p>';
-    }
-
-    radarTab.innerHTML = html;
-};
-// ==========================================
-// 💡 主畫面浮動行軍面板 (HUD) - 手機自適應版
-// ==========================================
 window.renderMarchHUD = function() {
     if (!myData || !myData.marches) return;
     
@@ -2324,10 +2129,7 @@ window.renderMarchHUD = function() {
         document.body.appendChild(hud);
     }
     
-    // 💡 偵測是否為手機螢幕 (寬度小於 768px)
     const isMobile = window.innerWidth < 768;
-    
-    // 手機版自動縮小 15% (scale 0.85)，並貼齊右上角避免擋住主選單
     hud.style.cssText = `
         position: fixed; 
         right: ${isMobile ? '2px' : '15px'}; 
@@ -2367,11 +2169,19 @@ window.renderMarchHUD = function() {
         const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
         const canRecall = (m.type !== 'return' && m.type !== 'defend_npc' && m.type !== 'npc_attack_node');
 
+        // 💡 修復：HUD 0秒時的文字完美轉換
+        let timeDisplay = formatTime(remain);
+        if (m.type === 'gathering' && remain === 0) {
+            timeDisplay = '⛏ 作業中...';
+        } else if (remain === 0) {
+            timeDisplay = '⏳ 結算中...';
+        }
+
         html += `
         <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 8px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.6);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
                 <span style="font-size:0.95rem; font-weight:bold; color:#38bdf8; text-shadow: 1px 1px 2px black;">${icon} ${stateText}</span>
-                <span style="font-size:0.95rem; color:#facc15; font-weight:bold; text-shadow: 1px 1px 2px black;">${formatTime(remain)}</span>
+                <span style="font-size:0.95rem; color:#facc15; font-weight:bold; text-shadow: 1px 1px 2px black;">${timeDisplay}</span>
             </div>
             <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom: 6px;">目標: (${m.targetX}, ${m.targetY})</div>
             <div style="display:flex; gap:6px;">
@@ -2385,43 +2195,267 @@ window.renderMarchHUD = function() {
 };
 
 // ==========================================
-// 💡 強制召回部隊 (防崩潰保護版)
+// 💡 遊戲主心跳 (行軍、採集、升級結算)
 // ==========================================
-window.recallMarch = async (marchId) => {
-    const mIdx = myData.marches.findIndex(x => x.id === marchId);
-    if (mIdx === -1) return;
-    
-    let m = myData.marches[mIdx];
-    if (!confirm("確定要立即召回這支部隊嗎？")) return;
+async function localTick() {
+  if (!myData || myData.isBanned) return;
+  sanitizeData(); 
+  
+  const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
+  
+  // 💡 每秒更新右上角 HUD
+  if (typeof window.renderMarchHUD === 'function') {
+      window.renderMarchHUD();
+  }
 
-    const now = Date.now();
-    const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
-    let returnTimeMs = 0;
-    
-    if (m.type === 'gathering') {
-        returnTimeMs = Math.ceil(dist * 3 * 1000); 
-        // ⚠️ 這裡用 try-catch 包起來，就算 deleteDoc 沒載入，也不會阻擋部隊回家！
-        try { 
-            if (typeof deleteDoc !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
-        } catch(e) { console.warn("資源點釋放略過"); }
-    } else if (m.finishesAt > now) {
-        returnTimeMs = now - m.startTime; // 走到一半折返
-    } else {
-        returnTimeMs = Math.ceil(dist * 3 * 1000); 
+  let cleanedMarches = [];
+  let marchesChanged = false;
+
+  for (let m of myData.marches) {
+      if (m.type === 'attack_player' && now >= m.finishesAt) {
+          const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
+          if (tC && tC.shieldEndsAt && tC.shieldEndsAt > now) {
+              myData.logs.unshift(`🛡️ [戰報] 目標【${tC.name}】已開啟護盾，部隊無法攻擊，自動折返！`);
+              m.type = 'return'; m.startX = m.targetX; m.startY = m.targetY;
+              m.targetX = myData.x; m.targetY = myData.y; m.startTime = now;
+              marchesChanged = true;
+          }
+      }
+      
+      if (m.type === 'return' && !m.timeFixed) {
+          const dist = Math.hypot(myData.x - m.startX, myData.y - m.startY);
+          m.finishesAt = m.startTime + Math.ceil(dist * 3 * 1000); 
+          m.timeFixed = true;
+          marchesChanged = true;
+      }
+
+      // 💡 修復 1：歸還兵力與物資 (將原本錯寫的 m.payload 更正為 m.loot，修復物資蒸發 Bug)
+      if (m.type === 'return' && now >= m.finishesAt) {
+          if (m.troops) {
+              myData.troops.infantry = (myData.troops.infantry || 0) + (m.troops.infantry || 0);
+              myData.troops.archer = (myData.troops.archer || 0) + (m.troops.archer || 0);
+              myData.troops.cavalry = (myData.troops.cavalry || 0) + (m.troops.cavalry || 0);
+          }
+          if (m.loot && (m.loot.wood > 0 || m.loot.iron > 0 || m.loot.food > 0 || m.loot.speedup1h > 0 || m.loot.speedup30m > 0 || m.loot.speedup5m > 0 || m.loot.resourceCard > 0)) {
+              myData.wood += (m.loot.wood || 0);
+              myData.iron += (m.loot.iron || 0);
+              myData.food += (m.loot.food || 0);
+              if (m.loot.speedup5m) myData.items.speedup5m += m.loot.speedup5m;
+              if (m.loot.speedup30m) myData.items.speedup30m += m.loot.speedup30m;
+              if (m.loot.speedup1h) myData.items.speedup1h += m.loot.speedup1h;
+              if (m.loot.resourceCard) myData.items.resourceCard += m.loot.resourceCard;
+
+              let lootStr = `木:${formatCompact(m.loot.wood||0)} 鐵:${formatCompact(m.loot.iron||0)} 糧:${formatCompact(m.loot.food||0)}`;
+              if (m.loot.speedup1h) lootStr += ` | ⚡1hx${m.loot.speedup1h}`;
+              else if (m.loot.speedup30m) lootStr += ` | ⚡30mx${m.loot.speedup30m}`;
+              else if (m.loot.speedup5m) lootStr += ` | ⚡5mx${m.loot.speedup5m}`;
+              if (m.loot.resourceCard) lootStr += ` | 📦x${m.loot.resourceCard}`;
+
+              myData.logs.unshift(`⛺ [部隊返鄉] 滿載而歸！帶回戰利品: ${lootStr}`);
+          } else {
+              myData.logs.unshift(`⛺ [部隊返鄉] 您的遠征軍已安全返回主城。`);
+          }
+          marchesChanged = true;
+          try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
+          continue; // 成功進城！直接剔除
+      }
+      cleanedMarches.push(m);
+  }
+  
+  if (myData.marches.length !== cleanedMarches.length) {
+      myData.marches = cleanedMarches;
+      marchesChanged = true;
+  }
+  if (marchesChanged) savePrivateData();
+
+  const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
+  const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
+  
+  myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
+  myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
+  myData.food += dt * farmProdPerSec - dt * upkeepPerSec;
+  if (myData.food < 0) myData.food = 0;
+
+  let needSave = false;
+  
+  // 💡 系統 AI：單次警告機制
+  for (let m of myData.marches) {
+      if (m.type === 'gathering' && !m.npcWarned) {
+          let nearLm = epicLandmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
+          if (nearLm && Math.random() < 0.02) { 
+              m.npcWarned = true; 
+              myData.marches.push({
+                  id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
+                  startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
+                  startTime: now, finishesAt: now + 12000, 
+                  npcName: nearLm.name, pwr: 15000 
+              });
+              myData.logs.unshift(`🚨 [領地警告] 您的採集部隊驚動了 ${nearLm.name}，NPC 守軍正前往發出警告！`);
+              needSave = true;
+          }
+      }
+  }
+  
+  let newCleared = [];
+  for (let poi of myData.clearedPOI) {
+    const parts = poi.split(',');
+    if (parts.length >= 4) {
+      const cTime = parseInt(parts[2]);
+      if (now - cTime > 15 * 60 * 1000) continue; 
     }
+    newCleared.push(poi);
+  }
+  if (newCleared.length !== myData.clearedPOI.length) { myData.clearedPOI = newCleared; needSave = true; }
 
-    // 強制轉換為返回狀態
-    m.type = 'return';
-    m.isGathering = false; 
-    m.startX = m.targetX;
-    m.startY = m.targetY;
-    m.targetX = myData.x;
-    m.targetY = myData.y;
-    m.startTime = now;
-    m.finishesAt = now + returnTimeMs;
-    m.timeFixed = true; 
+  let newBuildQueues = [];
+  for (let q of myData.buildQueues) {
+    if (now >= q.finishesAt) {
+      if(CFG.buildings[q.target]) {
+         myData.buildings[q.target]++;
+         myData.logs.unshift(`[建造就緒] ${CFG.buildings[q.target].name} 升級至 Lv.${myData.buildings[q.target]}`);
+         try{ setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true }); }catch(e){}
+      }
+      needSave = true;
+    } else { newBuildQueues.push(q); }
+  }
+  if (myData.buildQueues.length !== newBuildQueues.length) { myData.buildQueues = newBuildQueues; needSave = true; }
 
-    myData.logs.unshift(`🎺 [軍事] 已下達召回指令，部隊返回中！`);
-    await savePrivateData();
-    window.renderMarchHUD(); // 瞬間更新 UI
-};
+  if (myData.researchQueue && now >= myData.researchQueue.finishesAt) {
+    if(CFG.techs[myData.researchQueue.target]) {
+       myData.research[myData.researchQueue.target]++;
+       myData.logs.unshift(`[科技突破] ${CFG.techs[myData.researchQueue.target].name} 升級至 Lv.${myData.research[myData.researchQueue.target]}`);
+    }
+    myData.researchQueue = null; needSave = true;
+  }
+
+  if (myData.trainQueue && now >= myData.trainQueue.finishesAt) {
+    if(CFG.troops[myData.trainQueue.type]) {
+       myData.troops[myData.trainQueue.type] += myData.trainQueue.count;
+       myData.logs.unshift(`[徵兵就緒] ${myData.trainQueue.count} 名${CFG.troops[myData.trainQueue.type].name}入列`);
+    }
+    myData.trainQueue = null; needSave = true; 
+    try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
+  }
+
+  worldBosses.forEach(boss => {
+     if (boss.hp <= 0 && boss.contributors && boss.contributors[myUid]) {
+         const claimId = `${boss.id}_${boss.spawnId}`;
+         if (!myData.claimedBosses.includes(claimId)) {
+             const myDmg = boss.contributors[myUid];
+             const lW = myDmg * boss.mult; const lI = myDmg * boss.mult; const lF = myDmg * boss.mult;
+             const s5 = Math.floor(myDmg / (2000/boss.mult));
+             const s30 = boss.mult >= 5 ? Math.floor(myDmg / (10000/boss.mult)) : 0;
+             const s1h = boss.mult >= 10 ? Math.floor(myDmg / (20000/boss.mult)) : 0;
+
+             myData.wood += lW; myData.iron += lI; myData.food += lF;
+             myData.items.speedup5m += s5; myData.items.speedup30m += s30; myData.items.speedup1h += s1h;
+             myData.claimedBosses.push(claimId);
+
+             let lootStr = `木:${formatCompact(lW)} 鐵:${formatCompact(lI)} 糧:${formatCompact(lF)}`;
+             if (s1h) lootStr += ` | ⚡1hx${s1h}`; else if (s30) lootStr += ` | ⚡30mx${s30}`; else if (s5) lootStr += ` | ⚡5mx${s5}`;
+             myData.logs.unshift(`🏆 [首領討伐成功] ${boss.name} 被擊殺！貢獻度 ${myDmg}，分得戰利品: ${lootStr}`);
+             needSave = true;
+         }
+     }
+     if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
+  });
+
+  if (Math.random() < 0.005) {
+    if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
+      let nearestNPC = null, minDist = 15;
+      for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
+        for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
+          const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+          if (cell && cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
+            const dist = Math.hypot(tx - myData.x, ty - myData.y);
+            if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
+          }
+        }
+      }
+      if (nearestNPC && !myData.marches.some(m => m.type === 'defend_npc' && m.startX === nearestNPC.x && m.startY === nearestNPC.y)) {
+        const timeMs = Math.ceil(minDist * 4 * 1000); 
+        const enemyPwr = Math.floor(10 + myData.buildings.castle * 15);
+        myData.marches.push({
+          id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
+          startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
+        });
+        myData.logs.unshift(`🚨 [警戒] ${nearestNPC.ent.name} 敵軍正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
+        needSave = true;
+      }
+    }
+  }
+
+  let newMarches = [];
+  for (let m of myData.marches) {
+    if (now >= m.finishesAt && m.type !== 'gathering') {
+      if (m.type === 'npc_attack_node') {
+          let gMarchIdx = myData.marches.findIndex(mx => mx.type === 'gathering' && mx.targetX === m.targetX && mx.targetY === m.targetY);
+          if (gMarchIdx !== -1) {
+              let gMarch = myData.marches[gMarchIdx];
+              let pwr = getPwrByTech(gMarch.troops, myData.research);
+              if (pwr >= m.pwr) {
+                  myData.logs.unshift(`⚔ [採集防衛] 成功擊退 ${m.npcName} 的驅逐軍！部隊可繼續安心採集。`);
+              } else {
+                  myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.9); 
+                  myData.logs.unshift(`☠️ [驅逐警告] 您遭到 ${m.npcName} 襲擊，損失少量兵力！請斟酌是否繼續採集。`);
+              }
+          }
+          needSave = true; continue; 
+      }
+      else if (m.type === 'attack_player') { const res = await resolveAttackPlayer(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); } 
+      else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
+      else if (m.type === 'occupy_node') { 
+          const res = await resolveOccupyNode(m);
+          if (res.isGathering) {
+              m.type = 'gathering'; m.startTime = Date.now(); m.finishesAt = Date.now() + 3600 * 1000;
+              m.capacity = res.cap; m.resType = res.resType;
+              newMarches.push(m);
+          } else if (res.survived) { newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      }
+      else { const res = await resolveInteractNPC(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      needSave = true;
+    } 
+    else if (m.type === 'gathering') {
+      if (now >= m.finishesAt) {
+          m.type = 'return'; m.loot = { wood:0, iron:0, food:0 }; m.loot[m.resType] = m.capacity;
+          m.finishesAt = now + (now - m.startTime); 
+          try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); }catch(e){}
+          myData.logs.unshift(`[採集完成] 駐紮部隊滿載而歸！`);
+          newMarches.push(m);
+          needSave = true;
+      } else {
+          newMarches.push(m);
+          if (Math.floor(now/1000) % 10 === 0) {
+              getDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)).then(snap => {
+                  if (snap.exists() && snap.data().uid !== myUid) {
+                      const idx = myData.marches.findIndex(x => x.id === m.id);
+                      if (idx !== -1) {
+                          myData.marches[idx].type = 'return';
+                          myData.marches[idx].loot = { wood:0, iron:0, food:0 };
+                          myData.marches[idx].troops.infantry = Math.floor(myData.marches[idx].troops.infantry * 0.3);
+                          myData.marches[idx].finishesAt = Date.now() + (Date.now() - myData.marches[idx].startTime);
+                          myData.logs.unshift(`🚨 [資源爭奪] 您在 (${m.targetX}, ${m.targetY}) 的部隊遭到敵軍擊敗，已撤退！`);
+                          savePrivateData();
+                      }
+                  }
+              });
+          }
+      }
+    }
+    else { newMarches.push(m); }
+  }
+  
+  if (needSave) { myData.marches = newMarches; await savePrivateData(); }
+  
+  // 🧹 靜默掃地機器人：清理遺留的雲端 NPC 幽靈佔領點
+  if (typeof worldNodes !== 'undefined') {
+      worldNodes.forEach(n => {
+          if (n.uid === 'NPC' && typeof deleteDoc !== 'undefined') {
+              try { deleteDoc(doc(db, "world_map", `NODE_${n.x}_${n.y}`)); } catch(e){}
+          }
+      });
+  }
+
+  try { window.renderSelf(); } catch(e){}
+}
