@@ -58,15 +58,15 @@ const epicLandmarks = [
 
 const CFG = {
   buildings: { 
-    castle:    { name: '主城',     rate: 0,   baseW: 600, baseI: 600, baseTime: 1200, maxLevel: 99 },
-    academy:   { name: '學院',     rate: 0,   baseW: 400, baseI: 400, baseTime: 900, maxLevel: 99 },
-    builder:   { name: '工匠小屋', rate: 0,   baseW: 2000, baseI: 2000, baseTime: 1800, maxLevel: 3 }, 
-    wall:      { name: '城牆',     rate: 0,   baseW: 800, baseI: 800, baseTime: 600, maxLevel: 99 },
-    warehouse: { name: '地下倉庫', rate: 0,   baseW: 500, baseI: 500, baseTime: 400, maxLevel: 99 },
-    lumber:    { name: '伐木場',   rate: 1.0, baseW: 100, baseI: 50,  baseTime: 300, maxLevel: 99 }, 
-    mine:      { name: '鐵礦場',   rate: 0.8, baseW: 50,  baseI: 100, baseTime: 300, maxLevel: 99 }, 
-    farm:      { name: '農田',     rate: 1.2, baseW: 80,  baseI: 80,  baseTime: 300, maxLevel: 99 }, 
-    barracks:  { name: '兵營',     rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
+    castle:    { name: '主城',     desc: '提升其他建築等級上限，增強領地整體實力。', rate: 0,   baseW: 600, baseI: 600, baseTime: 1200, maxLevel: 99 },
+    academy:   { name: '學院',     desc: '解鎖並提升軍事科技，強化部隊戰鬥力與屬性。', rate: 0,   baseW: 400, baseI: 400, baseTime: 900, maxLevel: 99 },
+    builder:   { name: '工匠小屋', desc: '增加可同時升級的建築佇列數量。', rate: 0,   baseW: 2000, baseI: 2000, baseTime: 1800, maxLevel: 3 }, 
+    wall:      { name: '城牆',     desc: '增強防禦力，降低城池遭敵軍攻打時的戰損比例。', rate: 0,   baseW: 800, baseI: 800, baseTime: 600, maxLevel: 99 },
+    warehouse: { name: '地下倉庫', desc: '保護基礎資源，避免在城池被攻破時遭全數掠奪。', rate: 0,   baseW: 500, baseI: 500, baseTime: 400, maxLevel: 99 },
+    lumber:    { name: '伐木場',   desc: '持續生產木材，用於升級建築與研發科技。', rate: 1.0, baseW: 100, baseI: 50,  baseTime: 300, maxLevel: 99 }, 
+    mine:      { name: '鐵礦場',   desc: '持續生產鐵礦，是招募高階兵種的必備資源。', rate: 0.8, baseW: 50,  baseI: 100, baseTime: 300, maxLevel: 99 }, 
+    farm:      { name: '農田',     desc: '持續生產糧草，用以維持龐大軍隊的日常消耗。', rate: 1.2, baseW: 80,  baseI: 80,  baseTime: 300, maxLevel: 99 }, 
+    barracks:  { name: '兵營',     desc: '解鎖高階兵種，升級可提升單次招募士兵的數量。', rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
   },
   techs: {
     infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 600 },
@@ -189,12 +189,30 @@ function sanitizeData() {
 function runAntiCheat() {
     if (isAdmin || myData.isBanned) return false;
     let cheatDetected = false; let reason = "";
-    const MAX_RESOURCE = 2000000000; const MAX_TROOPS = 2000000000; const MAX_ITEMS = 100000;
-    if (myData.wood > MAX_RESOURCE || myData.iron > MAX_RESOURCE || myData.food > MAX_RESOURCE) { cheatDetected = true; reason = "修改資源數量異常"; }
-    if (myData.troops.infantry > MAX_TROOPS || myData.troops.archer > MAX_TROOPS || myData.troops.cavalry > MAX_TROOPS) { cheatDetected = true; reason = "修改兵力數量異常"; }
-    if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS || myData.items.resourceCard > MAX_ITEMS) { cheatDetected = true; reason = "修改道具數量異常"; }
-    if (myData.buildings.castle > 100 || myData.buildings.builder > 10) { cheatDetected = true; reason = "修改建築等級異常"; }
-    if (myData.name) myData.name = myData.name.replace(/[<>]/g, "").substring(0, 15);
+    const MAX_RESOURCE = 500000000; const MAX_TROOPS = 50000000; const MAX_ITEMS = 10000;
+
+    // 💡 1. 嚴格文字過濾 (防 HTML 注入 / XSS 攻擊)
+    const textRegex = /[<>"'`\\]/g;
+    if (myData.name) myData.name = myData.name.replace(textRegex, "").substring(0, 12);
+    if (myData.allianceName) myData.allianceName = myData.allianceName.replace(textRegex, "").substring(0, 10);
+
+    // 💡 2. 防範數值變成 NaN 或 Infinity (防禦記憶體修改器)
+    const resKeys = ['wood', 'iron', 'food'];
+    resKeys.forEach(k => { 
+        if (!isFinite(myData[k]) || isNaN(myData[k]) || myData[k] < 0) myData[k] = 0; 
+        if (myData[k] > MAX_RESOURCE) { cheatDetected = true; reason = `資源數量異常(${k})`; }
+    });
+
+    // 💡 3. 嚴格檢查部隊數量
+    ['infantry', 'archer', 'cavalry'].forEach(k => {
+        if (!isFinite(myData.troops[k]) || isNaN(myData.troops[k]) || myData.troops[k] < 0) myData.troops[k] = 0;
+        if (myData.troops[k] > MAX_TROOPS) { cheatDetected = true; reason = `兵力數量異常(${k})`; }
+    });
+
+    // 💡 4. 檢查道具、建築與幽靈佇列
+    if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { cheatDetected = true; reason = "道具數量超出硬上限"; }
+    if (myData.buildings.castle > 100 || myData.buildings.builder > 5) { cheatDetected = true; reason = "建築等級異常"; }
+    if (myData.buildQueues.length > 5 || myData.marches.length > 10) { cheatDetected = true; reason = "佇列資料篡改"; }
 
     if (cheatDetected) {
         myData.isBanned = true; myData.banReason = reason;
@@ -692,9 +710,28 @@ window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y
 async function localTick() {
   if (!myData || myData.isBanned) return;
   sanitizeData(); 
-  
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
-  
+
+  // 💡 【新增】離線進度報告 (若玩家離開超過 5 分鐘 / 300秒)
+  if (dt > 300) {
+      const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
+      const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
+      
+      // 計算離線期間的總產出與消耗
+      const pW = Math.floor(dt * (CFG.buildings.lumber.rate * myData.buildings.lumber));
+      const pI = Math.floor(dt * (CFG.buildings.mine.rate * myData.buildings.mine));
+      const pF = Math.floor(dt * farmProdPerSec);
+      const cF = Math.floor(dt * upkeepPerSec);
+      
+      let logMsg = `📴 [離線報告] 歡迎歸來！您離開了 ${formatTime(Math.floor(dt))}。領地產出: 🌲${formatCompact(pW)} ⛏️${formatCompact(pI)}`;
+      if (pF >= cF) {
+          logMsg += ` 🌾+${formatCompact(pF - cF)} (扣除部隊糧草後)`;
+      } else {
+          logMsg += ` 🌾-${formatCompact(cF - pF)} (糧草入不敷出)`;
+      }
+      
+      myData.logs.unshift(logMsg);
+  }
   // 💡 每秒更新右上角 HUD
   if (typeof window.renderMarchHUD === 'function') {
       window.renderMarchHUD();
@@ -1821,7 +1858,7 @@ window.renderSelf = function() {
                 btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
             }
 
-            return genCard(CFG.buildings[key].name, lvl, `升級需 ${formatTime(timeSec)}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
+            return genCard(CFG.buildings[key].name, lvl, `<span style="color:#60a5fa;">${CFG.buildings[key].desc}</span><br>升級需 ${formatTime(timeSec)}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
           }).join('');
       }
 
