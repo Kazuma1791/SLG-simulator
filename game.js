@@ -754,21 +754,21 @@ async function localTick() {
       }
   }
 
-  // 💡 系統 AI：偵測玩家在勢力範圍內採集，隨機發動驅逐攻擊！
+  // 💡 系統 AI：偵測玩家在勢力範圍內採集 (單次警告機制，不再死纏爛打)
   for (let m of myData.marches) {
-      if (m.type === 'gathering') {
+      // 加入 !m.npcWarned 標記，確保一趟採集只會被 NPC 警告一次！
+      if (m.type === 'gathering' && !m.npcWarned) {
           let nearLm = landmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
-          if (nearLm && Math.random() < 0.02) { // 每秒 2% 機率被巡邏軍發現
-              if (!myData.marches.some(mx => mx.type === 'npc_attack_node' && mx.targetX === m.targetX && mx.targetY === m.targetY)) {
-                  myData.marches.push({
-                      id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
-                      startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
-                      startTime: now, finishesAt: now + 12000, // 敵軍 12 秒後抵達
-                      npcName: nearLm.name, pwr: 15000 
-                  });
-                  myData.logs.unshift(`🚨 [領地警告] 您在 (${m.targetX}, ${m.targetY}) 的採集部隊驚動了 ${nearLm.name}，敵方驅逐軍正趕往該地！`);
-                  needSave = true;
-              }
+          if (nearLm && Math.random() < 0.02) { 
+              m.npcWarned = true; // ⚠️ 貼上標籤，這趟採集安全了
+              myData.marches.push({
+                  id: 'NPC_ATK_' + Date.now(), type: 'npc_attack_node',
+                  startX: nearLm.x, startY: nearLm.y, targetX: m.targetX, targetY: m.targetY,
+                  startTime: now, finishesAt: now + 12000, 
+                  npcName: nearLm.name, pwr: 15000 
+              });
+              myData.logs.unshift(`🚨 [領地警告] 您的採集部隊驚動了 ${nearLm.name}，NPC 守軍正前往發出警告！`);
+              needSave = true;
           }
       }
   }
@@ -890,16 +890,11 @@ async function localTick() {
               let gMarch = myData.marches[gMarchIdx];
               let pwr = getPwrByTech(gMarch.troops, myData.research);
               if (pwr >= m.pwr) {
-                  myData.logs.unshift(`⚔️️ [採集防衛] 您的部隊成功擊退了 ${m.npcName} 的驅逐軍！`);
+                  myData.logs.unshift(`⚔️️ [採集防衛] 成功擊退 ${m.npcName} 的驅逐軍！部隊可繼續安心採集。`);
               } else {
-                  myData.marches[gMarchIdx].type = 'return';
-                  const dist = Math.hypot(myData.x - gMarch.targetX, myData.y - gMarch.targetY);
-                  myData.marches[gMarchIdx].startTime = now;
-                  myData.marches[gMarchIdx].finishesAt = now + Math.ceil(dist * 3 * 1000);
-                  myData.marches[gMarchIdx].timeFixed = true;
-                  myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.5); // 損失一半步兵
-                  myData.logs.unshift(`☠️ [採集失敗] 您的部隊在 (${m.targetX}, ${m.targetY}) 被 ${m.npcName} 擊潰，丟棄物資撤退！`);
-                  try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); } catch(e){}
+                  // 💡 警告機制：不強制撤退，只扣除 10% 兵力讓玩家知道危險
+                  myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.9); 
+                  myData.logs.unshift(`☠️ [驅逐警告] 您遭到 ${m.npcName} 襲擊，損失少量兵力！請斟酌是否繼續採集。`);
               }
           }
           needSave = true; continue; // 結算完直接剔除，不推入新的陣列
@@ -1243,7 +1238,13 @@ function drawWorldMap() {
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
-            const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid);
+            const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
+            
+            // 💡 視覺化佔領演算：地標周邊有 40% 的資源點會被標記為 NPC 駐守
+            const isNearLandmark = [{x:115,y:95},{x:148,y:32},{x:145,y:165},{x:65,y:185}].some(lm => Math.hypot(x-lm.x, y-lm.y) <= 10);
+            const seed = x * 123 + y * 456 + Math.floor(Date.now() / 3600000); // 隨時間變化的亂數種子
+            const isNpcOccupied = !isMine && !isEnemy && isNearLandmark && (seed % 100 < 40); 
+
             let resImg = null; let fallbackEmoji = '';
             if (cell.entity.type === 'res_farm') { resImg = imgResFarm; fallbackEmoji = '🌾'; }
             else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
@@ -1254,10 +1255,17 @@ function drawWorldMap() {
 
             const resName = cell.entity.name.split(' ')[1] || '資源區';
             ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42);
-            ctx.fillStyle = isMine ? '#10b981' : (isEnemy ? '#ef4444' : '#38bdf8');
-            ctx.font = 'bold 10px sans-serif'; ctx.fillText(isMine ? '我方採集' : (isEnemy ? '敵方佔領' : '可佔領'), px+TILE_SIZE/2, py+54);
+            
+            if (isMine) {
+                ctx.fillStyle = '#10b981'; ctx.fillText('我方採集', px+TILE_SIZE/2, py+54);
+            } else if (isEnemy) {
+                ctx.fillStyle = '#ef4444'; ctx.fillText('敵方佔領', px+TILE_SIZE/2, py+54);
+            } else if (isNpcOccupied) {
+                ctx.fillStyle = '#f97316'; ctx.fillText('⚠️ NPC 駐守', px+TILE_SIZE/2, py+54);
+            } else {
+                ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
+            }
           }
-        }
       }
     }
   }
