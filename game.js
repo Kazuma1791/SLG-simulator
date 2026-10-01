@@ -1342,7 +1342,7 @@ async function resolveDefendNPC(m) {
 }
 
 // ==========================================
-// 💡 野外戰鬥結算系統 (修復 1 兵打贏 Bug)
+// 💡 PVE 與 PVP 戰鬥結算引擎 (含醫療所與負重)
 // ==========================================
 async function resolveInteractNPC(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarch: null };
@@ -1360,29 +1360,26 @@ async function resolveInteractNPC(m) {
         // ✅ 戰鬥勝利
         let lossRate = (defPwr / (attPwr + 1)) * 0.15;
         
-        // 🏥 PVE 戰損：90% 送進醫療所，10% 陣亡
         let lInf = Math.floor(m.troops.infantry * lossRate); let wInf = Math.floor(lInf * 0.9);
         let lArc = Math.floor(m.troops.archer * lossRate); let wArc = Math.floor(lArc * 0.9);
         let lCav = Math.floor(m.troops.cavalry * lossRate); let wCav = Math.floor(lCav * 0.9);
-        let overflow = window.addWounded(wInf, wArc, wCav); // 寫入傷兵
+        let overflow = window.addWounded(wInf, wArc, wCav); 
         
         res.troops.infantry = Math.max(0, m.troops.infantry - lInf);
         res.troops.archer = Math.max(0, m.troops.archer - lArc);
         res.troops.cavalry = Math.max(0, m.troops.cavalry - lCav);
         
-        // 🎒 負重系統介入 (依照兵種負重計算能帶走多少戰利品)
         let maxLoad = window.getLoadCapacity(res.troops);
         let currentLoad = 0;
         ['food', 'wood', 'iron'].forEach(k => {
             let amt = m.entity.loot[k] || 0;
-            if (currentLoad + amt > maxLoad) amt = maxLoad - currentLoad; // 裝不下的丟棄
+            if (currentLoad + amt > maxLoad) amt = maxLoad - currentLoad; 
             res.loot[k] = amt; currentLoad += amt;
         });
 
         reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠️陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
         if(myData.quests) myData.quests.daily.kills++;
 
-        // 勢力反擊邏輯 (保留不變)
         let factionName = m.entity.faction;
         if (!factionName && ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].some(n => m.entity.name.includes(n))) {
             factionName = ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n));
@@ -1392,18 +1389,18 @@ async function resolveInteractNPC(m) {
             res.counterMarch = { id: 'COUNTER_'+Date.now(), type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 復仇軍團` };
         }
     } else {
-        // ❌ 戰鬥失敗 (全軍潰散，但 70% 保留重傷進醫院)
+        // ❌ 戰鬥失敗
         let wInf = Math.floor(m.troops.infantry * 0.7); let wArc = Math.floor(m.troops.archer * 0.7); let wCav = Math.floor(m.troops.cavalry * 0.7);
         window.addWounded(wInf, wArc, wCav);
         res.survived = false; res.troops = {infantry:0, archer:0, cavalry:0};
         reportText = `討伐遭遇慘敗！部隊潰散 (🏥 ${wInf+wArc+wCav} 人已送往醫療所)`;
         if(window.addReport) window.addReport(`☠️ 遠征失敗`, reportText, false);
-        return res;
+        return res; // 這裡的 return 是合法的，因為它在函數內部
     }
   }
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
   if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
-  return res;
+  return res; // 這裡的 return 也是合法的
 }
 
 async function resolveAttackPlayer(m) {
@@ -1421,8 +1418,6 @@ async function resolveAttackPlayer(m) {
       const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + (target.buildings.wall || 0) * 0.05);
 
       if (attPwr > defPwr) {
-        // ✅ 攻擊方勝利
-        // 1. 防守方傷兵結算 (70% 兵力進防守方醫院，不降級建築)
         let tWounded = target.wounded || {infantry:0, archer:0, cavalry:0};
         let tHospMax = 10000 + (target.buildings.castle || 1) * 5000;
         let tCurHosp = tWounded.infantry + tWounded.archer + tWounded.cavalry;
@@ -1432,7 +1427,6 @@ async function resolveAttackPlayer(m) {
             tWounded[k] += toAdd; tCurHosp += toAdd;
         });
 
-        // 2. 攻擊方負重限制搶劫
         const maxLoad = window.getLoadCapacity(m.troops);
         const protectAmt = (target.buildings.warehouse || 0) * 2000;
         let currentLoad = 0;
@@ -1443,19 +1437,17 @@ async function resolveAttackPlayer(m) {
         };
         let lF = steal('food'); let lW = steal('wood'); let lI = steal('iron');
 
-        // 3. 攻擊方自身戰損 (10% 傷兵送醫)
         let attLossRate = (defPwr / (attPwr + 1)) * 0.1;
         let wInf = Math.floor(m.troops.infantry * attLossRate); let wArc = Math.floor(m.troops.archer * attLossRate); let wCav = Math.floor(m.troops.cavalry * attLossRate);
-        window.addWounded(wInf, wArc, wCav); // 寫入自己醫院
+        window.addWounded(wInf, wArc, wCav); 
         res.troops.infantry -= wInf; res.troops.archer -= wArc; res.troops.cavalry -= wCav;
         
         transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
-        transaction.set(tPubRef, { troops: 0 }, { merge: true }); // 💡 拔除降級程式碼！
+        transaction.set(tPubRef, { troops: 0 }, { merge: true });
         
         res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
         if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
       } else {
-        // ❌ 攻擊方失敗 (60% 進自己醫院)
         let wInf = Math.floor(m.troops.infantry * 0.6); let wArc = Math.floor(m.troops.archer * 0.6); let wCav = Math.floor(m.troops.cavalry * 0.6);
         window.addWounded(wInf, wArc, wCav);
         transaction.set(tPrivRef, { logs: [`[堅壁清野] 成功擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
