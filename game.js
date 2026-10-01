@@ -531,31 +531,87 @@ window.gmExecuteCustom = async () => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
     if (!targetUid) return alert("請先從下方列表選取玩家！");
-    const field = document.getElementById('gm-custom-field').value;
-    const amount = parseInt(document.getElementById('gm-custom-amount').value);
-    if(isNaN(amount)) return alert("請輸入正確數值");
+    
+    const field = document.getElementById('gm-custom-field').value.trim();
+    const rawAmount = document.getElementById('gm-custom-amount').value;
+    const amount = parseInt(rawAmount); // 嘗試轉換為數字
     
     const targetRef = doc(db, "players", targetUid);
     const targetSnap = await getDoc(targetRef);
     if (!targetSnap.exists()) return alert("找不到該名玩家！");
     let tData = targetSnap.data();
     
-    if(['wood','iron','food'].includes(field)) tData[field] = amount;
-    if(['infantry','archer','cavalry'].includes(field)) { tData.troops = tData.troops || {}; tData.troops[field] = amount; }
-    if(field.startsWith('speedup') || field === 'shieldCard') { tData.items = tData.items || {}; tData.items[field] = amount; }
-    if(field === 'castleLevel') { tData.buildings = tData.buildings || {}; tData.buildings.castle = amount; }
+    // 確保深層資料結構存在，避免報錯
+    tData.troops = tData.troops || {};
+    tData.items = tData.items || {};
+    tData.buildings = tData.buildings || {};
+    tData.research = tData.research || {};
     
-    tData.logs = tData.logs || []; tData.logs.unshift(`[GM] 您的資料已被管理員手動修正。`);
-    await setDoc(targetRef, tData, {merge: true});
-    
-    if(['infantry','archer','cavalry'].includes(field)) {
-        const totalT = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
-        await setDoc(doc(db, "world_map", targetUid), { troops: totalT }, {merge: true});
-    }
-    if(field === 'castleLevel') await setDoc(doc(db, "world_map", targetUid), { castleLevel: amount }, {merge: true});
-    alert(`✅ 已將玩家 ${tData.name} 的 [${field}] 修改為 ${amount}`);
-}
+    let updatedMap = false; // 是否需要同步更新世界地圖
 
+    // 💡 1. 判斷並修改資源
+    if (['wood', 'iron', 'food'].includes(field)) {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        tData[field] = amount;
+    } 
+    // 💡 2. 判斷並修改兵力
+    else if (['infantry', 'archer', 'cavalry'].includes(field)) {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        tData.troops[field] = amount;
+        updatedMap = true;
+    } 
+    // 💡 3. 判斷並修改所有背包道具
+    else if (['speedup5m', 'speedup30m', 'speedup1h', 'shieldCard', 'renameCard', 'resourceCard'].includes(field)) {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        tData.items[field] = amount;
+    } 
+    // 💡 4. 判斷並修改「所有」建築等級 (自動比對 CFG 設定)
+    else if (CFG.buildings[field] || field === 'castleLevel') {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        let bKey = field === 'castleLevel' ? 'castle' : field;
+        tData.buildings[bKey] = amount;
+        if (bKey === 'castle') updatedMap = true;
+    } 
+    // 💡 5. 判斷並修改「所有」科技等級 (自動比對 CFG 設定)
+    else if (CFG.techs[field]) {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        tData.research[field] = amount;
+    } 
+    // 💡 6. 判斷並修改座標 (強制遷城)
+    else if (field === 'x' || field === 'y') {
+        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
+        tData[field] = amount;
+        updatedMap = true;
+    }
+    // 💡 7. 判斷並強制修改/踢出聯盟 (支援文字輸入)
+    else if (field === 'allianceName') {
+        tData.allianceName = rawAmount === 'null' || rawAmount === '' ? null : rawAmount;
+        updatedMap = true;
+    } 
+    else {
+        return alert("未知的欄位名稱：" + field);
+    }
+    
+    // 寫入系統日誌
+    tData.logs = tData.logs || []; 
+    tData.logs.unshift(`[GM系統] 您的【${field}】資料已被管理員手動修正。`);
+    await setDoc(targetRef, tData, { merge: true });
+    
+    // 💡 8. 如果修改的內容會影響世界地圖，同步更新！
+    if (updatedMap) {
+        let mapUpdate = {};
+        if (['infantry', 'archer', 'cavalry'].includes(field)) {
+            mapUpdate.troops = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
+        }
+        if (field === 'castleLevel' || field === 'castle') mapUpdate.castleLevel = amount;
+        if (field === 'allianceName') mapUpdate.allianceName = tData.allianceName;
+        if (field === 'x') mapUpdate.x = amount;
+        if (field === 'y') mapUpdate.y = amount;
+        await setDoc(doc(db, "world_map", targetUid), mapUpdate, { merge: true });
+    }
+    
+    alert(`✅ 已成功將玩家 ${tData.name} 的 [${field}] 修改為：${rawAmount}`);
+};
 window.gmAuditPlayer = async () => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
