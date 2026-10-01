@@ -1240,10 +1240,16 @@ function drawWorldMap() {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
             
-            // 💡 視覺化佔領演算：地標周邊有 40% 的資源點會被標記為 NPC 駐守
-            const isNearLandmark = [{x:115,y:95},{x:148,y:32},{x:145,y:165},{x:65,y:185}].some(lm => Math.hypot(x-lm.x, y-lm.y) <= 10);
-            const seed = x * 123 + y * 456 + Math.floor(Date.now() / 3600000); // 隨時間變化的亂數種子
-            const isNpcOccupied = !isMine && !isEnemy && isNearLandmark && (seed % 100 < 40); 
+            // 💡 精準算出是「哪一座史詩地標」離這個資源點最近
+            const landmarks = [{name:'中央王都',x:115,y:95}, {name:'猩紅法師塔',x:148,y:32}, {name:'迷霧監視塔',x:145,y:165}, {name:'砂海要塞',x:65,y:185}];
+            let nearLm = null; let minDist = 999;
+            landmarks.forEach(lm => {
+                let d = Math.hypot(x - lm.x, y - lm.y);
+                if (d <= 10 && d < minDist) { minDist = d; nearLm = lm; }
+            });
+            
+            const seed = x * 123 + y * 456 + Math.floor(Date.now() / 3600000); 
+            const isNpcOccupied = !isMine && !isEnemy && nearLm && (seed % 100 < 40); 
 
             let resImg = null; let fallbackEmoji = '';
             if (cell.entity.type === 'res_farm') { resImg = imgResFarm; fallbackEmoji = '🌾'; }
@@ -1261,7 +1267,8 @@ function drawWorldMap() {
             } else if (isEnemy) {
                 ctx.fillStyle = '#ef4444'; ctx.fillText('敵方佔領', px+TILE_SIZE/2, py+54);
             } else if (isNpcOccupied) {
-                ctx.fillStyle = '#f97316'; ctx.fillText('⚠️ NPC 駐守', px+TILE_SIZE/2, py+54);
+                // 💡 具體顯示是哪個勢力佔據了這個資源點
+                ctx.fillStyle = '#f97316'; ctx.fillText(`⚠️ ${nearLm.name}駐守`, px+TILE_SIZE/2, py+54); 
             } else {
                 ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
             }
@@ -2160,6 +2167,9 @@ window.useShieldCard = async () => {
     window.renderSelf();
     alert("🛡️ 和平護盾已啟動！您的城池在接下來的 8 小時內將免受攻擊！");
 };
+// ==========================================
+// 💡 玩家手動召回部隊邏輯 (修復採集卡死問題)
+// ==========================================
 window.recallMarch = async (marchId) => {
     const mIdx = myData.marches.findIndex(x => x.id === marchId);
     if (mIdx === -1) return;
@@ -2169,20 +2179,37 @@ window.recallMarch = async (marchId) => {
     if (m.type === 'return') return alert("部隊已經在返回途中！");
     if (m.type === 'defend_npc' || m.type === 'npc_attack_node') return alert("無法召回敵軍部隊！");
 
-    if (!confirm("確定要立即召回這支部隊嗎？\n(若在行軍途中召回，返航時間將依據已走的距離計算)")) return;
+    if (!confirm("確定要立即召回這支部隊嗎？\n(若在採集中召回，將放棄目前尚未運回的資源)")) return;
 
     const now = Date.now();
     let returnTimeMs = 0;
+    const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
     
-    if (m.finishesAt > now && m.type !== 'gathering') {
-        const timeSpent = now - m.startTime;
-        returnTimeMs = timeSpent; 
+    // 💡 判斷部隊狀態：是「還在路上」還是「已經在採集」
+    if (m.type === 'gathering' && m.isGathering) {
+        // 如果已經抵達並在採集中，折返時間為完整距離
+        returnTimeMs = Math.ceil(dist * 3 * 1000); 
+        
+        // ⚠️ 核心修復：必須把佔領的資源點從資料庫刪除，否則會永久佔用導致卡死！
+        try { 
+            if (typeof db !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
+        } catch(e) { console.error("釋放資源點失敗", e); }
+        
+        // 同步清除本地顯示
+        if (typeof worldNodes !== 'undefined') {
+            worldNodes = worldNodes.filter(n => !(n.x === m.targetX && n.y === m.targetY));
+        }
+    } else if (m.finishesAt > now) {
+        // 如果還在前往的路上，折返時間 = 已經走的時間
+        returnTimeMs = now - m.startTime; 
     } else {
-        const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
+        // 保底狀態
         returnTimeMs = Math.ceil(dist * 3 * 1000); 
     }
 
+    // 改變部隊狀態為「返回」並解除採集狀態
     m.type = 'return';
+    m.isGathering = false; 
     m.startX = m.targetX;
     m.startY = m.targetY;
     m.targetX = myData.x;
