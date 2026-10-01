@@ -2278,23 +2278,36 @@ window.renderRadar = function() {
     radarTab.innerHTML = html;
 };
 // ==========================================
-// 💡 主畫面浮動行軍面板 (HUD)
+// 💡 主畫面浮動行軍面板 (HUD) - 手機自適應版
 // ==========================================
 window.renderMarchHUD = function() {
     if (!myData || !myData.marches) return;
     
-    // 動態在畫面上生成一個浮動的面板
     let hud = document.getElementById('march-hud');
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'march-hud';
-        // 💡 關鍵修復：改用 fixed 固定位置，並把 z-index 調到最高 (9999)
-        hud.style.cssText = 'position: fixed; right: 15px; top: 75px; z-index: 9999; width: 220px; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
-        // 💡 關鍵修復：直接塞進 body，無視任何 HTML 結構差異，保證一定顯示！
         document.body.appendChild(hud);
     }
     
-    // 如果目前沒有部隊在外，清空並隱藏面板
+    // 💡 偵測是否為手機螢幕 (寬度小於 768px)
+    const isMobile = window.innerWidth < 768;
+    
+    // 手機版自動縮小 15% (scale 0.85)，並貼齊右上角避免擋住主選單
+    hud.style.cssText = `
+        position: fixed; 
+        right: ${isMobile ? '2px' : '15px'}; 
+        top: ${isMobile ? '50px' : '75px'}; 
+        z-index: 9999; 
+        width: 220px; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 6px; 
+        pointer-events: none;
+        transform: ${isMobile ? 'scale(0.8)' : 'none'};
+        transform-origin: top right;
+    `;
+    
     if (myData.marches.length === 0) {
         hud.innerHTML = '';
         return;
@@ -2321,21 +2334,22 @@ window.renderMarchHUD = function() {
         const canRecall = (m.type !== 'return' && m.type !== 'defend_npc' && m.type !== 'npc_attack_node');
 
         html += `
-        <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.6);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+        <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 8px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.6);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
                 <span style="font-size:0.95rem; font-weight:bold; color:#38bdf8; text-shadow: 1px 1px 2px black;">${icon} ${stateText}</span>
                 <span style="font-size:0.95rem; color:#facc15; font-weight:bold; text-shadow: 1px 1px 2px black;">${formatTime(remain)}</span>
             </div>
-            <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom: 8px;">目標座標: (${m.targetX}, ${m.targetY})</div>
+            <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom: 6px;">目標: (${m.targetX}, ${m.targetY})</div>
             <div style="display:flex; gap:6px;">
-                <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="flex:1; background:#2563eb; border:1px solid #1d4ed8; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">📍 鎖定</button>
-                ${canRecall ? `<button onclick="window.recallMarch('${m.id}')" style="flex:1; background:#d97706; border:1px solid #b45309; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎺 召回</button>` : ''}
+                <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="flex:1; background:#2563eb; border:1px solid #1d4ed8; color:white; border-radius:4px; padding:6px; font-size:0.8rem; cursor:pointer; font-weight:bold;">📍 鎖定</button>
+                ${canRecall ? `<button onclick="window.recallMarch('${m.id}')" style="flex:1; background:#d97706; border:1px solid #b45309; color:white; border-radius:4px; padding:6px; font-size:0.8rem; cursor:pointer; font-weight:bold;">🎺 召回</button>` : ''}
             </div>
         </div>`;
     });
     
     hud.innerHTML = html;
 };
+
 // ==========================================
 // 💡 強制召回部隊 (防崩潰保護版)
 // ==========================================
