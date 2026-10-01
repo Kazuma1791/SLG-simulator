@@ -350,7 +350,14 @@ onAuthStateChanged(auth, async (user) => {
           myData = d;
           setTimeout(() => { window.openGuideModal(); }, 1500);
         } else {
-          myData = pSnap.data(); sanitizeData(); await setDoc(playerRef, myData, {merge:true});
+          myData = pSnap.data(); 
+          // 💡 核心修復：在存檔與初始化前，第一時間執行特赦，徹底洗白設備！
+          if (myData.clearDeviceBan) {
+              localStorage.removeItem('SLG_DEATH_MARK');
+              myData.clearDeviceBan = false; // 清除完立刻關閉特赦令
+          }
+          sanitizeData(); 
+          await setDoc(playerRef, myData, {merge:true});
         }
 
         isAdmin = (user.email === 'topacoau@gmail.com');
