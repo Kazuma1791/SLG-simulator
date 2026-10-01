@@ -224,10 +224,18 @@
             <!-- 未加入聯盟顯示 -->
             <div id="alliance-create-box">
                 <p style="color:#94a3b8; font-size:0.9rem; margin-bottom:10px;">您尚未加入聯盟。與盟友一同征服史詩地標，且同盟間無法互相攻擊！</p>
-                <input type="text" id="alliance-name-input" placeholder="輸入聯盟名稱 (例: 皇家騎士團)" style="width:100%; padding:10px; background:#1e2c40; color:#fff; border:1px solid #475569; border-radius:4px; margin-bottom:10px;">
-                <div style="display:flex; gap:8px;">
-                    <button onclick="window.createAlliance()" style="background:#2563eb; flex:1; padding:10px; font-weight:bold;">創建新聯盟</button>
-                    <button onclick="window.joinAlliance()" style="background:#10b981; flex:1; padding:10px; font-weight:bold;">加入此聯盟</button>
+                
+                <!-- 創建與搜尋專區 -->
+                <div style="display:flex; gap:8px; margin-bottom:15px;">
+                    <input type="text" id="alliance-name-input" placeholder="輸入名稱 (例: 皇家騎士團)" style="flex:1; padding:8px; background:#1e2c40; color:#fff; border:1px solid #475569; border-radius:4px;">
+                    <button onclick="window.createAlliance()" style="background:#2563eb; padding:8px; font-weight:bold; white-space:nowrap;">創建</button>
+                    <button onclick="window.joinAlliance()" style="background:#059669; padding:8px; font-weight:bold; white-space:nowrap;">搜尋</button>
+                </div>
+                
+                <!-- 公開聯盟列表專區 -->
+                <h5 style="color:#facc15; border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:10px;">🌍 招募中的聯盟列表</h5>
+                <div id="public-alliances-list" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                    <!-- 動態生成的聯盟列表會放在這裡 -->
                 </div>
             </div>
             <!-- 已加入聯盟顯示 (動態切換) -->
