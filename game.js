@@ -1266,10 +1266,10 @@ function drawWorldMap() {
                 ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
             }
           }
-      }
-    }
-  }
-
+        } 
+      } 
+    } 
+  } 
   // 💡 3. 繪製世界首領
   worldBosses.forEach(boss => {
      const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
