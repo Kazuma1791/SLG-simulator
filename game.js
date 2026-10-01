@@ -710,6 +710,25 @@ async function localTick() {
   sanitizeData(); 
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
+  // 💡 【行軍安全與護盾修復中樞】
+  myData.marches.forEach(m => {
+      // 1. 修復護盾 Bug：如果抵達目標時，對方剛好開了護盾，強制部隊安全折返，避免卡死
+      if (m.type === 'attack_player' && now >= m.finishesAt) {
+          const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
+          if (tC && tC.shieldEndsAt && tC.shieldEndsAt > now) {
+              myData.logs.unshift(`🛡️ [戰報] 目標【${tC.name}】已開啟護盾，部隊無法攻擊，自動折返！`);
+              m.type = 'return'; m.startX = m.targetX; m.startY = m.targetY;
+              m.targetX = myData.x; m.targetY = myData.y; m.startTime = now;
+          }
+      }
+      
+      // 2. 修復返回時間過長 Bug：強制所有返回部隊以「真實距離」重新計算時間 (1格=3秒)
+      if (m.type === 'return' && !m.timeFixed) {
+          const dist = Math.hypot(myData.x - m.startX, myData.y - m.startY);
+          m.finishesAt = m.startTime + Math.ceil(dist * 3 * 1000); 
+          m.timeFixed = true; // 標記為已修復，不再重複計算
+      }
+  });
 
   const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
   const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
@@ -874,7 +893,10 @@ async function localTick() {
                   myData.logs.unshift(`⚔️️ [採集防衛] 您的部隊成功擊退了 ${m.npcName} 的驅逐軍！`);
               } else {
                   myData.marches[gMarchIdx].type = 'return';
-                  myData.marches[gMarchIdx].finishesAt = now + (now - gMarch.startTime);
+                  const dist = Math.hypot(myData.x - gMarch.targetX, myData.y - gMarch.targetY);
+                  myData.marches[gMarchIdx].startTime = now;
+                  myData.marches[gMarchIdx].finishesAt = now + Math.ceil(dist * 3 * 1000);
+                  myData.marches[gMarchIdx].timeFixed = true;
                   myData.marches[gMarchIdx].troops.infantry = Math.floor(gMarch.troops.infantry * 0.5); // 損失一半步兵
                   myData.logs.unshift(`☠️ [採集失敗] 您的部隊在 (${m.targetX}, ${m.targetY}) 被 ${m.npcName} 擊潰，丟棄物資撤退！`);
                   try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); } catch(e){}
@@ -1608,6 +1630,16 @@ canvas.addEventListener("click", (e) => {
 
 document.getElementById("btn-confirm-action").addEventListener('click', async () => {
   if (!targetAction) return;
+  // 💡 修復：發動攻擊時，強制解除自身的和平護盾
+    if (targetAction.type.startsWith('attack')) {
+        if (myData.shieldEndsAt && myData.shieldEndsAt > Date.now()) {
+            const confirmBreak = confirm("⚠️ 警告：發動軍事行動將會【立刻解除】您的和平護盾！確定要出兵嗎？");
+            if (!confirmBreak) return;
+            myData.shieldEndsAt = 0; // 破盾
+            await savePrivateData();
+            window.renderSelf();
+        }
+    }
 
   if (targetAction.type === 'relocate') {
     if (myData.wood < targetAction.cost || myData.iron < targetAction.cost || myData.food < targetAction.cost) return alert(`資源不足！需要各 ${targetAction.cost} 資源。`);
