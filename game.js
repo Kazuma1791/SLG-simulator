@@ -1,3 +1,44 @@
+// ==========================================
+// 🛡️ 前端封印：禁止使用 F12 與右鍵 (防護小白作弊)
+// ==========================================
+// 1. 禁止滑鼠右鍵 (防「檢查」)
+document.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+});
+
+// 2. 攔截各式開發者快捷鍵
+document.addEventListener('keydown', function (e) {
+    // 擋下 F12
+    if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        return false;
+    }
+    // 擋下 Ctrl + Shift + I (開發者工具)
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) {
+        e.preventDefault();
+        return false;
+    }
+    // 擋下 Ctrl + Shift + J (控制台)
+    if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) {
+        e.preventDefault();
+        return false;
+    }
+    // 擋下 Ctrl + U (檢視原始碼)
+    if (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.keyCode === 85)) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+// 3. (選用) 偵測如果控制台被強制打開，就彈出警告或清空畫面
+let devtools = function() {};
+devtools.toString = function() {
+    if (!window.isAdmin) {
+        alert("⚠️ 系統警告：嚴禁開啟開發者工具，您的行為已被記錄！");
+    }
+    return '';
+}
+console.log('%c', devtools);
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
