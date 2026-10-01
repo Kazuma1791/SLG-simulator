@@ -1459,11 +1459,6 @@ async function resolveAttackPlayer(m) {
   return res;
 }
   
-  // 記錄該座標已通關，避免重複刷
-  myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
-  return res;
-}
-
 async function resolveAttackPlayer(m) {
   let res = { survived: false, troops: m.troops, loot: {wood:0, iron:0, food:0} };
   try {
