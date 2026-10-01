@@ -1310,12 +1310,24 @@ function drawWorldMap() {
     // 💡 讓城池有像呼吸一樣的微幅上下浮動感
     const floatY = Math.sin(t / 250 + p.x) * 4;
 
-    if (p.shieldEndsAt && p.shieldEndsAt > t) {
-        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 30, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.2)'; ctx.fill();
-        ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
+    // 🛡️ 繪製超顯眼的全息能量護盾
+    if (p.shieldEndsAt && p.shieldEndsAt > Date.now()) {
+        ctx.save();
+        // 發光藍色光暈
+        ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15 + Math.sin(Date.now()/150)*5; 
+        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 35, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.25)'; ctx.fill();
+        
+        // 科技感虛線外框
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.9)'; ctx.lineWidth = 3; 
+        ctx.setLineDash([8, 4]); ctx.stroke();
+        
+        // 城堡頭頂懸浮盾牌標記
+        ctx.shadowBlur = 0; ctx.setLineDash([]);
+        ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('🛡️', px+TILE_SIZE/2, py - 35 + floatY);
+        ctx.restore();
     }
-
     // 💡 如果是自己的城堡，畫出超明顯的金色聖光光柱與指引箭頭！
     if (isMe) { 
         // 底部金色光圈
@@ -2083,4 +2095,29 @@ const originalSwitchTab = window.switchTab;
 window.switchTab = (t) => {
     if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
     if(t === 'alliance') window.renderAllianceUI();
+};
+// 💡 專屬護盾啟動邏輯：確保同步到雲端大地圖
+window.useShieldCard = async () => {
+    if (!myData.items || !myData.items.shieldCard || myData.items.shieldCard <= 0) {
+        return alert("護盾卡數量不足！請留意系統補給或打怪掉落。");
+    }
+    
+    // 扣除 1 張護盾卡，增加 8 小時 (8 * 3600 * 1000 毫秒) 的保護時間
+    myData.items.shieldCard -= 1;
+    const shieldTimeMs = 8 * 3600 * 1000;
+    const now = Date.now();
+    
+    // 如果原本就有護盾，則時間往上疊加；如果沒有，則從現在開始算
+    myData.shieldEndsAt = Math.max(now, myData.shieldEndsAt || 0) + shieldTimeMs;
+    
+    // ⚠️ 核心關鍵：將護盾狀態同步到世界地圖，這樣畫布跟其他玩家才看得到！
+    try {
+        await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true });
+    } catch (e) {
+        console.error("護盾同步到世界地圖失敗", e);
+    }
+    
+    await savePrivateData();
+    window.renderSelf();
+    alert("🛡️ 和平護盾已啟動！您的城池在接下來的 8 小時內將免受攻擊！");
 };
