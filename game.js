@@ -2494,11 +2494,28 @@ window.openQuestModal = () => {
     modal.style.display = 'flex';
 };
 
+// 🛡️ 嚴格安全版：領取每日任務獎勵
 window.claimQuest = async (qid) => {
+    if (!myData || !myData.quests) return;
+    const q = myData.quests.daily;
+    
+    // 💀 防駭客 1：檢查是否已經領取過，防止重複刷卡！
+    if (myData.quests.claimed.includes(qid)) {
+        return alert("⚠️ 系統警告：此獎勵已經領取過了，無法重複領取！");
+    }
+    
+    // 💀 防駭客 2：嚴格檢查任務是否「真正達成」，防止用 F12 強制觸發！
+    if (qid === 'q1' && q.kills < 3) return alert("⚠️ 非法操作：擊殺任務未達標！");
+    if (qid === 'q2' && q.upgrades < 2) return alert("⚠️ 非法操作：升級任務未達標！");
+    if (qid === 'q3' && q.gather_wood < 10000) return alert("⚠️ 非法操作：採集任務未達標！");
+
+    // 通過所有驗證，正式發放獎勵
     myData.quests.claimed.push(qid);
     if (qid === 'q1') myData.items.speedup5m += 3;
     if (qid === 'q2') myData.items.speedup1h += 1;
     if (qid === 'q3') myData.items.resourceCard += 1;
+    
+    myData.logs.unshift(`[任務] 成功領取每日任務獎勵！`);
     await savePrivateData();
     window.openQuestModal();
     try{ window.renderSelf(); }catch(e){}
