@@ -1177,13 +1177,32 @@ function drawWorldMap() {
               ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 - 5);
               
           } else if (cell.entity.type === 'npc_faction_guard') {
-            if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) {
-                ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+            const isLv3 = cell.entity.name.includes('Lv.3');
+            const isLv2 = cell.entity.name.includes('Lv.2');
+            
+            // 💡 根據階級給予不同的大小、圖片與光暈
+            if (isLv3) {
+                ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10;
+                if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 15, py - 15, TILE_SIZE + 30, TILE_SIZE + 30);
+                else { ctx.font='28px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+30); }
+                ctx.shadowBlur = 0;
+            } else if (isLv2) {
+                ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
+                if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) ctx.drawImage(imgDarkFortress, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+                else { ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+30); }
+                ctx.shadowBlur = 0;
             } else {
-                ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🛡️', px+TILE_SIZE/2, py+30);
+                if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px, py, TILE_SIZE, TILE_SIZE);
+                else { ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏕️', px+TILE_SIZE/2, py+30); }
             }
-            ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
-            ctx.fillText('禁衛哨所', px+TILE_SIZE/2, py+50);
+
+            // 💡 文字顏色依照階級區分 (紅 > 橘 > 藍)
+            ctx.fillStyle = isLv3 ? '#ef4444' : (isLv2 ? '#f97316' : '#38bdf8'); 
+            ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
+            
+            // 擷取名稱後半段 (把 "🏰 中央王都·禁衛城堡 (Lv.3)" 變成只顯示 "禁衛城堡 (Lv.3)")
+            const shortName = cell.entity.name.split('·')[1] || cell.entity.name;
+            ctx.fillText(shortName, px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'npc_castle') {
               if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
               else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20); }
@@ -1804,7 +1823,7 @@ window.renderSelf = function() {
                       btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
                   }
 
-                  return genCard(`${d.icon} ${d.name}`, lvl, `附加戰力: +${lvl}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
+                  return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.w * trainCount)} ⛏️${formatCompact(d.i * trainCount)} 🌾${formatCompact(d.f * trainCount)}`, progressHtml, btnHtml);
               }).join('');
           }
       }
@@ -1946,13 +1965,19 @@ window.trainTroopType = async (typeKey) => {
   const req = CFG.troops[typeKey];
   const bLvl = myData.buildings.barracks || 1;
   const trainCount = bLvl * 5;
-  const costW = req.costW * trainCount, costI = req.costI * trainCount, costF = req.costF * trainCount;
+  
+  // 💡 修復變數名稱：讀取設定檔中的 w, i, f 屬性
+  const costW = req.w * trainCount;
+  const costI = req.i * trainCount;
+  const costF = req.f * trainCount;
 
   if (bLvl < req.reqLvl) return alert('兵營等級不足！');
   if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
+  
   myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
   myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
-  await savePrivateData(); window.renderSelf();
+  await savePrivateData(); 
+  window.renderSelf();
 };
 // 💡 定義各大史詩地標的勢力範圍與反擊戰力
 function checkFactionRetaliation(targetX, targetY) {
