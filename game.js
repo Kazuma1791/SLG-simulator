@@ -998,7 +998,13 @@ async function localTick() {
               newMarches.push(m);
           } else if (res.survived) { newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       }
-      else { const res = await resolveInteractNPC(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      else { 
+          const res = await resolveInteractNPC(m); 
+          if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
+          
+          // 💡 完美接住回傳的「復仇軍團」，讓它正式出現在地圖與 HUD 上！
+          if (res.counterMarch) newMarches.push(res.counterMarch);
+      }
       needSave = true;
     } 
     else if (m.type === 'gathering') {
@@ -1169,7 +1175,8 @@ async function resolveDefendNPC(m) {
 }
 
 async function resolveInteractNPC(m) {
-  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
+  // 💡 新增 counterMarch 參數來打包回傳復仇軍團
+  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarch: null };
   let reportText = "";
   
   if (m.entity.type === 'relic') { 
@@ -1186,9 +1193,8 @@ async function resolveInteractNPC(m) {
     myData.logs.unshift(`[遠征] 摧毀 ${m.entity.name}！滿載戰利品返航。`); 
     
     reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🛡️步兵 -${loss}\n獲得戰利品：🌲${res.loot.wood||0} ⛏️${res.loot.iron||0} 🌾${res.loot.food||0}`;
-    if(myData.quests) myData.quests.daily.kills++; // 🎯 增加擊殺任務進度
+    if(myData.quests) myData.quests.daily.kills++;
 
-    // 💡 圍城 Bug 修復：只要攻擊帶有地標名稱的據點或本體，通通觸發圍城反擊！
     let factionName = m.entity.faction;
     if (!factionName) {
         if (m.entity.name.includes('中央王都')) factionName = '中央王都';
@@ -1204,13 +1210,14 @@ async function resolveInteractNPC(m) {
         const distToHome = Math.hypot(myData.x - fPos.x, myData.y - fPos.y);
         const counterTimeMs = Math.ceil(distToHome * 3 * 1000);
 
-        myData.marches.push({
+        // 💡 關鍵修復：不要直接塞進 myData.marches，而是打包進 res 讓主系統接手
+        res.counterMarch = {
             id: 'COUNTER_' + Date.now(),
             type: 'defend_npc',
             startX: fPos.x, startY: fPos.y, targetX: myData.x, targetY: myData.y,
             startTime: Date.now(), finishesAt: Date.now() + counterTimeMs,
-            npcPower: (m.entity.pwr || 15000) * 1.5, npcName: `${factionName} 復仇軍團`
-        });
+            npcPower: (m.entity.reqPwr || 15000) * 1.2, npcName: `${factionName} 復仇軍團`
+        };
     }
 
   } else { 
