@@ -2051,9 +2051,10 @@ window.createAlliance = async () => {
     window.renderAllianceUI(); alert(`✅ 成功創建聯盟【${name}】！`); window.refreshMap();
 };
 
-window.joinAlliance = async () => {
-    const name = document.getElementById('alliance-name-input').value.trim();
-    if(name.length < 2) return alert("請輸入聯盟名稱！");
+window.joinAlliance = async (targetName = null) => {
+    // 💡 支援直接點擊列表按鈕傳入名稱，或從輸入框讀取
+    const name = targetName || document.getElementById('alliance-name-input').value.trim();
+    if(!name || name.length < 2) return alert("請輸入或選擇有效的聯盟名稱！");
     myData.allianceName = name; await savePrivateData();
     try { await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true }); } catch(e){}
     window.renderAllianceUI(); alert(`✅ 成功加入聯盟【${name}】！`); window.refreshMap();
@@ -2076,7 +2077,6 @@ window.renderAllianceUI = () => {
         document.getElementById('my-alliance-title').innerText = `🛡️ 聯盟：[${myData.allianceName}]`;
         document.getElementById('my-alliance-leader').innerText = "共享勢力";
         
-        // 即時抓取線上的盟友列表
         const allies = allCastles.filter(c => c.allianceName === myData.allianceName);
         let membersHtml = `<div style="background:#0a0f1d; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#10b981;">👤 ${myData.name} (自己)</div>`;
         allies.forEach(a => {
@@ -2088,9 +2088,40 @@ window.renderAllianceUI = () => {
         document.getElementById('alliance-members-list').innerHTML = membersHtml;
     } else {
         createBox.style.display = 'block'; mainBox.style.display = 'none';
+        
+        // 💡 核心：動態掃描全服地圖，統計各聯盟人數
+        const allianceCounts = {};
+        allCastles.forEach(c => {
+            if (c.allianceName) {
+                allianceCounts[c.allianceName] = (allianceCounts[c.allianceName] || 0) + 1;
+            }
+        });
+        
+        const pubList = document.getElementById('public-alliances-list');
+        if (pubList) {
+            // 依照人數多寡，由大到小排序
+            const sortedAlliances = Object.keys(allianceCounts).sort((a,b) => allianceCounts[b] - allianceCounts[a]);
+            
+            if (sortedAlliances.length === 0) {
+                pubList.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center; padding:10px;">伺服器尚無任何聯盟，趕快創立第一個吧！</p>';
+            } else {
+                let listHtml = '';
+                sortedAlliances.forEach(aName => {
+                    listHtml += `
+                        <div style="background:#1e293b; padding:8px 12px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; border: 1px solid #334155;">
+                            <div>
+                                <div style="color:#38bdf8; font-weight:bold; font-size:0.95rem;">[${aName}]</div>
+                                <div style="color:#94a3b8; font-size:0.75rem; margin-top:2px;">👥 成員數: ${allianceCounts[aName]} 人</div>
+                            </div>
+                            <button onclick="window.joinAlliance('${aName}')" style="background:#10b981; padding:6px 12px; font-size:0.85rem; font-weight:bold; border-radius:4px; cursor:pointer;">加入</button>
+                        </div>
+                    `;
+                });
+                pubList.innerHTML = listHtml;
+            }
+        }
     }
 };
-
 const originalSwitchTab = window.switchTab;
 window.switchTab = (t) => {
     if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
