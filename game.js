@@ -1458,57 +1458,6 @@ async function resolveAttackPlayer(m) {
   } catch (err) { res.survived = true; }
   return res;
 }
-  
-async function resolveAttackPlayer(m) {
-  let res = { survived: false, troops: m.troops, loot: {wood:0, iron:0, food:0} };
-  try {
-    await runTransaction(db, async (transaction) => {
-      const tPrivRef = doc(db, "players", m.targetUid), tPubRef = doc(db, "world_map", m.targetUid);
-      const tDoc = await transaction.get(tPrivRef);
-      if (!tDoc.exists()) throw new Error("城池空");
-      const target = tDoc.data();
-      if (target.shieldEndsAt && target.shieldEndsAt > Date.now()) throw new Error("Shielded"); 
-      
-      const attPwr = getPwrByTech(m.troops, m.techs);
-      const defTroops = target.troops || {infantry:0, archer:0, cavalry:0};
-      const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + (target.buildings.wall || 0) * 0.05);
-
-      if (attPwr > defPwr) {
-        const protectAmt = (target.buildings.warehouse || 0) * 2000;
-        const lW = Math.max(0, Math.floor((target.wood - protectAmt) * 0.3));
-        const lI = Math.max(0, Math.floor((target.iron - protectAmt) * 0.3));
-        const lF = Math.max(0, Math.floor((target.food - protectAmt) * 0.3));
-
-        const bKeys = Object.keys(target.buildings).filter(k => target.buildings[k] > 1);
-        let dLog = ""; let pLevel = target.buildings.castle;
-        if (bKeys.length > 0) {
-          const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; target.buildings[rKey]--;
-          dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
-          if (rKey === 'castle') pLevel = target.buildings.castle;
-        }
-        transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, buildings: target.buildings, logs: [`[城破] 遭到突襲！損失物資${dLog}`, ...(target.logs || [])] }, { merge: true });
-        transaction.set(tPubRef, { troops: 0, castleLevel: pLevel }, { merge: true });
-        res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
-        myData.logs.unshift(`[大捷] 攻破 ${m.targetName}！滿載戰利品返航中。`);
-        if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】的城池！\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
-      } else {
-        transaction.set(tPrivRef, { logs: [`[堅壁清野] 擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
-        myData.logs.unshift(`[戰敗] 突擊 ${m.targetName} 遭遇重創，部隊全數陣亡！`);
-        if(window.addReport) window.addReport(`☠️ 突擊失敗`, `進攻【${m.targetName}】遭遇重創！\n我方兵力不敵，部隊已全數陣亡！`, false);
-      }
-    });
-    window.refreshMap();
-  } catch (err) { 
-    res.survived = true; 
-    if (err.message === "Shielded") {
-        myData.logs.unshift(`[撤軍] 目標 ${m.targetName} 已開啟和平護盾，部隊折返。`);
-        if(window.addReport) window.addReport(`🛡️ 無功而返`, `目標【${m.targetName}】開啟了和平護盾，部隊被迫撤退。`, false);
-    } else {
-        myData.logs.unshift(`[撲空] 敵方已遷城，部隊折返。`); 
-    }
-  }
-  return res;
-}
 
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
