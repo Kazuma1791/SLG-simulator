@@ -135,11 +135,45 @@ function getStaticEntity(x, y, type) {
   }
 
   // 🌲 3. 一般野外隨機物件
-  // 💡 新增：全地圖極低機率(0.2%)生成「黑暗前哨」，不僅會駐守，還會隨機發兵襲擊周圍玩家！
   if (r < 0.002) return { type: 'npc_outpost', name: '🏕️ 黑暗前哨', reqPwr: 3000, loot: { wood: 15000, iron: 15000, food: 15000, speedup5m: 5 } };
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
-  if (r < 0.030) return { type: 'res_farm', name: '🌾 豐饒農田', res: 'food', cap: 50000, reqPwr: 500 };
-  if (r < 0.050) return { type: 'res_lumber', name: '🌲 茂密林地', res: 'wood', cap: 50000, reqPwr: 500 };
+  
+  // 💡 4. 動態資源點生成 (分為 Lv.1 ~ Lv.5)
+  if (r < 0.060) {
+      // 1. 根據座標產生穩定的資源種類 (不會因為重整網頁而變換)
+      const typeRoll = (x * 13 + y * 31) % 3;
+      const types = [
+          { t: 'res_farm', n: '🌾 農田', r: 'food' },
+          { t: 'res_lumber', n: '🌲 伐木場', r: 'wood' },
+          { t: 'res_mine', n: '⛏️ 鐵礦', r: 'iron' }
+      ];
+      const pick = types[typeRoll];
+      
+      // 2. 根據座標產生穩定的等級 (Lv.1 最多，Lv.5 最稀有)
+      const lvRoll = (x * 47 + y * 83) % 100;
+      let lv = 1;
+      if (lvRoll >= 50) lv = 2; // 30% 機率
+      if (lvRoll >= 80) lv = 3; // 15% 機率
+      if (lvRoll >= 95) lv = 4; // 4% 機率
+      if (lvRoll === 99) lv = 5; // 1% 機率 (極度稀有)
+      
+      // 3. 定義各等級的「蘊藏量(cap)」與「守軍戰力(reqPwr)」
+      const stats = {
+          1: { cap: 10000, reqPwr: 200 },     // 新手輕鬆佔領
+          2: { cap: 30000, reqPwr: 1000 },    // 前期主力
+          3: { cap: 100000, reqPwr: 5000 },   // 中期大礦
+          4: { cap: 250000, reqPwr: 15000 },  // 兵家必爭之地
+          5: { cap: 500000, reqPwr: 40000 }   // 終極寶藏，必須出動大軍
+      };
+      
+      return { 
+          type: pick.t, 
+          name: `${pick.n} Lv.${lv}`, 
+          res: pick.r, 
+          cap: stats[lv].cap, 
+          reqPwr: stats[lv].reqPwr 
+      };
+  }
   if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
   if (r < 0.080) return { type: 'relic', name: '🏛 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
   return null;
