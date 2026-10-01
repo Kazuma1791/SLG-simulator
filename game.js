@@ -711,6 +711,11 @@ async function localTick() {
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
   
+  // 👇 把這三行貼在這裡！(遊戲每一秒進來都會立刻更新面板)
+  if (typeof window.renderMarchHUD === 'function') {
+      window.renderMarchHUD();
+  }
+
   // 💡 【行軍安全與護盾修復中樞】
   myData.marches.forEach(m => {
       // 1. 修復護盾 Bug
@@ -2278,15 +2283,21 @@ window.renderRadar = function() {
 window.renderMarchHUD = function() {
     if (!myData || !myData.marches) return;
     
-    // 動態在畫面上生成一個浮動的面板 (不用去改 HTML)
+    // 動態在畫面上生成一個浮動的面板
     let hud = document.getElementById('march-hud');
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'march-hud';
-        hud.style.cssText = 'position: absolute; right: 10px; top: 60px; z-index: 1000; width: 220px; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
-        const mapCont = document.getElementById('map-container');
-        if (mapCont) mapCont.appendChild(hud);
-        else return;
+        // 💡 關鍵修復：改用 fixed 固定位置，並把 z-index 調到最高 (9999)
+        hud.style.cssText = 'position: fixed; right: 15px; top: 75px; z-index: 9999; width: 220px; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
+        // 💡 關鍵修復：直接塞進 body，無視任何 HTML 結構差異，保證一定顯示！
+        document.body.appendChild(hud);
+    }
+    
+    // 如果目前沒有部隊在外，清空並隱藏面板
+    if (myData.marches.length === 0) {
+        hud.innerHTML = '';
+        return;
     }
     
     const now = Date.now();
@@ -2303,30 +2314,28 @@ window.renderMarchHUD = function() {
         } else if (isReturning) {
             stateText = '⛺ 返回中'; icon = '⛺';
         } else if (m.type === 'attack_player') {
-            stateText = '⚔️ 攻擊中'; icon = '⚔️️'; bgColor = 'rgba(127, 29, 29, 0.85)';
+            stateText = '⚔️ 攻擊中'; icon = '⚔'; bgColor = 'rgba(127, 29, 29, 0.85)';
         }
 
         const remain = Math.max(0, Math.ceil((m.finishesAt - now)/1000));
-        // 敵軍來襲與返回中無法召回
         const canRecall = (m.type !== 'return' && m.type !== 'defend_npc' && m.type !== 'npc_attack_node');
 
         html += `
-        <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.4);">
+        <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 10px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.6);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-                <span style="font-size:0.9rem; font-weight:bold; color:#38bdf8;">${icon} ${stateText}</span>
-                <span style="font-size:0.9rem; color:#facc15; font-weight:bold;">${formatTime(remain)}</span>
+                <span style="font-size:0.95rem; font-weight:bold; color:#38bdf8; text-shadow: 1px 1px 2px black;">${icon} ${stateText}</span>
+                <span style="font-size:0.95rem; color:#facc15; font-weight:bold; text-shadow: 1px 1px 2px black;">${formatTime(remain)}</span>
             </div>
             <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom: 8px;">目標座標: (${m.targetX}, ${m.targetY})</div>
             <div style="display:flex; gap:6px;">
-                <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="flex:1; background:#2563eb; border:none; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold;">📍 鎖定</button>
-                ${canRecall ? `<button onclick="window.recallMarch('${m.id}')" style="flex:1; background:#d97706; border:none; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold;">🎺 召回</button>` : ''}
+                <button onclick="window.locatePlayer(${m.targetX}, ${m.targetY})" style="flex:1; background:#2563eb; border:1px solid #1d4ed8; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">📍 鎖定</button>
+                ${canRecall ? `<button onclick="window.recallMarch('${m.id}')" style="flex:1; background:#d97706; border:1px solid #b45309; color:white; border-radius:4px; padding:6px; font-size:0.75rem; cursor:pointer; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎺 召回</button>` : ''}
             </div>
         </div>`;
     });
     
     hud.innerHTML = html;
 };
-
 // ==========================================
 // 💡 強制召回部隊 (防崩潰保護版)
 // ==========================================
