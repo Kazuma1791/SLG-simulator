@@ -1678,10 +1678,10 @@ window.renderSelf = function() {
       if(titleEl) titleEl.innerHTML = `<span>👑 ${myData.name} <span style="color:#fbbf24; font-size:0.95rem;">(Lv.${myData.buildings.castle || 1})</span> <span style="font-size:0.85rem; color:#94a3b8;">(${myData.x}, ${myData.y})</span></span> <span id="shield-status-text" style="font-size:0.85rem; color:#06b6d4; font-weight:bold;">${shieldText}</span>`;
       
       const hrToSec = 3600;
-      const upkeepPerHr = myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep;
-      const woodProdPerHr = CFG.buildings.lumber.rate * myData.buildings.lumber * hrToSec;
-      const ironProdPerHr = CFG.buildings.mine.rate * myData.buildings.mine * hrToSec;
-      const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm * hrToSec;
+      const upkeepPerHr = (myData.troops.infantry||0)*CFG.troops.infantry.upkeep + (myData.troops.archer||0)*CFG.troops.archer.upkeep + (myData.troops.cavalry||0)*CFG.troops.cavalry.upkeep;
+      const woodProdPerHr = CFG.buildings.lumber.rate * (myData.buildings.lumber||1) * hrToSec;
+      const ironProdPerHr = CFG.buildings.mine.rate * (myData.buildings.mine||1) * hrToSec;
+      const farmProdPerSec = CFG.buildings.farm.rate * (myData.buildings.farm||1) * hrToSec;
       const netFood = farmProdPerSec - upkeepPerHr;
 
       if(document.getElementById('res-wood')) document.getElementById('res-wood').innerText = formatCompact(myData.wood); 
@@ -1694,9 +1694,9 @@ window.renderSelf = function() {
           document.getElementById('rate-food').style.color = netFood>=0 ? '#10b981' : '#ef4444';
       }
 
-      if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = formatCompact(myData.troops.infantry); 
-      if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = formatCompact(myData.troops.archer); 
-      if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = formatCompact(myData.troops.cavalry);
+      if(document.getElementById('res-inf')) document.getElementById('res-inf').innerText = formatCompact(myData.troops.infantry||0); 
+      if(document.getElementById('res-arc')) document.getElementById('res-arc').innerText = formatCompact(myData.troops.archer||0); 
+      if(document.getElementById('res-cav')) document.getElementById('res-cav').innerText = formatCompact(myData.troops.cavalry||0);
 
       const maxQueues = 1 + (myData.buildings.builder || 0);
       const bqText = document.getElementById('build-queue-text');
@@ -1823,7 +1823,7 @@ window.renderSelf = function() {
                       btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
                   }
 
-                  return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.w * trainCount)} ⛏️${formatCompact(d.i * trainCount)} 🌾${formatCompact(d.f * trainCount)}`, progressHtml, btnHtml);
+                  return genCard(`${d.icon} ${d.name}`, lvl, `附加戰力: +${lvl}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
               }).join('');
           }
       }
@@ -1834,7 +1834,6 @@ window.renderSelf = function() {
           tContainer.innerHTML = Object.keys(CFG.troops).map(key => {
               const d = CFG.troops[key];
               
-              // 若兵營等級不足，顯示未解鎖狀態
               if (bLvl < d.reqLvl) {
                   return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">需 兵營 Lv.${d.reqLvl}</div></div><div style="width:100px;text-align:right"><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div></div>`;
               }
@@ -1848,7 +1847,7 @@ window.renderSelf = function() {
               let btnHtml = ''; let progressHtml = '';
               
               if (isTraining) {
-                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - Date.now()) / 1000));
+                  const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
                   const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
                   btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">招募中 (${formatTime(remainSec)})</span>`;
                   progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
@@ -1867,7 +1866,6 @@ window.renderSelf = function() {
       console.error("UI 渲染嚴重錯誤:", e);
   }
 }
-
 window.useResourceCard = async () => {
     if (!myData || myData.items.resourceCard <= 0) return alert("背包中沒有足夠的軍用物資卡！");
     myData.items.resourceCard--;
