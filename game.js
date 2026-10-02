@@ -110,7 +110,34 @@ const CFG = {
   techs: {
     infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 600 },
     archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 600 },
-    cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 }
+    cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 },
+    // 🐎 行軍加速：每級 +8% 行軍速度
+    march_speed: { 
+      name: '急行軍隊', 
+      icon: '🐎',
+      desc: '提升全軍行軍速度 (+8%/級)', 
+      baseW: 300, 
+      baseI: 150, 
+      baseTime: 60 
+    },
+    // 🎒 負重強化：每級 +15% 攜帶上限
+    troop_load: { 
+      name: '輜重革新', 
+      icon: '🎒',
+      desc: '提升部隊負重上限 (+15%/級)', 
+      baseW: 400, 
+      baseI: 100, 
+      baseTime: 90 
+    },
+    // 🏥 醫院容量：每級 +3,000 傷兵上限
+    hospital_cap: { 
+      name: '戰地救護', 
+      icon: '🏥',
+      desc: '提升醫療所傷兵容量 (+3,000/級)', 
+      baseW: 250, 
+      baseI: 250, 
+      baseTime: 60 
+    },
   },
   troops: {
     infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
@@ -126,16 +153,40 @@ function formatCompact(num) {
   return Math.floor(num).toString();
 }
 
+// ==========================================
+// 💡 升級消耗：資源倍率拉高 (1.5 -> 1.62)，後期需要大量資源支撐
+// ==========================================
 function getUpgradeCost(key, level, isTech=false) { 
     const base = isTech ? CFG.techs[key] : CFG.buildings[key]; 
-    if(!base) return {w:0,i:0};
-    const m = Math.pow(1.5, level||0); return { w: Math.floor(base.baseW * m), i: Math.floor(base.baseI * m) }; 
+    if(!base) return {w:0, i:0, f:0};
+    const curLv = level || 0;
+    const m = Math.pow(1.62, curLv); 
+    const cost = { 
+        w: Math.floor((base.baseW || 100) * m), 
+        i: Math.floor((base.baseI || 80) * m) 
+    };
+    if (base.baseF) {
+        cost.f = Math.floor(base.baseF * m);
+    }
+    return cost; 
 }
+
+// ==========================================
+// 💡 升級時間：線性+溫和指數成長，最高封頂 3 小時 (10,800 秒)
+// ==========================================
 function getUpgradeTime(key, level, isTech=false) { 
     const baseCfg = isTech ? CFG.techs[key] : CFG.buildings[key]; 
     if(!baseCfg) return 60;
-    const base = baseCfg.baseTime || 60; return Math.floor(base * Math.pow(1.5, Math.max(0, (level||0) - 1))); 
+    const base = baseCfg.baseTime || 60;
+    const curLv = Math.max(0, (level||0) - 1);
+    
+    // 溫和成長曲線 (1.25 倍率)，避免後期幾百小時
+    let calculatedTime = Math.floor(base * Math.pow(1.25, curLv));
+    
+    // 🔒 終極限制：單項升級最高上限為 3 小時 (10,800 秒)
+    return Math.min(10800, calculatedTime); 
 }
+
 function formatTime(sec) {
   if (sec < 60) return sec + 's';
   if (sec < 3600) return Math.floor(sec/60) + 'm' + (sec%60 > 0 ? ' '+(sec%60)+'s' : '');
@@ -1986,7 +2037,7 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
         }
     }
 
-  if (targetAction.type === 'relocate') {
+if (targetAction.type === 'relocate') {
     if (myData.wood < targetAction.cost || myData.iron < targetAction.cost || myData.food < targetAction.cost) return alert(`資源不足！需要各 ${targetAction.cost} 資源。`);
     myData.wood -= targetAction.cost; myData.iron -= targetAction.cost; myData.food -= targetAction.cost;
     myData.x = targetAction.x; myData.y = targetAction.y;
@@ -2019,8 +2070,14 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
   if (sendInf > 0) spd = Math.max(spd, CFG.troops.infantry.speed);
   if (sendArc > 0) spd = Math.max(spd, CFG.troops.archer.speed);
   
-  const timeMs = Math.ceil(targetAction.dist * spd * 1000);
+  // 💡 這裡必須使用 let，才能在下方重新賦值
+  let timeMs = Math.ceil(targetAction.dist * spd * 1000);
   myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
+
+  // 🐎 套用【急行軍隊】科技加成：每級提速 8%
+  const speedTechLv = (myData.research && myData.research.march_speed) || 0;
+  const speedMult = 1 + (speedTechLv * 0.08);
+  timeMs = Math.ceil(timeMs / speedMult); // 縮短行軍時間毫秒數
 
   const newMarch = {
     id: 'M'+Date.now(), type: targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
@@ -2677,7 +2734,8 @@ window.claimQuest = async (qid) => {
 // 💡 傷兵醫療與部隊負重核心系統
 // ==========================================
 window.addWounded = function(wInf, wArc, wCav) {
-    if (!myData.wounded) myData.wounded = { infantry: 0, archer: 0, cavalry: 0 };
+    const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
     // 預設醫院容量：10,000 + (主城等級 * 5,000)
     let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000;
     let curHosp = (myData.wounded.infantry||0) + (myData.wounded.archer||0) + (myData.wounded.cavalry||0);
@@ -2696,7 +2754,9 @@ window.addWounded = function(wInf, wArc, wCav) {
 
 // 🎒 步兵負重 10, 弓兵負重 5, 騎兵負重 8
 window.getLoadCapacity = function(troops) {
-    return (troops.infantry||0)*10 + (troops.archer||0)*5 + (troops.cavalry||0)*8;
+    let baseLoad = (troops.infantry||0)*10 + (troops.archer||0)*5 + (troops.cavalry||0)*8;
+    let loadTechLv = (myData.research && myData.research.troop_load) || 0;
+    return Math.floor(baseLoad * (1 + loadTechLv * 0.15));
 };
 
 window.openHospitalModal = () => {
@@ -2711,7 +2771,8 @@ window.openHospitalModal = () => {
     if (!myData.wounded) myData.wounded = {infantry:0, archer:0, cavalry:0};
     let w = myData.wounded;
     let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
-    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000;
+    const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
 
     // 治療成本：每人 10 木材、15 糧食
     let costWood = totalW * 10; let costFood = totalW * 15;
