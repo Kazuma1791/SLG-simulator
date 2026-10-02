@@ -1721,402 +1721,7 @@ function drawMarchLines(ctx, marches, tileSize) {
 }
 
 function drawWorldMap() {
-  if (!myData || myData.isBanned) return; 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.save(); ctx.scale(zoom, zoom); ctx.translate(-camX, -camY);
 
-  const vW = canvas.width/zoom, vH = canvas.height/zoom;
-  const radius = BASE_VISION_RADIUS + currentVisionBonus;
-  const sC = Math.max(0, Math.floor(camX/TILE_SIZE)-1), eC = Math.min(WORLD_COLS, Math.ceil((camX+vW)/TILE_SIZE)+1);
-  const sR = Math.max(0, Math.floor(camY/TILE_SIZE)-1), eR = Math.min(WORLD_ROWS, Math.ceil((camY+vH)/TILE_SIZE)+1);
-  const t = Date.now();
-
-  const mapPixelW = WORLD_COLS * TILE_SIZE;
-  const mapPixelH = WORLD_ROWS * TILE_SIZE;
-  
-  if (imgWorldMap.complete && imgWorldMap.naturalHeight !== 0) {
-      const vLeft = Math.max(0, camX), vTop = Math.max(0, camY);
-      const vRight = Math.min(mapPixelW, camX + vW), vBottom = Math.min(mapPixelH, camY + vH);
-      const cW = vRight - vLeft, cH = vBottom - vTop;
-
-      if (cW > 0 && cH > 0) {
-          const scaleX = imgWorldMap.naturalWidth / mapPixelW;
-          const scaleY = imgWorldMap.naturalHeight / mapPixelH;
-          ctx.drawImage(imgWorldMap, vLeft * scaleX, vTop * scaleY, cW * scaleX, cH * scaleY, vLeft, vTop, cW, cH);
-      }
-  } else {
-      ctx.fillStyle = '#1e293b'; 
-      ctx.fillRect(camX, camY, vW, vH);
-  }
-
-  for (let x = sC; x < eC; x++) {
-    for (let y = sR; y < eR; y++) {
-      if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
-      const px = x*TILE_SIZE, py = y*TILE_SIZE;
-      
-      const isExplored = exploredTiles[x][y] || godModeFog;
-      if (!isExplored) { 
-          ctx.fillStyle='rgba(5, 8, 17, 0.9)'; 
-          ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
-          continue; 
-      }
-
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; 
-      ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
-
-      const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
-      const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 1 && x <= b.x + 2 && y >= b.y - 1 && y <= b.y + 2);
-
-      if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
-        const clrInfo = getClearedPOI(x, y);
-        
-        if (clrInfo) {
-          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
-        } else {
-          if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
-              ctx.shadowColor = '#facc15'; ctx.shadowBlur = 15 + Math.sin(t/200)*10;
-              if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkCapital, px - TILE_SIZE, py - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
-              } else {
-                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-              }
-              ctx.shadowBlur = 0;
-              ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign='center'; 
-              ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py + TILE_SIZE*2 - 10);
-              
-          } else if (cell.entity.type === 'npc_fortress') {
-              ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10 + Math.sin(t/200)*5;
-              if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
-                  ctx.drawImage(imgDarkFortress, px - TILE_SIZE/2, py - TILE_SIZE/2, TILE_SIZE * 2, TILE_SIZE * 2);
-              } else {
-                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-              }
-              ctx.shadowBlur = 0;
-              ctx.fillStyle = '#f87171'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center'; 
-              ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 - 5);
-              
-          } else if (cell.entity.type === 'npc_faction_guard') {
-            const isLv3 = cell.entity.name.includes('Lv.3');
-            const isLv2 = cell.entity.name.includes('Lv.2');
-            
-            if (isLv3) {
-                ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10;
-                if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 15, py - 15, TILE_SIZE + 30, TILE_SIZE + 30);
-                else { ctx.font='28px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+30); }
-                ctx.shadowBlur = 0;
-            } else if (isLv2) {
-                ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
-                if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) ctx.drawImage(imgDarkFortress, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
-                else { ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+30); }
-                ctx.shadowBlur = 0;
-            } else {
-                if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px, py, TILE_SIZE, TILE_SIZE);
-                else { ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏕️', px+TILE_SIZE/2, py+30); }
-            }
-
-            ctx.fillStyle = isLv3 ? '#ef4444' : (isLv2 ? '#f97316' : '#38bdf8'); 
-            ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
-            
-            const shortName = cell.entity.name.split('·')[1] || cell.entity.name;
-            ctx.fillText(shortName, px+TILE_SIZE/2, py+50);
-          } else if (cell.entity.type === 'npc_castle') {
-              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
-              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20); }
-              ctx.fillStyle = '#f87171'; ctx.font = '11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
-          } else if (cell.entity.type === 'npc_outpost') {
-              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
-              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24); }
-              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
-          } else if (cell.entity.type === 'barbarian') {
-            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py - 10, TILE_SIZE + 4, TILE_SIZE + 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30); }
-            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
-          } else if (cell.entity.type === 'relic') {
-            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30); }
-            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
-          // 📜 全域公告 / 告示牌：若已領取則跳過不畫
-          } else if (cell.entity.type === 'announcement' || cell.entity.type === 'notice') {
-            // 💡 直接對齊公告物件的 id
-            const annId = cell.entity.id;
-            const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(annId);
-            
-            // 若尚未領取，才繪製在地圖上；領取過後自動隱藏
-            if (!isClaimed) {
-              ctx.font = '24px sans-serif'; 
-              ctx.textAlign = 'center'; 
-              ctx.fillText('📜', px + TILE_SIZE / 2, py + 30);
-              ctx.fillStyle = '#facc15'; 
-              ctx.font = 'bold 10px sans-serif'; 
-              ctx.textAlign = 'center';
-              ctx.fillText(cell.entity.name || '公告', px + TILE_SIZE / 2, py + 45);
-            }
-          } else if (cell.entity.type.startsWith('res_')) {
-            const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
-            const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
-            
-            let nearLm = null; let minDist = 999;
-            epicLandmarks.forEach(lm => {
-                let d = Math.hypot(x - lm.x, y - lm.y);
-                if (d <= 10 && d < minDist) { minDist = d; nearLm = lm; }
-            });
-            
-            const seed = x * 123 + y * 456 + currentHourSeed; 
-            const isNpcOccupied = !isMine && !isEnemy && nearLm && (seed % 100 < 40); 
-
-            let resImg = null; let fallbackEmoji = '';
-            if (cell.entity.type === 'res_farm') { resImg = imgResFarm; fallbackEmoji = '🌾'; }
-            else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
-            else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
-
-            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28); }
-
-            const resName = cell.entity.name.split(' ')[1] || '資源區';
-            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42);
-            
-            if (isMine) {
-                ctx.fillStyle = '#10b981'; ctx.fillText('我方採集', px+TILE_SIZE/2, py+54);
-            } else if (isEnemy) {
-                ctx.fillStyle = '#ef4444'; ctx.fillText('敵方佔領', px+TILE_SIZE/2, py+54);
-            } else if (isNpcOccupied) {
-                ctx.fillStyle = '#f97316'; ctx.fillText(`⚠️ ${nearLm.name}駐守`, px+TILE_SIZE/2, py+54); 
-            } else {
-                ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
-            }
-          }
-        } 
-      } 
-    } 
-  } 
-
-  worldBosses.forEach(boss => {
-     const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
-     if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
-        const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
-        const bounce = 0; 
-        const centerBx = bx + TILE_SIZE; 
-        
-        if (boss.hp <= 0) {
-            ctx.font = '50px sans-serif'; ctx.textAlign='center'; ctx.fillText('☠️', centerBx, by + TILE_SIZE + 10);
-            ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif'; ctx.fillText('首領遺骸', centerBx, by + TILE_SIZE + 30);
-            ctx.fillStyle = '#64748b'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center';
-            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 15);
-        } else {
-            let targetImg = imgBossOuter; let fallbackEmoji = '🗿';
-            if (boss.id === 'BOSS_CORE') { targetImg = imgBossCore; fallbackEmoji = '🐉'; }
-            else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
-
-            if (targetImg.complete && targetImg.naturalHeight !== 0) {
-                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
-            } else {
-                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
-            }
-            
-            const barW = TILE_SIZE * 1.5;
-            const barX = bx + (TILE_SIZE * 2 - barW) / 2;
-            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
-            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
-            
-            ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
-            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
-        }
-     }
-  });
-
-  allCastles.forEach(p => {
-    const isMe = (p.id === myUid);
-    const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
-    if (!godModeFog && !isMe && !isExplored) return;
-    
-    const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
-    if (px<camX-TILE_SIZE*2 || px>camX+vW+TILE_SIZE*2 || py<camY-TILE_SIZE*2 || py>camY+vH+TILE_SIZE*2) return;
-
-    const floatY = Math.sin(t / 250 + p.x) * 4;
-
-    if (p.shieldEndsAt && p.shieldEndsAt > Date.now()) {
-        ctx.save();
-        ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15 + Math.sin(Date.now()/150)*5; 
-        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 35, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.25)'; ctx.fill();
-        
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.9)'; ctx.lineWidth = 3; 
-        ctx.setLineDash([8, 4]); ctx.stroke();
-        
-        ctx.shadowBlur = 0; ctx.setLineDash([]);
-        ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText('🛡️', px+TILE_SIZE/2, py - 35 + floatY);
-        ctx.restore();
-    }
-    if (isMe) { 
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
-        ctx.beginPath(); ctx.ellipse(px + TILE_SIZE/2, py + TILE_SIZE - 5 + floatY, 35, 15, 0, 0, Math.PI*2); ctx.fill();
-        
-        const grd = ctx.createLinearGradient(0, py - 120, 0, py + TILE_SIZE);
-        grd.addColorStop(0, 'rgba(250, 204, 21, 0)');
-        grd.addColorStop(1, 'rgba(250, 204, 21, 0.5)');
-        ctx.fillStyle = grd;
-        ctx.fillRect(px + TILE_SIZE/2 - 20, py - 120 + floatY, 40, 120 + TILE_SIZE/2);
-        
-        ctx.font = '35px sans-serif'; ctx.textAlign='center'; 
-        ctx.fillText('👇', px + TILE_SIZE/2, py - 30 + floatY * 2.5);
-    }
-    
-    let cLv = p.castleLevel || 1; let imgIdx = 0;
-    if (cLv >= 20) imgIdx = 6; else if (cLv >= 17) imgIdx = 5; else if (cLv >= 13) imgIdx = 4;
-    else if (cLv >= 9) imgIdx = 3; else if (cLv >= 6) imgIdx = 2; else if (cLv >= 3) imgIdx = 1;
-    
-    // 💡 1. 判斷該玩家是否為 VIP (擁有且未過期)
-    const isVip = p.vip && p.vip.isActive && p.vip.expiresAt > Date.now();
-
-    let currentCastleImg = castleImgs[imgIdx];
-    
-    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
-        // 💡 2. 如果是 VIP，加上黃金發光與濾鏡特效
-        if (isVip) {
-            ctx.save();
-            ctx.shadowColor = '#facc15';
-            ctx.shadowBlur = 20; // 邊緣發出黃金光暈
-            ctx.filter = 'sepia(1) hue-rotate(15deg) saturate(3) brightness(1.2)'; // 城堡材質變成黃金
-        }
-        
-        ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
-        
-        if (isVip) {
-            ctx.restore(); 
-        }
-    } else {
-        // 💡 3. 如果圖片沒載入 (備案方塊)，如果是 VIP 也是黃金配色
-        ctx.fillStyle = isVip ? '#b45309' : (isMe?'#1d4ed8':'#991b1b'); 
-        ctx.fillRect(px+12,py+16+floatY,31,26);
-        ctx.fillStyle = isVip ? '#facc15' : (isMe?'#3b82f6':'#ef4444'); 
-        ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
-    }
-
-    // ==========================================
-    // 🔥 城池燃燒動態特效 🔥
-    // ==========================================
-    const isBurning = p.burnEndsAt && p.burnEndsAt > Date.now();
-    
-    if (isBurning) {
-        const time = Date.now();
-        const flicker1 = Math.sin(time / 150) * 4; 
-        const flicker2 = Math.cos(time / 200) * 3; 
-        
-        ctx.font = '22px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('🔥', px + TILE_SIZE / 2 - 15, py + 10 + floatY + flicker1);
-        ctx.fillText('🔥', px + TILE_SIZE / 2 + 10, py - 5 + floatY + flicker2);
-        
-        ctx.font = '16px sans-serif';
-        ctx.fillStyle = `rgba(0, 0, 0, ${0.5 + Math.sin(time/300)*0.2})`; 
-        ctx.fillText('☁️', px + TILE_SIZE / 2, py - 25 + floatY - (time % 1000) / 50); 
-    }
-    // ==========================================
-
-    你貼的這段代碼讓我完全看清楚問題了！🕵️‍♂️
-
-這裡面總共有 2 個地方 少了括號，導致瀏覽器讀到最後直接崩潰：
-
-城池迴圈沒有關閉：if (zoom>0.5) {...} 結束後，應該要先用 }); 把 allCastles.forEach 關起來，才能繼續畫後面的 epicLandmarks（地標）。
-
-採集部隊的 IF 沒有關閉：在下面 if (m.type === 'gathering') { 的最後，少了一個 }，導致大亂。
-
-另外，檔案最底下有重複兩次畫行軍線的代碼，我也順便幫你整理乾淨了！
-
-🛠️ 終極修復版（請直接全選這一段替換）：
-請把你剛剛貼給我的這整段（從 if (zoom>0.5) { 一直到最後面的 ctx.restore(); }），直接替換成下面這段修好的版本：
-
-JavaScript
-    if (zoom>0.5) {
-      // 💡 4. VIP 的名字字體變成純金黃色
-      if (isVip) {
-          ctx.fillStyle = '#facc15'; 
-      } else {
-          ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
-      }
-      
-      ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; 
-      ctx.textAlign='center';
-      
-      let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
-      
-      // 💡 5. VIP 名字加上皇冠
-      if (isVip) dispName = '👑 ' + dispName;
-
-      ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
-      ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
-    }
-    
-    ctx.textAlign='start';
-  }); // 👈 【關鍵修復 1】在這裡關閉 allCastles.forEach 迴圈！
-
-  // ==========================================
-  // 🗺️ 繪製大地圖動態地標 (Epic Landmarks)
-  // ==========================================
-  epicLandmarks.forEach((lm, idx) => {
-      const cycle = 15000; 
-      const phase = (t + idx * 4321) % (cycle * 2); 
-      const isReturning = phase > cycle;
-      const p = isReturning ? (1 - (phase - cycle)/cycle) : (phase / cycle);
-      
-      const periodId = Math.floor((t + idx * 4321) / (cycle * 2));
-      const r1 = Math.sin(periodId * 12.9898 + idx) * 43758.5453;
-      const angle = (r1 - Math.floor(r1)) * Math.PI * 2;
-      const dist = 3 + ((r1 * 7) - Math.floor(r1 * 7)) * 4;
-      
-      const tgX = lm.x + Math.cos(angle) * dist;
-      const tgY = lm.y + Math.sin(angle) * dist;
-      
-      const sX = lm.x*TILE_SIZE + TILE_SIZE/2, sY = lm.y*TILE_SIZE + TILE_SIZE/2;
-      const eX = tgX*TILE_SIZE + TILE_SIZE/2, eY = tgY*TILE_SIZE + TILE_SIZE/2;
-      const cX = sX + (eX - sX) * p, cY = sY + (eY - sY) * p;
-
-      if (cX > camX-TILE_SIZE && cX < camX+vW+TILE_SIZE && cY > camY-TILE_SIZE && cY < camY+vH+TILE_SIZE) {
-          ctx.beginPath(); ctx.setLineDash([4,4]); ctx.moveTo(sX, sY); ctx.lineTo(eX, eY);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
-          
-          ctx.fillStyle = lm.c; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = '#fff'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; 
-          ctx.fillText(isReturning ? '📦' : '⛏️', cX, cY+3);
-      }
-  });
-
-  // ==========================================
-  // 🏹 繪製大地圖全新動態行軍軌跡與採集狀態
-  // ==========================================
-  if (myData && myData.marches && myData.marches.length > 0) {
-    // 1. 保留採集中標籤 (駐留在資源點上挖礦)
-    myData.marches.forEach(m => {
-      if (m.type === 'gathering') {
-        const cX = m.targetX * TILE_SIZE + TILE_SIZE / 2;
-        const cY = m.targetY * TILE_SIZE + TILE_SIZE / 2;
-        ctx.fillStyle = '#10b981';
-        ctx.beginPath();
-        ctx.arc(cX, cY, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('⛏', cX, cY + 4);
-
-        const left = Math.ceil((m.finishesAt - t) / 1000);
-        if (left > 0) {
-          ctx.fillStyle = '#facc15';
-          ctx.font = 'bold 13px sans-serif';
-          ctx.fillText(formatTime(left), cX, cY - 20);
-        }
-        ctx.textAlign = 'start';
-      } // 👈 【關鍵修復 2】補上這個 } 來關閉 if 判斷！
-    });
-
-    // 2. 移動中部隊繪製全新流動虛線與方向箭頭 (排除原地採集的部隊)
-    const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
-    drawMarchLines(ctx, movingMarches, TILE_SIZE);
-  }
-    
-  ctx.restore();
-}
 
 window.zoomMapBtn = (factor) => {
   const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
@@ -3108,134 +2713,43 @@ window.healAllWounded = async () => {
 // 👑 VIP 系統：打開介面與領取獎勵
 // ==========================================
 
-window.openVipModal = function() {
-    const modal = document.getElementById('vip-modal');
-    const container = document.getElementById('vip-action-container');
-    if (!modal || !container || !myData) return;
-
-    // 如果 VIP 資料不存在，先初始化
-    if (!myData.vip || typeof myData.vip !== 'object') {
-        myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
-    }
-
-    // 檢查 VIP 是否過期
-    if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
-        myData.vip.isActive = false; // 過期自動取消
-    }
-
-    if (myData.vip.isActive) {
-        // ✅ 已經是 VIP，顯示領取按鈕
-        const remainDays = Math.ceil((myData.vip.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
-        container.innerHTML = `
-            <div style="color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 1.1rem;">
-                ✅ 你的 VIP 剩餘 ${remainDays} 天
-            </div>
-            <button onclick="window.claimVipDaily()" style="width: 100%; padding: 14px; background: linear-gradient(to right, #f59e0b, #eab308); color: #000; border: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                🎁 領取今日 VIP 獎勵
-            </button>
-        `;
-    } else {
-        // ❌ 還不是 VIP，顯示 PayMe 連結與備註提醒
-        container.innerHTML = `
-            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-                <p style="color: #fca5a5; font-size: 0.85rem; margin: 0; line-height: 1.4;">
-                    請點擊下方 PayMe 連結付款，並在備註填寫你的<br>
-                    <strong style="color: #fff; font-size: 1rem;">【玩家ID: ${myUid}】</strong><br>
-                    管理員核對後將立即為您開通！
-                </p>
-            </div>
-            <a href="https://payme.hsbc/0661b177b2f04214972535987915b5d6" target="_blank" 
-               style="display: block; width: 100%; padding: 14px; background: #e3004f; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; box-sizing: border-box; box-shadow: 0 4px 6px rgba(227, 0, 79, 0.3);">
-               🔴 一按即 PayMe！
-            </a>
-        `;
-    }
-    modal.style.display = 'flex';
-};
-
-// 領取 VIP 每日獎勵
-window.claimVipDaily = async function() {
-    if (!myData.vip || !myData.vip.isActive) {
-        return alert("你還不是 VIP 哦！");
-    }
-    
-    const todayStr = new Date().toDateString();
-    if (myData.vip.lastClaimed === todayStr) {
-        return alert("今天已經領取過 VIP 專屬獎勵了，請明天再來！");
-    }
-
-    // 記錄今天已領取
-    myData.vip.lastClaimed = todayStr;
-    
-    // 🎁 發送 VIP 每日豐厚獎勵
-    myData.wood += 20000;
-    myData.iron += 20000;
-    myData.food += 20000;
-    myData.items.speedup1h += 2;   // 1小時加速卡 x2
-    myData.items.speedup30m += 4;  // 30分鐘加速卡 x4
-
-    // 儲存資料到資料庫
-    await savePrivateData();
-    
-    alert("🎉 成功領取 VIP 每日禮包！\n獲得：木/鐵/糧 x20000, 1小時加速卡x2, 30分鐘加速卡x4");
-    
-    // 關閉視窗並刷新畫面
-    document.getElementById('vip-modal').style.display = 'none';
-    if (typeof renderSelf === 'function') renderSelf();
-};
 // ==========================================
 // 🛠️ 寫入資料庫邏輯：發放 VIP (同步寫入地圖版)
 // ==========================================
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
-    
-    // 準備好 VIP 資料
-    const vipData = {
-        isActive: true,
-        expiresAt: expiry,
-        lastClaimed: ""
-    };
-    
+    const vipData = { isActive: true, expiresAt: expiry, lastClaimed: "" };
     try {
-        // 1. 寫入 players 集合 (玩家私人資料，用來領取每日獎勵)
         await setDoc(doc(db, "players", targetUid), { vip: vipData }, { merge: true });
-        
-        // 2. 💡 寫入 world_map 集合 (公開地圖資料，這樣大地圖上才畫得出黃金城！)
         await setDoc(doc(db, "world_map", targetUid), { vip: vipData }, { merge: true });
-        
         alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
-        
-        // 自動刷新 GM 面板與大地圖，讓你馬上看到黃金城！
         if (typeof renderGMPlayers === 'function') renderGMPlayers();
         if (typeof window.refreshMap === 'function') window.refreshMap();
-        
     } catch (e) {
         alert(`❌ 開通失敗：${e.message}`);
     }
 };
+
 // ==========================================
 // 👑 玩家專用：VIP 介面與每日領獎邏輯
 // ==========================================
-
 window.openVipModal = function() {
     const modal = document.getElementById('vip-modal');
     const container = document.getElementById('vip-action-container');
-    if (!modal || !container) return;
+    if (!modal || !container || !myData) return;
 
-    // 檢查玩家目前的 VIP 狀態
-    const vip = myData && myData.vip ? myData.vip : null;
-    const now = Date.now();
-    const isVip = vip && vip.isActive && vip.expiresAt > now;
+    if (!myData.vip || typeof myData.vip !== 'object') {
+        myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
+    }
+    if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
+        myData.vip.isActive = false; 
+    }
 
-    if (isVip) {
-        // 🌟 身分為 VIP：計算剩餘天數
-        const daysLeft = Math.ceil((vip.expiresAt - now) / (1000 * 60 * 60 * 24));
-        
-        // 檢查今天是否已經領過獎勵 (利用日期字串比對)
+    if (myData.vip.isActive) {
+        const daysLeft = Math.ceil((myData.vip.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
         const todayStr = new Date().toLocaleDateString();
-        const alreadyClaimed = (vip.lastClaimed === todayStr);
+        const alreadyClaimed = (myData.vip.lastClaimed === todayStr);
 
-        // 渲染 VIP 專屬介面 (顯示天數 + 領獎按鈕)
         container.innerHTML = `
             <div style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
                 <h4 style="color: #10b981; margin: 0 0 5px 0;">👑 您的 VIP 已生效</h4>
@@ -3247,47 +2761,40 @@ window.openVipModal = function() {
             }
         `;
     } else {
-        // ❌ 身分不是 VIP：顯示購買按鈕 (請把網址換成你的真實 PayMe 連結)
+        // 💡 這裡換成了你的真實 PayMe 連結！
         container.innerHTML = `
-            <button onclick="window.open('https://payme.hsbc/你的PayMe名稱', '_blank')" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                💳 前往 PayMe 購買 ($25)
-            </button>
-            <p style="color: #94a3b8; font-size: 0.75rem; margin-top: 10px;">付款時請在備註填寫您的 ID：<br><strong style="color: #facc15; font-size: 1.1rem; user-select: all;">${myUid}</strong></p>
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                <p style="color: #fca5a5; font-size: 0.85rem; margin: 0; line-height: 1.4;">
+                    請點擊下方 PayMe 連結付款，並在備註填寫你的<br>
+                    <strong style="color: #fff; font-size: 1rem;">【玩家ID: ${myUid}】</strong><br>
+                    管理員核對後將立即為您開通！
+                </p>
+            </div>
+            <a href="https://payme.hsbc/0661b177b2f04214972535987915b5d6" target="_blank" 
+               style="display: block; width: 100%; padding: 14px; background: #e3004f; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; box-sizing: border-box; text-align: center; box-shadow: 0 4px 6px rgba(227, 0, 79, 0.3);">
+               🔴 一按即 PayMe！ ($25)
+            </a>
         `;
     }
-    
-    // 顯示彈窗
     modal.style.display = 'flex';
 };
 
-// 🎁 點擊領獎的執行函數
-window.claimVipReward = function() {
-    // 雙重防護：確認真的有 VIP 且未過期
+window.claimVipReward = async function() {
     if (!myData || !myData.vip || !myData.vip.isActive || myData.vip.expiresAt < Date.now()) return;
-    
     const todayStr = new Date().toLocaleDateString();
-    if (myData.vip.lastClaimed === todayStr) {
-        alert("❌ 您今天已經領取過 VIP 獎勵了！");
-        return;
-    }
+    if (myData.vip.lastClaimed === todayStr) return alert("❌ 您今天已經領取過 VIP 獎勵了！");
 
-   // 💰 調整後的平衡版獎勵 (微量資源塞牙縫，重點給加速)
-    myData.wood = (myData.wood || 0) + 5000;  // 從 20000 降到 5000
+    // 💰 平衡版每日獎勵
+    myData.wood = (myData.wood || 0) + 5000;  
     myData.iron = (myData.iron || 0) + 5000;
     myData.food = (myData.food || 0) + 5000;
-    
     if(!myData.items) myData.items = {};
-    // 改給 2 張 30 分鐘加速，或者 1 張 1 小時加速，比較不會讓科技樹瞬間被秒升完
-    myData.items.speed30m = (myData.items.speed30m || 0) + 2;
+    myData.items.speed30m = (myData.items.speed30m || 0) + 2; // 給2張30分加速
 
-    // 標記今天已領取
     myData.vip.lastClaimed = todayStr;
-
-    // 儲存進 Firebase (呼叫你原本的存檔函數)
-    if (typeof savePrivateData === 'function') savePrivateData();
+    await savePrivateData();
     
-    alert("🎁 領取成功！\n獲得：木材 2w、鐵礦 2w、糧草 2w、1小時加速卡x2");
-    
-    // 重新渲染彈窗 (按鈕會立刻變成「✅ 今日已領取」)
+    alert("🎁 領取成功！\n獲得：木/鐵/糧 各 5000、30分鐘加速卡 x2");
     window.openVipModal();
+    if (typeof window.renderSelf === 'function') window.renderSelf();
 };
