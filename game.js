@@ -3013,3 +3013,82 @@ window.healAllWounded = async () => {
         try { window.renderSelf(); } catch(e){}
     }
 };
+// ==========================================
+// 👑 VIP 系統：打開介面與領取獎勵
+// ==========================================
+
+window.openVipModal = function() {
+    const modal = document.getElementById('vip-modal');
+    const container = document.getElementById('vip-action-container');
+    if (!modal || !container || !myData) return;
+
+    // 如果 VIP 資料不存在，先初始化
+    if (!myData.vip || typeof myData.vip !== 'object') {
+        myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
+    }
+
+    // 檢查 VIP 是否過期
+    if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
+        myData.vip.isActive = false; // 過期自動取消
+    }
+
+    if (myData.vip.isActive) {
+        // ✅ 已經是 VIP，顯示領取按鈕
+        const remainDays = Math.ceil((myData.vip.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
+        container.innerHTML = `
+            <div style="color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 1.1rem;">
+                ✅ 你的 VIP 剩餘 ${remainDays} 天
+            </div>
+            <button onclick="window.claimVipDaily()" style="width: 100%; padding: 14px; background: linear-gradient(to right, #f59e0b, #eab308); color: #000; border: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                🎁 領取今日 VIP 獎勵
+            </button>
+        `;
+    } else {
+        // ❌ 還不是 VIP，顯示 PayMe 連結與備註提醒
+        container.innerHTML = `
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                <p style="color: #fca5a5; font-size: 0.85rem; margin: 0; line-height: 1.4;">
+                    請點擊下方 PayMe 連結付款，並在備註填寫你的<br>
+                    <strong style="color: #fff; font-size: 1rem;">【玩家ID: ${myUid}】</strong><br>
+                    管理員核對後將立即為您開通！
+                </p>
+            </div>
+            <a href="https://payme.hsbc/0661b177b2f04214972535987915b5d6" target="_blank" 
+               style="display: block; width: 100%; padding: 14px; background: #e3004f; color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 1.1rem; box-sizing: border-box; box-shadow: 0 4px 6px rgba(227, 0, 79, 0.3);">
+               🔴 一按即 PayMe！
+            </a>
+        `;
+    }
+    modal.style.display = 'flex';
+};
+
+// 領取 VIP 每日獎勵
+window.claimVipDaily = async function() {
+    if (!myData.vip || !myData.vip.isActive) {
+        return alert("你還不是 VIP 哦！");
+    }
+    
+    const todayStr = new Date().toDateString();
+    if (myData.vip.lastClaimed === todayStr) {
+        return alert("今天已經領取過 VIP 專屬獎勵了，請明天再來！");
+    }
+
+    // 記錄今天已領取
+    myData.vip.lastClaimed = todayStr;
+    
+    // 🎁 發送 VIP 每日豐厚獎勵
+    myData.wood += 20000;
+    myData.iron += 20000;
+    myData.food += 20000;
+    myData.items.speedup1h += 2;   // 1小時加速卡 x2
+    myData.items.speedup30m += 4;  // 30分鐘加速卡 x4
+
+    // 儲存資料到資料庫
+    await savePrivateData();
+    
+    alert("🎉 成功領取 VIP 每日禮包！\n獲得：木/鐵/糧 x20000, 1小時加速卡x2, 30分鐘加速卡x4");
+    
+    // 關閉視窗並刷新畫面
+    document.getElementById('vip-modal').style.display = 'none';
+    if (typeof renderSelf === 'function') renderSelf();
+};
