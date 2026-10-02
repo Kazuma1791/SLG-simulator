@@ -2354,6 +2354,9 @@ window.trainTroopType = async (typeKey) => {
   await savePrivateData(); window.renderSelf();
 };
 
+// ==========================================
+// 💡 側邊按鈕、戰報、任務系統與醫療所
+// ==========================================
 window.renderSideMenu = function() {
     if (document.getElementById('side-menu-hud')) return;
     const div = document.createElement('div'); div.id = 'side-menu-hud';
@@ -2397,7 +2400,7 @@ window.openReportModal = () => {
         <h2 style="color:#38bdf8; margin:20px 20px 10px 20px;">📬 軍事戰報</h2>
         <div style="padding:0 20px; overflow-y:auto; flex:1;">${rHtml}</div>
         <div style="padding:20px;">
-            <button onclick="document.getElementById('report-modal').style.display='none'; document.getElementById('btn-float-report').innerHTML='📬 戰報';" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; cursor:pointer;">關閉</button>
+            <button onclick="document.getElementById('report-modal').style.display='none'; document.getElementById('btn-float-report').innerHTML='📬 戰報';" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; color:white;">關閉</button>
         </div>
     </div>`;
     modal.style.display = 'flex';
@@ -2425,21 +2428,21 @@ window.openQuestModal = () => {
             <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">⚔️ 擊殺野怪/敵軍 (${q.kills}/3)</div>
             <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：⚡5分加速 x 3</div>
             ${q1Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
-              (q1Done ? '<button onclick="window.claimQuest(\'q1\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+              (q1Done ? `<button onclick="window.claimQuest('q1')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>` : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
         </div>
         
         <div style="margin-bottom:10px; background:#0f172a; padding:10px; border-radius:6px; border-left: 4px solid #38bdf8;">
             <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">🏗️ 升級任意建築 (${q.upgrades}/2)</div>
             <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：⚡1小時加速 x 1</div>
             ${q2Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
-              (q2Done ? '<button onclick="window.claimQuest(\'q2\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+              (q2Done ? `<button onclick="window.claimQuest('q2')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>` : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
         </div>
         
         <div style="margin-bottom:10px; background:#0f172a; padding:10px; border-radius:6px; border-left: 4px solid #38bdf8;">
             <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">🌲 採集木材 (${formatCompact(q.gather_wood)} / 10K)</div>
             <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：📦 軍用物資卡 x 1</div>
             ${q3Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
-              (q3Done ? '<button onclick="window.claimQuest(\'q3\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+              (q3Done ? `<button onclick="window.claimQuest('q3')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>` : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
         </div>
         <button onclick="document.getElementById('quest-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
     </div>`;
