@@ -3107,31 +3107,21 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 寫入資料庫邏輯：發放 VIP
+// 🛠️ 寫入資料庫邏輯：發放 VIP (Firestore v9 版)
 // ==========================================
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
     try {
-        let dbRef;
-        // 自動偵測 Firebase 連線變數
-        if (typeof firebase !== 'undefined' && firebase.database) {
-            dbRef = firebase.database().ref(`users/${targetUid}/vip`);
-        } else if (typeof database !== 'undefined' && database.ref) {
-            dbRef = database.ref(`users/${targetUid}/vip`);
-        } else if (typeof db !== 'undefined' && db.ref) {
-            dbRef = db.ref(`users/${targetUid}/vip`);
-        } else {
-            alert("❌ 找不到資料庫連線！");
-            return;
-        }
-
-        // 執行更新
-        await dbRef.update({
-            isActive: true,
-            expiresAt: expiry,
-            lastClaimed: ""
-        });
+        // 使用與 savePrivateData 完全相同的 setDoc 與 doc 語法
+        // 寫入目標：players -> 目標玩家 UID -> 更新 vip 欄位
+        await setDoc(doc(db, "players", targetUid), {
+            vip: {
+                isActive: true,
+                expiresAt: expiry,
+                lastClaimed: ""
+            }
+        }, { merge: true });
         
         alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請該玩家重新整理網頁即可生效。`);
         
