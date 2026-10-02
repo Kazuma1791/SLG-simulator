@@ -113,12 +113,20 @@ function getUpgradeCost(key, level, isTech=false) {
 
 function getTechEffectText(techKey, curLevel) {
   const lv = curLevel || 0;
-  if (techKey === 'march_speed') return `行軍速度：+${lv * 8}\%${lv > 0 ? `(下級: +${(lv + 1) * 8}%)` : ''}`;
-  if (techKey === 'troop_load') return `部隊負重：+${lv * 15}\%${lv > 0 ? `(下級: +${(lv + 1) * 15}%)` : ''}`;
-  if (techKey === 'hospital_cap') return `傷兵上限：+${(lv * 3000).toLocaleString()}${lv > 0 ? `(下級: +${((lv + 1) * 3000).toLocaleString()})` : ''}`;
-  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return `部隊戰力：+${lv}${lv > 0 ? `(下級: +${lv + 1})` : ''}`;
-  return '';
-}
+  let nextText = "";
+  
+  if (lv > 0) {
+      if (techKey === 'march_speed') nextText = " (下級: +" + ((lv + 1) * 8) + "%)";
+      else if (techKey === 'troop_load') nextText = " (下級: +" + ((lv + 1) * 15) + "%)";
+      else if (techKey === 'hospital_cap') nextText = " (下級: +" + ((lv + 1) * 3000).toLocaleString() + ")";
+      else nextText = " (下級: +" + (lv + 1) + ")";
+  }
+
+  if (techKey === 'march_speed') return "行軍速度：+" + (lv * 8) + "%" + nextText;
+  if (techKey === 'troop_load') return "部隊負重：+" + (lv * 15) + "%" + nextText;
+  if (techKey === 'hospital_cap') return "傷兵上限：+" + (lv * 3000).toLocaleString() + nextText;
+  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return "部隊戰力：+" + lv + nextText;
+  return ""
 
 window.openAcademyModal = function() {
   if (!myData) return;
