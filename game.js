@@ -1568,6 +1568,7 @@ async function resolveAttackPlayer_NEW(m) {
       const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + (target.buildings.wall || 0) * 0.05);
 
       if (attPwr > defPwr) {
+        // ✅ 攻擊方勝利 (防守方城破)
         let tWounded = target.wounded || {infantry:0, archer:0, cavalry:0};
         let tHospMax = 10000 + (target.buildings.castle || 1) * 5000;
         let tCurHosp = tWounded.infantry + tWounded.archer + tWounded.cavalry;
@@ -1592,12 +1593,22 @@ async function resolveAttackPlayer_NEW(m) {
         window.addWounded(wInf, wArc, wCav); 
         res.troops.infantry -= wInf; res.troops.archer -= wArc; res.troops.cavalry -= wCav;
         
-        transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
-        transaction.set(tPubRef, { troops: 0 }, { merge: true });
+        transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！城池正在燃燒！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
+        
+        // ==========================================
+        // 🔥 在這裡寫入燃燒狀態到世界地圖 🔥
+        // ==========================================
+        const burnTime = Date.now() + (30 * 60 * 1000); // 設定燃燒 30 分鐘
+        transaction.set(tPubRef, { 
+            troops: 0, 
+            burnEndsAt: burnTime // 加入這個時間戳！
+        }, { merge: true });
+        // ==========================================
         
         res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
-        if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
+        if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n敵軍城池已陷入火海！🔥\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
       } else {
+        // ❌ 攻擊方失敗
         let wInf = Math.floor(m.troops.infantry * 0.6); let wArc = Math.floor(m.troops.archer * 0.6); let wCav = Math.floor(m.troops.cavalry * 0.6);
         window.addWounded(wInf, wArc, wCav);
         transaction.set(tPrivRef, { logs: [`[堅壁清野] 成功擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
