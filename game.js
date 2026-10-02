@@ -1721,9 +1721,345 @@ function drawMarchLines(ctx, marches, tileSize) {
 }
 
 function drawWorldMap() {
+  if (!myData || myData.isBanned) return; 
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save(); ctx.scale(zoom, zoom); ctx.translate(-camX, -camY);
 
+  const vW = canvas.width/zoom, vH = canvas.height/zoom;
+  const radius = BASE_VISION_RADIUS + currentVisionBonus;
+  const sC = Math.max(0, Math.floor(camX/TILE_SIZE)-1), eC = Math.min(WORLD_COLS, Math.ceil((camX+vW)/TILE_SIZE)+1);
+  const sR = Math.max(0, Math.floor(camY/TILE_SIZE)-1), eR = Math.min(WORLD_ROWS, Math.ceil((camY+vH)/TILE_SIZE)+1);
+  const t = Date.now();
+
+  const mapPixelW = WORLD_COLS * TILE_SIZE;
+  const mapPixelH = WORLD_ROWS * TILE_SIZE;
+  
+  if (imgWorldMap.complete && imgWorldMap.naturalHeight !== 0) {
+      const vLeft = Math.max(0, camX), vTop = Math.max(0, camY);
+      const vRight = Math.min(mapPixelW, camX + vW), vBottom = Math.min(mapPixelH, camY + vH);
+      const cW = vRight - vLeft, cH = vBottom - vTop;
+
+      if (cW > 0 && cH > 0) {
+          const scaleX = imgWorldMap.naturalWidth / mapPixelW;
+          const scaleY = imgWorldMap.naturalHeight / mapPixelH;
+          ctx.drawImage(imgWorldMap, vLeft * scaleX, vTop * scaleY, cW * scaleX, cH * scaleY, vLeft, vTop, cW, cH);
+      }
+  } else {
+      ctx.fillStyle = '#1e293b'; 
+      ctx.fillRect(camX, camY, vW, vH);
+  }
+
+  for (let x = sC; x < eC; x++) {
+    for (let y = sR; y < eR; y++) {
+      if (x<0 || x>=WORLD_COLS || y<0 || y>=WORLD_ROWS) continue;
+      const px = x*TILE_SIZE, py = y*TILE_SIZE;
+      
+      const isExplored = exploredTiles[x][y] || godModeFog;
+      if (!isExplored) { 
+          ctx.fillStyle='rgba(5, 8, 17, 0.9)'; 
+          ctx.fillRect(px,py,TILE_SIZE,TILE_SIZE); 
+          continue; 
+      }
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; 
+      ctx.lineWidth = 1; ctx.strokeRect(px,py,TILE_SIZE,TILE_SIZE);
+
+      const cell = MAP_CACHE[x] && MAP_CACHE[x][y];
+      const isBossOverlap = worldBosses.some(b => (b.hp > 0 || b.despawnAt > t) && x >= b.x - 1 && x <= b.x + 2 && y >= b.y - 1 && y <= b.y + 2);
+
+      if (cell && cell.entity && !allCastles.some(p => p.x === x && p.y === y) && !isBossOverlap) {
+        const clrInfo = getClearedPOI(x, y);
+        
+        if (clrInfo) {
+          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+        } else {
+          if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
+              ctx.shadowColor = '#facc15'; ctx.shadowBlur = 15 + Math.sin(t/200)*10;
+              if (imgDarkCapital.complete && imgDarkCapital.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkCapital, px - TILE_SIZE, py - TILE_SIZE, TILE_SIZE * 3, TILE_SIZE * 3);
+              } else {
+                  ctx.fillStyle = 'rgba(76, 29, 149, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+              }
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign='center'; 
+              ctx.fillText(cell.entity.name.split(' ')[1]||'據點', px+TILE_SIZE/2, py + TILE_SIZE*2 - 10);
+              
+          } else if (cell.entity.type === 'npc_fortress') {
+              ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10 + Math.sin(t/200)*5;
+              if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) {
+                  ctx.drawImage(imgDarkFortress, px - TILE_SIZE/2, py - TILE_SIZE/2, TILE_SIZE * 2, TILE_SIZE * 2);
+              } else {
+                  ctx.fillStyle = 'rgba(153, 27, 27, 0.6)'; ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+              }
+              ctx.shadowBlur = 0;
+              ctx.fillStyle = '#f87171'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center'; 
+              ctx.fillText('黑暗要塞', px+TILE_SIZE/2, py + TILE_SIZE*1.5 - 5);
+              
+          } else if (cell.entity.type === 'npc_faction_guard') {
+            const isLv3 = cell.entity.name.includes('Lv.3');
+            const isLv2 = cell.entity.name.includes('Lv.2');
+            
+            if (isLv3) {
+                ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 10;
+                if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 15, py - 15, TILE_SIZE + 30, TILE_SIZE + 30);
+                else { ctx.font='28px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏰', px+TILE_SIZE/2, py+30); }
+                ctx.shadowBlur = 0;
+            } else if (isLv2) {
+                ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
+                if (imgDarkFortress.complete && imgDarkFortress.naturalHeight !== 0) ctx.drawImage(imgDarkFortress, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+                else { ctx.font='24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏯', px+TILE_SIZE/2, py+30); }
+                ctx.shadowBlur = 0;
+            } else {
+                if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px, py, TILE_SIZE, TILE_SIZE);
+                else { ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏕', px+TILE_SIZE/2, py+30); }
+            }
+
+            ctx.fillStyle = isLv3 ? '#ef4444' : (isLv2 ? '#f97316' : '#38bdf8'); 
+            ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; 
+            
+            const shortName = cell.entity.name.split('·')[1] || cell.entity.name;
+            ctx.fillText(shortName, px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'npc_castle') {
+              if (imgDarkCastle.complete && imgDarkCastle.naturalHeight !== 0) ctx.drawImage(imgDarkCastle, px - 10, py - 15, TILE_SIZE + 20, TILE_SIZE + 20);
+              else { ctx.fillStyle = 'rgba(59, 7, 100, 0.6)'; ctx.fillRect(px+10, py+10, TILE_SIZE-20, TILE_SIZE-20); }
+              ctx.fillStyle = '#f87171'; ctx.font = '11px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗城堡', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'npc_outpost') {
+              if (imgDarkOutpost.complete && imgDarkOutpost.naturalHeight !== 0) ctx.drawImage(imgDarkOutpost, px - 5, py - 5, TILE_SIZE + 10, TILE_SIZE + 10);
+              else { ctx.fillStyle = 'rgba(23, 23, 23, 0.6)'; ctx.fillRect(px+12, py+12, TILE_SIZE-24, TILE_SIZE-24); }
+              ctx.fillStyle = '#f87171'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('黑暗前哨', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'barbarian') {
+            if (imgBarbarian.complete && imgBarbarian.naturalHeight !== 0) ctx.drawImage(imgBarbarian, px - 2, py - 10, TILE_SIZE + 4, TILE_SIZE + 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('👹', px+TILE_SIZE/2, py+30); }
+            ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
+          } else if (cell.entity.type === 'relic') {
+            if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30); }
+            ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+          } else if (cell.entity.type === 'announcement' || cell.entity.type === 'notice') {
+            const annId = cell.entity.id;
+            const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(annId);
+            if (!isClaimed) {
+              ctx.font = '24px sans-serif'; 
+              ctx.textAlign = 'center'; 
+              ctx.fillText('📜', px + TILE_SIZE / 2, py + 30);
+              ctx.fillStyle = '#facc15'; 
+              ctx.font = 'bold 10px sans-serif'; 
+              ctx.textAlign = 'center';
+              ctx.fillText(cell.entity.name || '公告', px + TILE_SIZE / 2, py + 45);
+            }
+          } else if (cell.entity.type.startsWith('res_')) {
+            const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
+            const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
+            
+            let nearLm = null; let minDist = 999;
+            epicLandmarks.forEach(lm => {
+                let d = Math.hypot(x - lm.x, y - lm.y);
+                if (d <= 10 && d < minDist) { minDist = d; nearLm = lm; }
+            });
+            
+            const seed = x * 123 + y * 456 + currentHourSeed; 
+            const isNpcOccupied = !isMine && !isEnemy && nearLm && (seed % 100 < 40); 
+
+            let resImg = null; let fallbackEmoji = '';
+            if (cell.entity.type === 'res_farm') { resImg = imgResFarm; fallbackEmoji = '🌾'; }
+            else if (cell.entity.type === 'res_lumber') { resImg = imgResLumber; fallbackEmoji = '🌲'; }
+            else if (cell.entity.type === 'res_mine') { resImg = imgResMine; fallbackEmoji = '⛏️'; }
+
+            if (resImg && resImg.complete && resImg.naturalHeight !== 0) ctx.drawImage(resImg, px + 2, py - 10, TILE_SIZE - 4, TILE_SIZE - 4);
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, px+TILE_SIZE/2, py+28); }
+
+            const resName = cell.entity.name.split(' ')[1] || '資源區';
+            ctx.textAlign='center'; ctx.fillStyle = '#fef08a'; ctx.font = '10px sans-serif'; ctx.fillText(resName, px+TILE_SIZE/2, py+42);
+            
+            if (isMine) {
+                ctx.fillStyle = '#10b981'; ctx.fillText('我方採集', px+TILE_SIZE/2, py+54);
+            } else if (isEnemy) {
+                ctx.fillStyle = '#ef4444'; ctx.fillText('敵方佔領', px+TILE_SIZE/2, py+54);
+            } else if (isNpcOccupied) {
+                ctx.fillStyle = '#f97316'; ctx.fillText(`⚠️ ${nearLm.name}駐守`, px+TILE_SIZE/2, py+54); 
+            } else {
+                ctx.fillStyle = '#38bdf8'; ctx.fillText('可佔領', px+TILE_SIZE/2, py+54);
+            }
+          }
+        } 
+      } 
+    } 
+  } 
+
+  worldBosses.forEach(boss => {
+     const isExplored = (exploredTiles[boss.x] && exploredTiles[boss.x][boss.y]) || godModeFog;
+     if ((boss.hp > 0 || boss.despawnAt > t) && isExplored) {
+        const bx = boss.x * TILE_SIZE, by = boss.y * TILE_SIZE;
+        const bounce = 0; 
+        const centerBx = bx + TILE_SIZE; 
+        
+        if (boss.hp <= 0) {
+            ctx.font = '50px sans-serif'; ctx.textAlign='center'; ctx.fillText('☠️', centerBx, by + TILE_SIZE + 10);
+            ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif'; ctx.fillText('首領遺骸', centerBx, by + TILE_SIZE + 30);
+            ctx.fillStyle = '#64748b'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center';
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 15);
+        } else {
+            let targetImg = imgBossOuter; let fallbackEmoji = '🗿';
+            if (boss.id === 'BOSS_CORE') { targetImg = imgBossCore; fallbackEmoji = '🐉'; }
+            else if (boss.id.startsWith('BOSS_MID')) { targetImg = imgBossMid; fallbackEmoji = '🦑'; }
+
+            if (targetImg.complete && targetImg.naturalHeight !== 0) {
+                ctx.drawImage(targetImg, bx, by + bounce, TILE_SIZE * 2, TILE_SIZE * 2);
+            } else {
+                ctx.font = '60px sans-serif'; ctx.textAlign='center'; ctx.fillText(fallbackEmoji, centerBx, by + TILE_SIZE + 20 + bounce);
+            }
+            
+            const barW = TILE_SIZE * 1.5;
+            const barX = bx + (TILE_SIZE * 2 - barW) / 2;
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(barX, by - 10 + bounce, barW * (boss.hp/boss.maxHp), 6);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(barX, by - 10 + bounce, barW, 6);
+            
+            ctx.fillStyle = '#facc15'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign='center';
+            ctx.fillText(boss.name, centerBx, by + TILE_SIZE * 2 + 18 + bounce);
+        }
+     }
+  });
+
+  allCastles.forEach(p => {
+    const isMe = (p.id === myUid);
+    const isExplored = exploredTiles[p.x] && exploredTiles[p.x][p.y];
+    if (!godModeFog && !isMe && !isExplored) return;
+    
+    const px = p.x*TILE_SIZE, py = p.y*TILE_SIZE;
+    if (px<camX-TILE_SIZE*2 || px>camX+vW+TILE_SIZE*2 || py<camY-TILE_SIZE*2 || py>camY+vH+TILE_SIZE*2) return;
+
+    const floatY = Math.sin(t / 250 + p.x) * 4;
+
+    if (p.shieldEndsAt && p.shieldEndsAt > Date.now()) {
+        ctx.save();
+        ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15 + Math.sin(Date.now()/150)*5; 
+        ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 35, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.25)'; ctx.fill();
+        
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.9)'; ctx.lineWidth = 3; 
+        ctx.setLineDash([8, 4]); ctx.stroke();
+        
+        ctx.shadowBlur = 0; ctx.setLineDash([]);
+        ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('🛡️', px+TILE_SIZE/2, py - 35 + floatY);
+        ctx.restore();
+    }
+    if (isMe) { 
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
+        ctx.beginPath(); ctx.ellipse(px + TILE_SIZE/2, py + TILE_SIZE - 5 + floatY, 35, 15, 0, 0, Math.PI*2); ctx.fill();
+        
+        const grd = ctx.createLinearGradient(0, py - 120, 0, py + TILE_SIZE);
+        grd.addColorStop(0, 'rgba(250, 204, 21, 0)');
+        grd.addColorStop(1, 'rgba(250, 204, 21, 0.5)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(px + TILE_SIZE/2 - 20, py - 120 + floatY, 40, 120 + TILE_SIZE/2);
+        
+        ctx.font = '35px sans-serif'; ctx.textAlign='center'; 
+        ctx.fillText('👇', px + TILE_SIZE/2, py - 30 + floatY * 2.5);
+    }
+    
+    let cLv = p.castleLevel || 1; let imgIdx = 0;
+    if (cLv >= 20) imgIdx = 6; else if (cLv >= 17) imgIdx = 5; else if (cLv >= 13) imgIdx = 4;
+    else if (cLv >= 9) imgIdx = 3; else if (cLv >= 6) imgIdx = 2; else if (cLv >= 3) imgIdx = 1;
+    
+    // 💡 VIP 特效
+    const isVip = p.vip && p.vip.isActive && p.vip.expiresAt > Date.now();
+    let currentCastleImg = castleImgs[imgIdx];
+    
+    if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+        if (isVip) {
+            ctx.save();
+            ctx.shadowColor = '#facc15'; ctx.shadowBlur = 20; 
+            ctx.filter = 'sepia(1) hue-rotate(15deg) saturate(3) brightness(1.2)';
+        }
+        ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
+        if (isVip) ctx.restore(); 
+    } else {
+        ctx.fillStyle = isVip ? '#b45309' : (isMe?'#1d4ed8':'#991b1b'); 
+        ctx.fillRect(px+12,py+16+floatY,31,26);
+        ctx.fillStyle = isVip ? '#facc15' : (isMe?'#3b82f6':'#ef4444'); 
+        ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
+    }
+
+    // 🔥 城池燃燒動態特效 🔥
+    const isBurning = p.burnEndsAt && p.burnEndsAt > Date.now();
+    if (isBurning) {
+        const time = Date.now();
+        const flicker1 = Math.sin(time / 150) * 4; 
+        const flicker2 = Math.cos(time / 200) * 3; 
+        ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('🔥', px + TILE_SIZE / 2 - 15, py + 10 + floatY + flicker1);
+        ctx.fillText('🔥', px + TILE_SIZE / 2 + 10, py - 5 + floatY + flicker2);
+        ctx.font = '16px sans-serif'; ctx.fillStyle = `rgba(0, 0, 0, ${0.5 + Math.sin(time/300)*0.2})`; 
+        ctx.fillText('☁️', px + TILE_SIZE / 2, py - 25 + floatY - (time % 1000) / 50); 
+    }
+
+    if (zoom>0.5) {
+      if (isVip) { ctx.fillStyle = '#facc15'; } 
+      else { ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); }
+      ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; ctx.textAlign='center';
+      let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
+      if (isVip) dispName = '👑 ' + dispName;
+      ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
+      ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
+    }
+    
+    ctx.textAlign='start';
+  }); 
+
+  // 🗺️ 繪製大地圖動態地標 (Epic Landmarks)
+  epicLandmarks.forEach((lm, idx) => {
+      const cycle = 15000; 
+      const phase = (t + idx * 4321) % (cycle * 2); 
+      const isReturning = phase > cycle;
+      const p = isReturning ? (1 - (phase - cycle)/cycle) : (phase / cycle);
+      
+      const periodId = Math.floor((t + idx * 4321) / (cycle * 2));
+      const r1 = Math.sin(periodId * 12.9898 + idx) * 43758.5453;
+      const angle = (r1 - Math.floor(r1)) * Math.PI * 2;
+      const dist = 3 + ((r1 * 7) - Math.floor(r1 * 7)) * 4;
+      
+      const tgX = lm.x + Math.cos(angle) * dist;
+      const tgY = lm.y + Math.sin(angle) * dist;
+      
+      const sX = lm.x*TILE_SIZE + TILE_SIZE/2, sY = lm.y*TILE_SIZE + TILE_SIZE/2;
+      const eX = tgX*TILE_SIZE + TILE_SIZE/2, eY = tgY*TILE_SIZE + TILE_SIZE/2;
+      const cX = sX + (eX - sX) * p, cY = sY + (eY - sY) * p;
+
+      if (cX > camX-TILE_SIZE && cX < camX+vW+TILE_SIZE && cY > camY-TILE_SIZE && cY < camY+vH+TILE_SIZE) {
+          ctx.beginPath(); ctx.setLineDash([4,4]); ctx.moveTo(sX, sY); ctx.lineTo(eX, eY);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.setLineDash([]);
+          
+          ctx.fillStyle = lm.c; ctx.beginPath(); ctx.arc(cX, cY, 6, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; 
+          ctx.fillText(isReturning ? '📦' : '⛏️', cX, cY+3);
+      }
+  });
+
+  // 🏹 繪製大地圖全新動態行軍軌跡與採集狀態
+  if (myData && myData.marches && myData.marches.length > 0) {
+    myData.marches.forEach(m => {
+      if (m.type === 'gathering') {
+        const cX = m.targetX * TILE_SIZE + TILE_SIZE / 2;
+        const cY = m.targetY * TILE_SIZE + TILE_SIZE / 2;
+        ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⛏', cX, cY + 4);
+        const left = Math.ceil((m.finishesAt - t) / 1000);
+        if (left > 0) {
+          ctx.fillStyle = '#facc15'; ctx.font = 'bold 13px sans-serif'; ctx.fillText(formatTime(left), cX, cY - 20);
+        }
+        ctx.textAlign = 'start';
+      } 
+    });
+    const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
+    drawMarchLines(ctx, movingMarches, TILE_SIZE);
+  }
+    
+  ctx.restore();
+}
 
 window.zoomMapBtn = (factor) => {
+
   const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
   if (nZ !== zoom) {
     const cx = canvas.width / 2, cy = canvas.height / 2;
