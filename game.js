@@ -303,6 +303,8 @@ function sanitizeData() {
   if (isNaN(myData.shieldEndsAt) || myData.shieldEndsAt === null) myData.shieldEndsAt = 0;
   if (isNaN(myData.lastRelocateTime) || myData.lastRelocateTime === null) myData.lastRelocateTime = 0;
   if (typeof myData.isBanned !== 'boolean') myData.isBanned = false;
+  if (!Array.isArray(myData.dynamicNPCs)) myData.dynamicNPCs = [];
+  if (typeof window.applyDynamicNPCs === 'function') window.applyDynamicNPCs();
 }
 
 function runAntiCheat() {
@@ -952,7 +954,7 @@ async function localTick() {
     const parts = poi.split(',');
     if (parts.length >= 4) {
       const cTime = parseInt(parts[2]);
-      if (now - cTime > 15 * 60 * 1000) continue; 
+      if (now - cTime > 3 * 24 * 60 * 60 * 1000) continue; // 延長原地點復活時間為 3 天 
     }
     newCleared.push(poi);
   }
@@ -1304,6 +1306,18 @@ async function resolveInteractNPC(m) {
     }
   }
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
+  if (myData.clearedPOI.length > 500) myData.clearedPOI.shift(); // 避免陣列無限膨脹，最多記錄500個墳墓
+  
+  // 清除舊的動態 NPC 記錄
+  if (!myData.dynamicNPCs) myData.dynamicNPCs = [];
+  const dIdx = myData.dynamicNPCs.findIndex(dn => dn.x === m.targetX && dn.y === m.targetY);
+  if (dIdx !== -1) myData.dynamicNPCs.splice(dIdx, 1);
+
+  // 在旁邊隨機生成新的野怪 (排除主城與大型要塞，只針對一般野怪)
+  if (['barbarian', 'npc_outpost', 'relic'].includes(m.entity.type)) {
+      if (typeof window.spawnDynamicNPC === 'function') window.spawnDynamicNPC(m.targetX, m.targetY, m.entity);
+  }
+
   if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
   return res;
 }
@@ -2807,4 +2821,41 @@ window.recallMarch = async (marchId) => {
         window.renderMarchHUD();
         window.renderSelf();
     }
+};
+// ==========================================
+// 🌟 野外 NPC 動態重生系統 (打死後隨機換位置)
+// ==========================================
+window.spawnDynamicNPC = function(oldX, oldY, entity) {
+    if (!myData.dynamicNPCs) myData.dynamicNPCs = [];
+    let tries = 0; let nx = oldX, ny = oldY;
+    while (tries < 50) {
+        // 在 4~12 格的距離內隨機找新地點
+        let dist = 4 + Math.floor(Math.random() * 9); 
+        let angle = Math.random() * Math.PI * 2;
+        nx = Math.floor(oldX + Math.cos(angle) * dist);
+        ny = Math.floor(oldY + Math.sin(angle) * dist);
+        
+        if (nx > 2 && nx < WORLD_COLS-2 && ny > 2 && ny < WORLD_ROWS-2) {
+            const cell = MAP_CACHE[nx] && MAP_CACHE[nx][ny];
+            // 確保新地點是空地、不是水域、沒有城堡、沒有現存實體、也沒有燃燒的墳墓
+            if (cell && cell.type !== 'water' && !cell.entity && !allCastles.some(c=>c.x===nx&&c.y===ny) && !getClearedPOI(nx, ny)) {
+                break;
+            }
+        }
+        tries++;
+    }
+    if (tries < 50) {
+        // 將新 NPC 寫入動態資料庫與地圖快取
+        myData.dynamicNPCs.push({ x: nx, y: ny, entity: entity });
+        if (MAP_CACHE[nx] && MAP_CACHE[nx][ny]) MAP_CACHE[nx][ny].entity = entity;
+    }
+};
+
+window.applyDynamicNPCs = function() {
+    if (!myData || !myData.dynamicNPCs) return;
+    myData.dynamicNPCs.forEach(d => {
+        if (MAP_CACHE[d.x] && MAP_CACHE[d.x][d.y]) {
+            MAP_CACHE[d.x][d.y].entity = d.entity;
+        }
+    });
 };
