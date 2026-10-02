@@ -111,6 +111,58 @@ function getUpgradeCost(key, level, isTech=false) {
     return { w: Math.floor((base.baseW || 100) * m), i: Math.floor((base.baseI || 80) * m), f: base.baseF ? Math.floor(base.baseF * m) : 0 }; 
 }
 
+function getTechEffectText(techKey, curLevel) {
+  const lv = curLevel || 0;
+  if (techKey === 'march_speed') return `行軍速度：+${lv * 8}\%${lv > 0 ? `(下級: +${(lv + 1) * 8}%)` : ''}`;
+  if (techKey === 'troop_load') return `部隊負重：+${lv * 15}\%${lv > 0 ? `(下級: +${(lv + 1) * 15}%)` : ''}`;
+  if (techKey === 'hospital_cap') return `傷兵上限：+${(lv * 3000).toLocaleString()}${lv > 0 ? `(下級: +${((lv + 1) * 3000).toLocaleString()})` : ''}`;
+  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return `部隊戰力：+${lv}${lv > 0 ? `(下級: +${lv + 1})` : ''}`;
+  return '';
+}
+
+window.openAcademyModal = function() {
+  if (!myData) return;
+  const modal = document.getElementById('academy-modal');
+  const list = document.getElementById('academy-tech-list');
+  if (!modal || !list) return;
+
+  const isResearching = myData.researchQueue && myData.researchQueue.finishesAt > Date.now();
+  let html = '';
+
+  Object.keys(CFG.techs).forEach(k => {
+    const t = CFG.techs[k];
+    const curLv = (myData.research && myData.research[k]) || 0;
+    const cost = getUpgradeCost(k, curLv, true);
+    const timeSec = getUpgradeTime(k, curLv, true);
+    const effectText = getTechEffectText(k, curLv);
+    const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
+    const canUpgrade = !isResearching && hasRes;
+
+    html += `
+      <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex: 1; margin-right: 12px;">
+          <div style="font-weight: bold; font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+            <span>${t.icon \vert{}\vert{} '🔬'}</span><span>${t.name}</span>
+            <span style="font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 4px;">Lv.${curLv}</span>
+          </div>
+          <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">${t.desc}</div>
+          <div style="color: #34d399; font-size: 12px; font-weight: bold; margin-top: 4px;">✨ 當前效果: ${effectText}</div>
+          <div style="color: #cbd5e1; font-size: 11px; margin-top: 6px; display: flex; gap: 8px;">
+            <span>🪵 木材: ${formatCompact(cost.w)}</span><span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>${cost.f ? `<span>🌾 糧草: ${formatCompact(cost.f)}</span>` : ''}<span>⏱️️ 耗時: ${formatTime(timeSec)}</span>
+          </div>
+        </div>
+        <div>
+          <button onclick="startResearch('${k}')" ${canUpgrade ? '' : 'disabled'} 
+            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'}; background: ${canUpgrade ? '#3b82f6' : '#475569'}; color: ${canUpgrade ? '#ffffff' : '#94a3b8'};">
+            ${isResearching && myData.researchQueue.target === k ? '研發中' : '研發'}
+          </button>
+        </div>
+      </div>`;
+  });
+  list.innerHTML = html;
+  modal.style.display = 'block';
+};
+
 function getUpgradeTime(key, level, isTech=false) { 
     const baseCfg = isTech ? CFG.techs[key] : CFG.buildings[key]; 
     if(!baseCfg) return 60;
@@ -262,6 +314,7 @@ function runAntiCheat() {
     }
     return false;
 }
+
 function getClearedPOI(x, y) {
   if (!myData || !myData.clearedPOI) return null;
   const found = myData.clearedPOI.find(poi => poi === `${x},${y}` || poi.startsWith(`${x},${y},`));
@@ -271,7 +324,7 @@ function getClearedPOI(x, y) {
 async function spawnWorldBoss(id) {
   let bx, by, n, hp, m;
   if (id === 'BOSS_CORE') { bx = 28; by = 135; n = '🌋 熔岩滅世魔龍'; hp = 500000; m = 20; } 
-  else if (id === 'BOSS_MID_1') { bx = 55; by = 120; n = '🌪️ 深海漩渦巨妖'; hp = 150000; m = 8; } 
+  else if (id === 'BOSS_MID_1') { bx = 55; by = 120; n = '🌪️️ 深海漩渦巨妖'; hp = 150000; m = 8; } 
   else if (id === 'BOSS_MID_2') { bx = 45; by = 35; n = '❄️ 凜冬風暴巨鷹'; hp = 150000; m = 8; } 
   else if (id === 'BOSS_MID_3') { bx = 160; by = 45; n = '🩸 猩紅樹魔'; hp = 150000; m = 8; } 
   else if (id === 'BOSS_MID_4') { bx = 160; by = 145; n = '🌑 腐化岩魔'; hp = 150000; m = 8; } 
@@ -420,8 +473,7 @@ onAuthStateChanged(auth, async (user) => {
     });
 
     await window.refreshMap();
-    setInterval(localTick, 1000); 
-    setInterval(window.refreshMap, 60000);
+    setInterval(localTick, 1000); requestAnimationFrame(renderLoop); setInterval(window.refreshMap, 60000);
   } else {
     document.getElementById("login-panel").style.display = "flex"; myUid = null; myData = null; isAdmin = false; document.getElementById('btn-tab-gm').style.display = 'none';
   }
@@ -451,7 +503,7 @@ window.renderAnnouncement = () => {
     if(a.iron) rStr.push(`⛏️${formatCompact(a.iron)}`);
     if(a.food) rStr.push(`🌾${formatCompact(a.food)}`); 
     if(a.speed) rStr.push(`⚡1hx${a.speed}`);
-    if(a.shield) rStr.push(`🛡️️x${a.shield}`); 
+    if(a.shield) rStr.push(`🛡x${a.shield}`); 
     
     let btnHtml = '';
     if (rStr.length > 0) {
@@ -751,7 +803,9 @@ function renderGMPlayers() {
 }
 
 window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
-
+// ==========================================
+// 💡 遊戲主心跳 (行軍、採集、升級結算與離線報告)
+// ==========================================
 async function localTick() {
   if (!myData || myData.isBanned) return;
   sanitizeData(); 
@@ -784,7 +838,7 @@ async function localTick() {
       if (m.type === 'attack_player' && now >= m.finishesAt) {
           const tC = allCastles.find(c => (c.id === m.targetUid || c.id === m.id));
           if (tC && tC.shieldEndsAt && tC.shieldEndsAt > now) {
-              myData.logs.unshift(`🛡️ [戰報] 目標【${tC.name}】已開啟護盾，部隊無法攻擊，自動折返！`);
+              myData.logs.unshift(`🛡️️ [戰報] 目標【${tC.name}】已開啟護盾，部隊無法攻擊，自動折返！`);
               m.type = 'return'; m.startX = m.targetX; m.startY = m.targetY;
               m.targetX = myData.x; m.targetY = myData.y; m.startTime = now;
               marchesChanged = true;
@@ -1199,7 +1253,7 @@ async function resolveInteractNPC(m) {
             res.loot[k] = amt; currentLoad += amt;
         });
 
-        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠️陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
+        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠️️陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
         if(myData.quests) myData.quests.daily.kills++;
 
         let factionName = m.entity.faction;
@@ -1266,7 +1320,10 @@ async function resolveAttackPlayer_NEW(m) {
         transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！城池正在燃燒！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
         
         const burnTime = Date.now() + (30 * 60 * 1000); 
-        transaction.set(tPubRef, { troops: 0, burnEndsAt: burnTime }, { merge: true });
+        transaction.set(tPubRef, { 
+            troops: 0, 
+            burnEndsAt: burnTime 
+        }, { merge: true });
         
         res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
         if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n敵軍城池已陷入火海！🔥\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
@@ -1281,6 +1338,7 @@ async function resolveAttackPlayer_NEW(m) {
   } catch (err) { res.survived = true; }
   return res;
 }
+
 function renderLoop() {
   if (document.getElementById('tab-world').classList.contains('active')) drawWorldMap();
   requestAnimationFrame(renderLoop);
@@ -1473,7 +1531,7 @@ function drawWorldMap() {
             ctx.fillStyle = '#f87171'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText('野蠻人', px+TILE_SIZE/2, py+50);
           } else if (cell.entity.type === 'relic') {
             if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
-            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️️', px+TILE_SIZE/2, py+30); }
+            else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛', px+TILE_SIZE/2, py+30); }
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
           } else if (cell.entity.type === 'announcement' || cell.entity.type === 'notice') {
             const annId = cell.entity.id;
@@ -1575,8 +1633,10 @@ function drawWorldMap() {
         ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15 + Math.sin(Date.now()/150)*5; 
         ctx.beginPath(); ctx.arc(px+TILE_SIZE/2, py+TILE_SIZE/2 + floatY, 35, 0, Math.PI*2);
         ctx.fillStyle = 'rgba(6, 182, 212, 0.25)'; ctx.fill();
+        
         ctx.strokeStyle = 'rgba(34, 211, 238, 0.9)'; ctx.lineWidth = 3; 
         ctx.setLineDash([8, 4]); ctx.stroke();
+        
         ctx.shadowBlur = 0; ctx.setLineDash([]);
         ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('🛡️', px+TILE_SIZE/2, py - 35 + floatY);
@@ -1585,11 +1645,13 @@ function drawWorldMap() {
     if (isMe) { 
         ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
         ctx.beginPath(); ctx.ellipse(px + TILE_SIZE/2, py + TILE_SIZE - 5 + floatY, 35, 15, 0, 0, Math.PI*2); ctx.fill();
+        
         const grd = ctx.createLinearGradient(0, py - 120, 0, py + TILE_SIZE);
         grd.addColorStop(0, 'rgba(250, 204, 21, 0)');
         grd.addColorStop(1, 'rgba(250, 204, 21, 0.5)');
         ctx.fillStyle = grd;
         ctx.fillRect(px + TILE_SIZE/2 - 20, py - 120 + floatY, 40, 120 + TILE_SIZE/2);
+        
         ctx.font = '35px sans-serif'; ctx.textAlign='center'; 
         ctx.fillText('👇', px + TILE_SIZE/2, py - 30 + floatY * 2.5);
     }
@@ -1688,7 +1750,6 @@ function drawWorldMap() {
     
   ctx.restore();
 }
-
 window.zoomMapBtn = (factor) => {
   const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
   if (nZ !== zoom) {
@@ -2125,19 +2186,15 @@ window.renderSelf = function() {
           const bLvl = myData.buildings.barracks || 1;
           tContainer.innerHTML = Object.keys(CFG.troops).map(key => {
               const d = CFG.troops[key];
-              
               if (bLvl < d.reqLvl) {
                   return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">需 兵營 Lv.${d.reqLvl}</div></div><div style="width:100px;text-align:right"><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div></div>`;
               }
-              
               const buff = myData.research[`${key}_atk`] || 0;
               const isTraining = myData.trainQueue && myData.trainQueue.type === key;
-              
               const trainCount = bLvl * 5; 
               const totalTime = d.time * trainCount;
               
               let btnHtml = ''; let progressHtml = '';
-              
               if (isTraining) {
                   const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
                   const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
@@ -2146,7 +2203,6 @@ window.renderSelf = function() {
               } else {
                   btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
               }
-
               return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.w * trainCount)} ⛏️${formatCompact(d.i * trainCount)} 🌾${formatCompact(d.f * trainCount)}`, progressHtml, btnHtml);
           }).join('');
       }
@@ -2161,9 +2217,7 @@ window.useResourceCard = async () => {
     if (!myData || myData.items.resourceCard <= 0) return alert("背包中沒有足夠的軍用物資卡！");
     myData.items.resourceCard--;
     const gain = 100000; 
-    myData.wood += gain;
-    myData.iron += gain;
-    myData.food += gain;
+    myData.wood += gain; myData.iron += gain; myData.food += gain;
     myData.logs.unshift(`[後勤補給] 成功開啟物資卡，獲得各項資源 ${formatCompact(gain)}！`);
     await savePrivateData();
     alert(`📦 開啟成功！\n獲得 木材/鐵礦/糧草 各 ${formatCompact(gain)}`);
@@ -2223,10 +2277,7 @@ window.confirmRename = async () => {
 };
 
 window.locateHome = () => { 
-  if (myData) { 
-      window.switchTab('world'); 
-      setTimeout(() => { centerCameraOn(myData.x, myData.y); }, 60); 
-  }
+  if (myData) { window.switchTab('world'); setTimeout(() => { centerCameraOn(myData.x, myData.y); }, 60); }
 };
 
 window.upgradeBuilding = async (key) => {
@@ -2258,93 +2309,194 @@ window.trainTroopType = async (typeKey) => {
   const req = CFG.troops[typeKey];
   const bLvl = myData.buildings.barracks || 1;
   const trainCount = bLvl * 5;
-  
-  const costW = req.w * trainCount;
-  const costI = req.i * trainCount;
-  const costF = req.f * trainCount;
+  const costW = req.w * trainCount; const costI = req.i * trainCount; const costF = req.f * trainCount;
 
   if (bLvl < req.reqLvl) return alert('兵營等級不足！');
   if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
   
   myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
   myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
-  await savePrivateData(); 
-  window.renderSelf();
+  await savePrivateData(); window.renderSelf();
 };
 
-window.createAlliance = async () => {
-    const name = document.getElementById('alliance-name-input').value.trim();
-    if(name.length < 2 || name.length > 10) return alert("聯盟名稱需為 2~10 字元！");
-    myData.allianceName = name; await savePrivateData();
-    try { await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true }); } catch(e){}
-    window.renderAllianceUI(); alert(`✅ 成功創建聯盟【${name}】！`); window.refreshMap();
+window.renderSideMenu = function() {
+    if (document.getElementById('side-menu-hud')) return;
+    const div = document.createElement('div'); div.id = 'side-menu-hud';
+    div.style.cssText = 'position:fixed; left:10px; top:80px; z-index:9990; display:flex; flex-direction:column; gap:10px;';
+    div.innerHTML = `
+        <button id="btn-float-hospital" onclick="window.openHospitalModal()" style="background:#1e293b; border:1px solid #ef4444; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🏥 醫療所</button>
+        <button id="btn-float-report" onclick="window.openReportModal()" style="background:#1e293b; border:1px solid #3b82f6; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">📬 戰報</button>
+        <button id="btn-float-quest" onclick="window.openQuestModal()" style="background:#1e293b; border:1px solid #10b981; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🎯 任務</button>
+    `;
+    document.body.appendChild(div);
 };
 
-window.joinAlliance = async (targetName = null) => {
-    const name = targetName || document.getElementById('alliance-name-input').value.trim();
-    if(!name || name.length < 2) return alert("請輸入或選擇有效的聯盟名稱！");
-    myData.allianceName = name; await savePrivateData();
-    try { await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true }); } catch(e){}
-    window.renderAllianceUI(); alert(`✅ 成功加入聯盟【${name}】！`); window.refreshMap();
+window.addReport = function(title, text, isWin = true) {
+    if (!myData) return;
+    if (!myData.reports) myData.reports = [];
+    myData.reports.unshift({ id: 'RPT_'+Date.now(), title, text, isWin, time: Date.now() });
+    if (myData.reports.length > 30) myData.reports.pop();
+    const btn = document.getElementById('btn-float-report');
+    if (btn) btn.innerHTML = '📬 戰報 <span style="background:red; color:white; border-radius:50%; padding:2px 6px; font-size:10px;">新</span>';
 };
 
-window.leaveAlliance = async () => {
-    if(!confirm("確定要退出目前聯盟嗎？")) return;
-    myData.allianceName = null; await savePrivateData();
-    try { await setDoc(doc(db, "world_map", myUid), { allianceName: null }, { merge: true }); } catch(e){}
-    window.renderAllianceUI(); alert("已退出聯盟。"); window.refreshMap();
+window.openReportModal = () => {
+    let modal = document.getElementById('report-modal');
+    if (!modal) {
+        modal = document.createElement('div'); modal.id = 'report-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+    
+    let rHtml = (myData.reports || []).map(r => `
+        <div style="background:#0f172a; border-left:4px solid ${r.isWin ? '#10b981' : '#ef4444'}; padding:10px; margin-bottom:10px; border-radius:4px;">
+            <div style="font-weight:bold; color:${r.isWin ? '#10b981' : '#ef4444'};">${r.title}</div>
+            <div style="font-size:0.75rem; color:#94a3b8; margin:4px 0;">${new Date(r.time).toLocaleString()}</div>
+            <div style="font-size:0.85rem; white-space:pre-wrap; color:#cbd5e1; line-height:1.4;">${r.text}</div>
+        </div>
+    `).join('');
+    if (!rHtml) rHtml = '<p style="text-align:center; color:#94a3b8;">暫無戰報</p>';
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #3b82f6; border-radius:10px; width:320px; max-height:80vh; display:flex; flex-direction:column; color:white;">
+        <h2 style="color:#38bdf8; margin:20px 20px 10px 20px;">📬 軍事戰報</h2>
+        <div style="padding:0 20px; overflow-y:auto; flex:1;">${rHtml}</div>
+        <div style="padding:20px;">
+            <button onclick="document.getElementById('report-modal').style.display='none'; document.getElementById('btn-float-report').innerHTML='📬 戰報';" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; cursor:pointer;">關閉</button>
+        </div>
+    </div>`;
+    modal.style.display = 'flex';
 };
 
-window.renderAllianceUI = () => {
-    const createBox = document.getElementById('alliance-create-box');
-    const mainBox = document.getElementById('alliance-main-box');
-    if(!createBox || !mainBox) return;
+window.openQuestModal = () => {
+    let modal = document.getElementById('quest-modal');
+    if (!modal) {
+        modal = document.createElement('div'); modal.id = 'quest-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+    
+    if (!myData.quests) return;
+    const q = myData.quests.daily; const c = myData.quests.claimed;
+    const q1Done = q.kills >= 3; const q1Claimed = c.includes('q1');
+    const q2Done = q.upgrades >= 2; const q2Claimed = c.includes('q2');
+    const q3Done = q.gather_wood >= 10000; const q3Claimed = c.includes('q3');
 
-    if (myData && myData.allianceName) {
-        createBox.style.display = 'none'; mainBox.style.display = 'block';
-        document.getElementById('my-alliance-title').innerText = `🛡️ 聯盟：[${myData.allianceName}]`;
-        document.getElementById('my-alliance-leader').innerText = "共享勢力";
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #10b981; border-radius:10px; width:300px; padding:20px; color:white;">
+        <h2 style="color:#10b981; margin-top:0;">🎯 每日任務</h2>
         
-        const allies = allCastles.filter(c => c.allianceName === myData.allianceName);
-        let membersHtml = `<div style="background:#0a0f1d; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#10b981;">👤 ${myData.name} (自己)</div>`;
-        allies.forEach(a => {
-            membersHtml += `<div style="background:#1e293b; padding:6px 10px; border-radius:4px; font-size:0.85rem; color:#cbd5e1; display:flex; justify-content:space-between; margin-top:4px;">
-                <span>👤 ${a.name} (Lv.${a.castleLevel||1})</span>
-                <button onclick="window.locatePlayer(${a.x}, ${a.y})" style="background:#2563eb; padding:2px 8px; border-radius:4px; font-size:0.7rem;">📍 尋找</button>
-            </div>`;
-        });
-        document.getElementById('alliance-members-list').innerHTML = membersHtml;
-    } else {
-        createBox.style.display = 'block'; mainBox.style.display = 'none';
+        <div style="margin-bottom:10px; background:#0f172a; padding:10px; border-radius:6px; border-left: 4px solid #38bdf8;">
+            <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">⚔️ 擊殺野怪/敵軍 (${q.kills}/3)</div>
+            <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：⚡5分加速 x 3</div>
+            ${q1Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
+              (q1Done ? '<button onclick="window.claimQuest(\'q1\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+        </div>
         
-        const allianceCounts = {};
-        allCastles.forEach(c => {
-            if (c.allianceName) {
-                allianceCounts[c.allianceName] = (allianceCounts[c.allianceName] || 0) + 1;
-            }
-        });
+        <div style="margin-bottom:10px; background:#0f172a; padding:10px; border-radius:6px; border-left: 4px solid #38bdf8;">
+            <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">🏗️ 升級任意建築 (${q.upgrades}/2)</div>
+            <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：⚡1小時加速 x 1</div>
+            ${q2Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
+              (q2Done ? '<button onclick="window.claimQuest(\'q2\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+        </div>
         
-        const pubList = document.getElementById('public-alliances-list');
-        if (pubList) {
-            const sortedAlliances = Object.keys(allianceCounts).sort((a,b) => allianceCounts[b] - allianceCounts[a]);
-            if (sortedAlliances.length === 0) {
-                pubList.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center; padding:10px;">伺服器尚無任何聯盟，趕快創立第一個吧！</p>';
-            } else {
-                let listHtml = '';
-                sortedAlliances.forEach(aName => {
-                    listHtml += `
-                        <div style="background:#1e293b; padding:8px 12px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; border: 1px solid #334155;">
-                            <div>
-                                <div style="color:#38bdf8; font-weight:bold; font-size:0.95rem;">[${aName}]</div>
-                                <div style="color:#94a3b8; font-size:0.75rem; margin-top:2px;">👥 成員數: ${allianceCounts[aName]} 人</div>
-                            </div>
-                            <button onclick="window.joinAlliance('${aName}')" style="background:#10b981; padding:6px 12px; font-size:0.85rem; font-weight:bold; border-radius:4px; cursor:pointer;">加入</button>
-                        </div>
-                    `;
-                });
-                pubList.innerHTML = listHtml;
-            }
-        }
+        <div style="margin-bottom:10px; background:#0f172a; padding:10px; border-radius:6px; border-left: 4px solid #38bdf8;">
+            <div style="font-weight:bold; color:#38bdf8; font-size:1.05rem;">🌲 採集木材 (${formatCompact(q.gather_wood)} / 10K)</div>
+            <div style="font-size:0.85rem; color:#facc15; margin:6px 0;">🎁 獎勵：📦 軍用物資卡 x 1</div>
+            ${q3Claimed ? '<button disabled style="background:#475569; width:100%; border-radius:4px; padding:6px; border:none; color:#cbd5e1; font-weight:bold;">✅ 已領取</button>' : 
+              (q3Done ? '<button onclick="window.claimQuest(\'q3\')" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:6px; cursor:pointer; border:none; color:white;">領取獎勵</button>' : '<button disabled style="background:#334155; color:#94a3b8; width:100%; border-radius:4px; padding:6px; border:none; font-weight:bold;">未完成</button>')}
+        </div>
+        <button onclick="document.getElementById('quest-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+window.claimQuest = async (qid) => {
+    if (!myData || !myData.quests) return;
+    const q = myData.quests.daily;
+    if (myData.quests.claimed.includes(qid)) return alert("⚠️ 系統警告：此獎勵已經領取過了，無法重複領取！");
+    if (qid === 'q1' && q.kills < 3) return alert("⚠️ 非法操作：擊殺任務未達標！");
+    if (qid === 'q2' && q.upgrades < 2) return alert("⚠️ 非法操作：升級任務未達標！");
+    if (qid === 'q3' && q.gather_wood < 10000) return alert("⚠️ 非法操作：採集任務未達標！");
+
+    myData.quests.claimed.push(qid);
+    if (qid === 'q1') myData.items.speedup5m += 3;
+    if (qid === 'q2') myData.items.speedup1h += 1;
+    if (qid === 'q3') myData.items.resourceCard += 1;
+    
+    myData.logs.unshift(`[任務] 成功領取每日任務獎勵！`);
+    await savePrivateData(); window.openQuestModal(); try{ window.renderSelf(); }catch(e){}
+};
+
+window.addWounded = function(wInf, wArc, wCav) {
+    const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
+    let curHosp = (myData.wounded.infantry||0) + (myData.wounded.archer||0) + (myData.wounded.cavalry||0);
+    let overflow = 0; 
+
+    let addTroop = (type, amount) => {
+        let space = Math.max(0, maxHosp - curHosp);
+        let toAdd = Math.min(amount, space);
+        myData.wounded[type] = (myData.wounded[type] || 0) + toAdd;
+        curHosp += toAdd; overflow += (amount - toAdd); 
+    };
+    addTroop('infantry', wInf); addTroop('archer', wArc); addTroop('cavalry', wCav);
+    return overflow; 
+};
+
+window.getLoadCapacity = function(troops) {
+    let baseLoad = (troops.infantry||0)*10 + (troops.archer||0)*5 + (troops.cavalry||0)*8;
+    let loadTechLv = (myData.research && myData.research.troop_load) || 0;
+    return Math.floor(baseLoad * (1 + loadTechLv * 0.15));
+};
+
+window.openHospitalModal = () => {
+    let modal = document.getElementById('hospital-modal');
+    if (!modal) {
+        modal = document.createElement('div'); modal.id = 'hospital-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+    
+    if (!myData.wounded) myData.wounded = {infantry:0, archer:0, cavalry:0};
+    let w = myData.wounded;
+    let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
+    const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
+    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
+
+    let costWood = totalW * 10; let costFood = totalW * 15;
+    let canHeal = totalW > 0 && myData.wood >= costWood && myData.food >= costFood;
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #ef4444; border-radius:10px; width:300px; padding:20px; color:white;">
+        <h2 style="color:#ef4444; margin-top:0;">🏥 醫療所</h2>
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
+            <div style="color:#94a3b8; font-size:0.85rem;">傷兵收容：${totalW} / ${maxHosp}</div>
+            <div style="margin-top:10px; color:#fca5a5;">🛡️ 重傷步兵：${w.infantry||0}</div>
+            <div style="color:#fca5a5;">🏹 重傷弓兵：${w.archer||0}</div>
+            <div style="color:#fca5a5;">🐎 重傷騎兵：${w.cavalry||0}</div>
+        </div>
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
+            <div style="font-weight:bold; color:#fbbf24;">治療所需物資：</div>
+            <div>🌲 木材：${formatCompact(costWood)} ${myData.wood < costWood ? '❌' : '✅'}</div>
+            <div>🌾 糧食：${formatCompact(costFood)} ${myData.food < costFood ? '❌' : '✅'}</div>
+        </div>
+        ${canHeal ? '<button onclick="window.healAllWounded()" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:10px; cursor:pointer; border:none; color:white;">✨ 立即治療全部傷兵</button>' : '<button disabled style="background:#475569; width:100%; font-weight:bold; border-radius:4px; padding:10px; border:none; color:#94a3b8;">物資不足或無傷兵</button>'}
+        <button onclick="document.getElementById('hospital-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+window.healAllWounded = async () => {
+    let w = myData.wounded;
+    let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
+    let costWood = totalW * 10; let costFood = totalW * 15;
+    if (myData.wood >= costWood && myData.food >= costFood) {
+        myData.wood -= costWood; myData.food -= costFood;
+        myData.troops.infantry += w.infantry; myData.troops.archer += w.archer; myData.troops.cavalry += w.cavalry;
+        myData.wounded = {infantry:0, archer:0, cavalry:0};
+        myData.logs.unshift(`[醫療] 成功治癒了 ${totalW} 名重傷士兵，部隊已歸隊！`);
+        await savePrivateData(); window.openHospitalModal(); try { window.renderSelf(); } catch(e){}
     }
 };
 
@@ -2419,4 +2571,3 @@ window.claimVipReward = async function() {
     window.openVipModal();
     if (typeof window.renderSelf === 'function') window.renderSelf();
 };
-
