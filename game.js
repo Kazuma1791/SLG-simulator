@@ -1001,16 +1001,30 @@ function renderGMPlayers() {
   if(!isAdmin) return;
   const container = document.getElementById('gm-players-container');
   if (!container) return;
+  
   const sorted = [...allCastles].filter(p => p.id !== myUid).sort((a,b) => (b.castleLevel||1) - (a.castleLevel||1));
+  
   container.innerHTML = sorted.map(p => {
      const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
+     // 💡 新增：檢查該玩家是否擁有有效的 VIP
+     const isVip = p.vip && p.vip.isActive && p.vip.expiresAt > Date.now();
+
      return `
       <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="window.selectGMTarget('${p.id}', '${p.name}')">
           <div style="pointer-events:none;">
-              <strong style="color:#fff; font-size:0.95rem;">${p.name}</strong> <span style="color:#fbbf24; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> ${isShielded?'<span style="color:#06b6d4; font-size:0.75rem;">[🛡️]</span>':''}<br>
+              <strong style="color:#fff; font-size:0.95rem;">${p.name}</strong> 
+              <span style="color:#fbbf24; font-size:0.85rem;">(Lv.${p.castleLevel || 1})</span> 
+              ${isShielded ? '<span style="color:#06b6d4; font-size:0.75rem;">[🛡️]</span>' : ''}
+              ${isVip ? '<span style="color:#facc15; font-size:0.8rem; font-weight:bold;">[👑 VIP]</span>' : ''}<br>
               <span style="font-size:0.75rem; color:#94a3b8;">ID: ${p.id.slice(0,6)}... | 座標: (${p.x}, ${p.y})</span>
           </div>
-          <button onclick="event.stopPropagation(); window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem;">📍 尋找</button>
+          <!-- 💡 將右側改為 Flex 容器，並排放置「尋找」與「發放 VIP」按鈕 -->
+          <div style="display:flex; gap:6px;">
+              <button onclick="event.stopPropagation(); window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem; border-radius:4px; border:none; color:#fff;">📍 尋找</button>
+              
+              <!-- 呼叫我們寫好的 adminSetVIP 函數，並防止冒泡點擊 -->
+              <button onclick="event.stopPropagation(); window.adminSetVIP('${p.id}', 30)" style="background: linear-gradient(to right, #f59e0b, #eab308); color:#000; padding:6px 10px; font-size:0.8rem; font-weight:bold; border-radius:4px; border:none;">發放 VIP</button>
+          </div>
       </div>
     `}).join('');
 }
@@ -3093,57 +3107,14 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 管理員專用：隱藏暗門與 VIP 發放模組
+// 🛠️ 寫入資料庫邏輯：發放 VIP
 // ==========================================
-
-// 1. 隱藏暗門：點擊標題後觸發
-window.secretAdminLogin = function() {
-    // 如果按鈕已經存在，就不重複執行
-    if (document.getElementById('admin-vip-btn')) {
-        return alert("管理員模式已啟動！");
-    }
-
-    // 跳出密碼輸入框
-    const pwd = prompt("請輸入 GM 管理員密碼：");
-    
-    // ⚠️ 這裡的 "1791" 就是你的專屬密碼，你可以自己改成想要的數字或英文
-    if (pwd === "1791") {
-        alert("✅ 密碼正確！管理員模式已啟動！");
-        
-        // 畫面上生成發放 VIP 的紅色按鈕
-        let btn = document.createElement('button');
-        btn.id = 'admin-vip-btn';
-        btn.innerHTML = '🛠️ 發放 VIP';
-        btn.style.cssText = 'position: fixed; bottom: 15px; right: 15px; z-index: 9999; background: #ef4444; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);';
-        btn.onclick = window.promptAdminVip; // 點擊按鈕執行發放
-        document.body.appendChild(btn);
-        
-        // 順便把 VIP 彈窗關掉
-        document.getElementById('vip-modal').style.display = 'none';
-    } else if (pwd !== null) {
-        alert("❌ 密碼錯誤！");
-    }
-};
-
-// 2. 點擊紅色按鈕後跳出的輸入框
-window.promptAdminVip = function() {
-    const targetUid = prompt("👑 請輸入已付款玩家的【ID】：\n（預設為開通 30 天）");
-    if (!targetUid || targetUid.trim() === "") return;
-
-    const confirmVip = confirm(`確定要為玩家「${targetUid}」開通 30 天 VIP 嗎？`);
-    if (confirmVip) {
-        window.adminSetVIP(targetUid.trim(), 30);
-    }
-};
-
-// 3. 寫入資料庫邏輯 (修正為標準 Firebase Realtime Database 寫法)
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
     try {
         let dbRef;
-        
-        // 自動偵測你遊戲中實際使用的 Firebase 連線變數
+        // 自動偵測 Firebase 連線變數
         if (typeof firebase !== 'undefined' && firebase.database) {
             dbRef = firebase.database().ref(`users/${targetUid}/vip`);
         } else if (typeof database !== 'undefined' && database.ref) {
@@ -3151,7 +3122,7 @@ window.adminSetVIP = async function(targetUid, days = 30) {
         } else if (typeof db !== 'undefined' && db.ref) {
             dbRef = db.ref(`users/${targetUid}/vip`);
         } else {
-            alert("❌ 仍然找不到資料庫連線！請截圖或告訴我你儲存資料的寫法。");
+            alert("❌ 找不到資料庫連線！");
             return;
         }
 
@@ -3164,7 +3135,10 @@ window.adminSetVIP = async function(targetUid, days = 30) {
         
         alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請該玩家重新整理網頁即可生效。`);
         
+        // 如果 GM 面板開著，順便刷新一下畫面讓他顯示 [👑 VIP]
+        if (typeof renderGMPlayers === 'function') renderGMPlayers();
+        
     } catch (e) {
-        alert(`❌ 開通失敗：${e.message}\n(請確認該玩家的 ID 是否正確存在於資料庫)`);
+        alert(`❌ 開通失敗：${e.message}`);
     }
 };
