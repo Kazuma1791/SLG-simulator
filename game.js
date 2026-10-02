@@ -2692,3 +2692,75 @@ mobileStyles.innerHTML = `
   input[type=number] { width: 80px; padding: 6px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; text-align: center; font-weight: bold; }
 `;
 document.head.appendChild(mobileStyles);
+// ==========================================
+// 🚀 動態行軍隊列顯示 (March HUD)
+// ==========================================
+window.renderMarchHUD = function() {
+    if (!myData || !myData.marches) return;
+    
+    let hud = document.getElementById('march-hud-container');
+    // 如果畫面上還沒有隊列容器，就創建一個放在右上角
+    if (!hud) {
+        hud = document.createElement('div');
+        hud.id = 'march-hud-container';
+        // 定位在右上角，寬度適中，不會擋住中間的地圖操作
+        hud.style.cssText = 'position:fixed; right:10px; top:80px; z-index:9980; display:flex; flex-direction:column; gap:8px; width:180px; pointer-events:none;';
+        document.body.appendChild(hud);
+    }
+    
+    // 如果沒有行軍部隊，就清空顯示
+    if (myData.marches.length === 0) {
+        hud.innerHTML = '';
+        return;
+    }
+
+    const now = Date.now();
+    let html = '';
+    
+    myData.marches.forEach((m) => {
+        // 計算倒數時間與進度條百分比
+        const remainSec = Math.max(0, Math.ceil((m.finishesAt - now) / 1000));
+        const totalSec = Math.ceil((m.finishesAt - m.startTime) / 1000);
+        let pct = totalSec > 0 ? Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100))) : 100;
+        
+        let actionName = '行軍中';
+        let icon = '🚀';
+        let color = '#38bdf8'; // 預設藍色
+        
+        // 根據不同任務類型，切換文字與顏色
+        if (m.type === 'gathering') {
+            actionName = '採集中'; icon = '⛏️'; color = '#10b981'; // 綠色
+        } else if (m.type === 'return') {
+            actionName = '返回中'; icon = '📦'; color = '#34d399'; // 淺綠
+        } else if (m.type === 'attack_player' || m.type === 'attack_capital' || m.type === 'attack_npc') {
+            actionName = '進攻中'; icon = '⚔️'; color = '#ef4444'; // 紅色
+        } else if (m.type === 'defend_npc' || m.type === 'counter_attack') {
+            actionName = '敵襲警戒'; icon = '🚨'; color = '#f97316'; // 橘色
+        } else if (m.type === 'relic') {
+            actionName = '遺跡探索'; icon = '🏛️'; color = '#a855f7'; // 紫色
+        } else if (m.type === 'occupy_node') {
+            actionName = '前往佔領'; icon = '🚩'; color = '#8b5cf6'; // 靛色
+        }
+
+        // 決定顯示的目標名稱（玩家名稱 > NPC名稱 > 座標）
+        let targetStr = m.targetName || m.npcName || `(${m.targetX}, ${m.targetY})`;
+
+        // 渲染成漂亮的半透明卡片與進度條
+        html += `
+        <div style="background:rgba(15, 23, 42, 0.85); border:1px solid ${color}; border-radius:6px; padding:8px 10px; color:white; pointer-events:auto; box-shadow:0 4px 6px rgba(0,0,0,0.4); backdrop-filter:blur(4px);">
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:6px;">
+                <span style="font-weight:bold; color:${color};">${icon} ${actionName}</span>
+                <span style="color:#facc15; font-family:monospace; font-weight:bold;">${formatTime(remainSec)}</span>
+            </div>
+            <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                目標: ${targetStr}
+            </div>
+            <div style="background:#334155; height:4px; border-radius:2px; overflow:hidden;">
+                <div style="background:${color}; height:100%; width:${pct}%; transition:width 1s linear;"></div>
+            </div>
+        </div>
+        `;
+    });
+    
+    hud.innerHTML = html;
+};
