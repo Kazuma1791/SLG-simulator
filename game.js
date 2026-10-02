@@ -2171,7 +2171,10 @@ window.renderSelf = function() {
                 btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">升級中 (${formatTime(remainSec)})</span>`;
                 progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
             } else {
-                btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'};" onclick="window.upgradeBuilding('${key}')" ${disabled?'disabled':''}>${isMax?'已達上限':`升級 (${formatTime(timeSec)})`}</button>`;
+                let btnBg = isMax ? '#475569' : '#2563eb';
+                let btnState = disabled ? 'disabled' : '';
+                let btnText = isMax ? '已達上限' : '升級 (' + formatTime(timeSec) + ')';
+                btnHtml = `<button class="btn-upgrade" style="background:${btnBg};" onclick="window.upgradeBuilding('${key}')" ${btnState}>${btnText}</button>`;
             }
 
             return genCard(CFG.buildings[key].name, lvl, `<span style="color:#60a5fa;">${CFG.buildings[key].desc}</span><br>升級需 ${formatTime(timeSec)}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
@@ -2198,7 +2201,10 @@ window.renderSelf = function() {
                       btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">研發中 (${formatTime(remainSec)})</span>`;
                       progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
                   } else {
-                      btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
+                      let btnBgR = isMax ? '#475569' : '#2563eb';
+                      let btnStateR = (isMax || myData.researchQueue) ? 'disabled' : '';
+                      let btnTextR = isMax ? '學院等級不足' : '研發 (' + formatTime(timeSec) + ')';
+                      btnHtml = `<button class="btn-upgrade" style="background:${btnBgR}" onclick="window.startResearch('${key}')" ${btnStateR}>${btnTextR}</button>`;
                   }
 
                   const effectText = typeof getTechEffectText === 'function' ? getTechEffectText(key, lvl) : `效果等級: ${lvl}`;
