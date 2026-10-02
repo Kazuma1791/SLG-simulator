@@ -146,27 +146,41 @@ window.openAcademyModal = function() {
     const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
     const canUpgrade = !isResearching && hasRes;
 
+    // 💡 安全寫法：先把糧草的 HTML 獨立準備好，避開複雜的括號嵌套
+    let foodHtml = "";
+    if (cost.f) {
+        foodHtml = "<span>🌾 糧草: " + formatCompact(cost.f) + "</span>";
+    }
+
+    // 💡 安全寫法：把按鈕狀態提取出來
+    let btnText = (isResearching && myData.researchQueue.target === k) ? '研發中' : '研發';
+    let btnBg = canUpgrade ? '#3b82f6' : '#475569';
+    let btnCursor = canUpgrade ? 'pointer' : 'not-allowed';
+    let btnColor = canUpgrade ? '#ffffff' : '#94a3b8';
+
     html += `
       <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
         <div style="flex: 1; margin-right: 12px;">
           <div style="font-weight: bold; font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-            <span>${t.icon \vert{}\vert{} '🔬'}</span><span>${t.name}</span>
+            <span>${t.icon || '🔬'}</span><span>${t.name}</span>
             <span style="font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 4px;">Lv.${curLv}</span>
           </div>
           <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">${t.desc}</div>
           <div style="color: #34d399; font-size: 12px; font-weight: bold; margin-top: 4px;">✨ 當前效果: ${effectText}</div>
           <div style="color: #cbd5e1; font-size: 11px; margin-top: 6px; display: flex; gap: 8px;">
-            <span>🪵 木材: ${formatCompact(cost.w)}</span><span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>${cost.f ? `<span>🌾 糧草: ${formatCompact(cost.f)}</span>` : ''}<span>⏱️️ 耗時: ${formatTime(timeSec)}</span>
+            <span>🪵 木材: ${formatCompact(cost.w)}</span><span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>
+            ${foodHtml}<span>⏱ 耗時: ${formatTime(timeSec)}</span>
           </div>
         </div>
         <div>
           <button onclick="startResearch('${k}')" ${canUpgrade ? '' : 'disabled'} 
-            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'}; background: ${canUpgrade ? '#3b82f6' : '#475569'}; color: ${canUpgrade ? '#ffffff' : '#94a3b8'};">
-            ${isResearching && myData.researchQueue.target === k ? '研發中' : '研發'}
+            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${btnCursor}; background: ${btnBg}; color: ${btnColor};">
+            ${btnText}
           </button>
         </div>
       </div>`;
   });
+
   list.innerHTML = html;
   modal.style.display = 'block';
 };
