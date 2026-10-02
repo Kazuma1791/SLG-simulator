@@ -3093,39 +3093,67 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 管理員專用：開通 VIP 功能
+// 🛠️ 管理員專用：VIP 發放與權限驗證模組
 // ==========================================
 
+const ADMIN_UID = "TK(GM)"; // 👈 ⚠️ 換成你自己的 ID，只有這個 ID 登入才會看到按鈕！
+
+// 1. 自動檢查身分，只有管理員登入時才生成按鈕
+function checkAndShowAdminButton() {
+    // 確定已經抓到玩家 ID，並且等於管理員 ID
+    if (typeof myUid !== 'undefined' && myUid === ADMIN_UID) {
+        let btn = document.getElementById('admin-vip-btn');
+        if (!btn) {
+            // 自動在畫面上生成按鈕
+            btn = document.createElement('button');
+            btn.id = 'admin-vip-btn';
+            btn.innerHTML = '🛠️ 發放 VIP';
+            btn.style.cssText = 'position: fixed; bottom: 15px; right: 15px; z-index: 9999; background: #ef4444; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);';
+            btn.onclick = window.promptAdminVip; // 綁定點擊事件
+            document.body.appendChild(btn);
+        }
+    }
+}
+// 每 2 秒檢查一次身分 (確保登入讀取資料後會自動顯示按鈕)
+setInterval(checkAndShowAdminButton, 2000);
+
+// 2. 點擊按鈕後跳出的輸入框
 window.promptAdminVip = function() {
-    // 跳出輸入框，讓管理員輸入玩家的 UID
     const targetUid = prompt("👑 請輸入已付款玩家的【ID】：\n（預設為開通 30 天）");
-    
-    // 如果管理員按了取消或沒輸入，就停止
     if (!targetUid || targetUid.trim() === "") return;
 
-    // 確認對話框
     const confirmVip = confirm(`確定要為玩家「${targetUid}」開通 30 天 VIP 嗎？`);
     if (confirmVip) {
         window.adminSetVIP(targetUid.trim(), 30);
     }
 };
 
+// 3. 寫入資料庫邏輯 (加入錯誤回報機制，不怕沒反應)
 window.adminSetVIP = async function(targetUid, days = 30) {
-    // 計算 30 天後的到期時間戳
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
     try {
-        // ⚠️️ 這裡的 database.ref 是假設你使用 Firebase
-        // 找到該玩家的資料庫節點，直接更新他的 VIP 狀態
-        await database.ref(`users/${targetUid}/vip`).update({
-            isActive: true,
-            expiresAt: expiry,
-            lastClaimed: "" // 讓玩家開通後可以馬上領取當天獎勵
-        });
+        // 嘗試寫入資料 (根據你可能的 Firebase 設定自動適配)
+        if (typeof database !== 'undefined') {
+            // Firebase Realtime Database 寫法
+            await database.ref(`users/${targetUid}/vip`).update({
+                isActive: true,
+                expiresAt: expiry,
+                lastClaimed: ""
+            });
+        } else if (typeof db !== 'undefined') {
+            // Firebase Firestore 寫法
+            await db.collection('users').doc(targetUid).set({
+                vip: { isActive: true, expiresAt: expiry, lastClaimed: "" }
+            }, { merge: true });
+        } else {
+            alert("❌ 找不到資料庫連線 (database / db)！請聯絡開發者確認 Firebase 變數名稱。");
+            return;
+        }
         
-        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
+        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請請玩家重新整理網頁即可生效。`);
     } catch (e) {
-        console.error("開通失敗：", e);
-        alert("❌ 開通失敗，請檢查資料庫連線或玩家 ID 是否正確！");
+        // 如果報錯，這次會直接彈窗告訴你原因！
+        alert(`❌ 開通失敗：${e.message}`);
     }
 };
