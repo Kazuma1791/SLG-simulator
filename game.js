@@ -3136,28 +3136,35 @@ window.promptAdminVip = function() {
     }
 };
 
-// 3. 寫入資料庫邏輯
+// 3. 寫入資料庫邏輯 (修正為標準 Firebase Realtime Database 寫法)
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
     try {
-        if (typeof database !== 'undefined') {
-            await database.ref(`users/${targetUid}/vip`).update({
-                isActive: true,
-                expiresAt: expiry,
-                lastClaimed: ""
-            });
-        } else if (typeof db !== 'undefined') {
-            await db.collection('users').doc(targetUid).set({
-                vip: { isActive: true, expiresAt: expiry, lastClaimed: "" }
-            }, { merge: true });
+        let dbRef;
+        
+        // 自動偵測你遊戲中實際使用的 Firebase 連線變數
+        if (typeof firebase !== 'undefined' && firebase.database) {
+            dbRef = firebase.database().ref(`users/${targetUid}/vip`);
+        } else if (typeof database !== 'undefined' && database.ref) {
+            dbRef = database.ref(`users/${targetUid}/vip`);
+        } else if (typeof db !== 'undefined' && db.ref) {
+            dbRef = db.ref(`users/${targetUid}/vip`);
         } else {
-            alert("❌ 找不到資料庫連線！");
+            alert("❌ 仍然找不到資料庫連線！請截圖或告訴我你儲存資料的寫法。");
             return;
         }
+
+        // 執行更新
+        await dbRef.update({
+            isActive: true,
+            expiresAt: expiry,
+            lastClaimed: ""
+        });
         
-        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
+        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請該玩家重新整理網頁即可生效。`);
+        
     } catch (e) {
-        alert(`❌ 開通失敗：${e.message}`);
+        alert(`❌ 開通失敗：${e.message}\n(請確認該玩家的 ID 是否正確存在於資料庫)`);
     }
 };
