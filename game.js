@@ -2834,9 +2834,8 @@ window.claimQuest = async (qid) => {
 // ==========================================
 window.addWounded = function(wInf, wArc, wCav) {
     const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
+    // 預設醫院容量：10,000 + (主城等級 * 5,000) + 科技加成
     let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
-    // 預設醫院容量：10,000 + (主城等級 * 5,000)
-    let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000;
     let curHosp = (myData.wounded.infantry||0) + (myData.wounded.archer||0) + (myData.wounded.cavalry||0);
     let overflow = 0; // 因醫院爆滿而陣亡的數量
 
