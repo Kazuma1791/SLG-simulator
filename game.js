@@ -126,7 +126,8 @@ function getTechEffectText(techKey, curLevel) {
   if (techKey === 'troop_load') return "部隊負重：+" + (lv * 15) + "%" + nextText;
   if (techKey === 'hospital_cap') return "傷兵上限：+" + (lv * 3000).toLocaleString() + nextText;
   if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return "部隊戰力：+" + lv + nextText;
-  return ""
+  return "";
+} // 👈 就是漏了這個右括號！！！
 
 window.openAcademyModal = function() {
   if (!myData) return;
