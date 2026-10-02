@@ -2699,16 +2699,14 @@ window.renderMarchHUD = function() {
     if (!myData || !myData.marches) return;
     
     let hud = document.getElementById('march-hud-container');
-    // 如果畫面上還沒有隊列容器，就創建一個放在右上角
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'march-hud-container';
-        // 定位在右上角，寬度適中，不會擋住中間的地圖操作
-        hud.style.cssText = 'position:fixed; right:10px; top:80px; z-index:9980; display:flex; flex-direction:column; gap:8px; width:180px; pointer-events:none;';
+        // 稍微加寬以容納按鈕
+        hud.style.cssText = 'position:fixed; right:10px; top:80px; z-index:9980; display:flex; flex-direction:column; gap:8px; width:220px; pointer-events:none;';
         document.body.appendChild(hud);
     }
     
-    // 如果沒有行軍部隊，就清空顯示
     if (myData.marches.length === 0) {
         hud.innerHTML = '';
         return;
@@ -2718,44 +2716,39 @@ window.renderMarchHUD = function() {
     let html = '';
     
     myData.marches.forEach((m) => {
-        // 計算倒數時間與進度條百分比
         const remainSec = Math.max(0, Math.ceil((m.finishesAt - now) / 1000));
         const totalSec = Math.ceil((m.finishesAt - m.startTime) / 1000);
         let pct = totalSec > 0 ? Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100))) : 100;
         
-        let actionName = '行軍中';
-        let icon = '🚀';
-        let color = '#38bdf8'; // 預設藍色
+        let actionName = '行軍中'; let icon = '🚀'; let color = '#38bdf8';
+        if (m.type === 'gathering') { actionName = '採集中'; icon = '⛏️'; color = '#10b981'; } 
+        else if (m.type === 'return') { actionName = '返回中'; icon = '📦'; color = '#34d399'; } 
+        else if (m.type === 'attack_player' || m.type === 'attack_capital' || m.type === 'attack_npc') { actionName = '進攻中'; icon = '⚔️'; color = '#ef4444'; } 
+        else if (m.type === 'defend_npc' || m.type === 'counter_attack') { actionName = '敵襲警戒'; icon = '🚨'; color = '#f97316'; } 
+        else if (m.type === 'relic') { actionName = '探索中'; icon = '🏛️️'; color = '#a855f7'; } 
+        else if (m.type === 'occupy_node') { actionName = '前往佔領'; icon = '🚩'; color = '#8b5cf6'; }
+
+        let targetStr = m.targetName || m.npcName || `(${m.targetX}, ${m.targetY})`;
         
-        // 根據不同任務類型，切換文字與顏色
+        // 建立「定位」按鈕
+        let btnHtml = `<button onclick="window.locateMarchTarget(${m.targetX||m.startX}, ${m.targetY||m.startY})" style="background:#0ea5e9; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; cursor:pointer; pointer-events:auto;">📍 定位</button>`;
+        
+        // 如果是「採集中」，增加「召回」按鈕
         if (m.type === 'gathering') {
-            actionName = '採集中'; icon = '⛏️'; color = '#10b981'; // 綠色
-        } else if (m.type === 'return') {
-            actionName = '返回中'; icon = '📦'; color = '#34d399'; // 淺綠
-        } else if (m.type === 'attack_player' || m.type === 'attack_capital' || m.type === 'attack_npc') {
-            actionName = '進攻中'; icon = '⚔️'; color = '#ef4444'; // 紅色
-        } else if (m.type === 'defend_npc' || m.type === 'counter_attack') {
-            actionName = '敵襲警戒'; icon = '🚨'; color = '#f97316'; // 橘色
-        } else if (m.type === 'relic') {
-            actionName = '遺跡探索'; icon = '🏛️'; color = '#a855f7'; // 紫色
-        } else if (m.type === 'occupy_node') {
-            actionName = '前往佔領'; icon = '🚩'; color = '#8b5cf6'; // 靛色
+            btnHtml += `<button onclick="window.recallMarch('${m.id}')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; margin-left:6px; cursor:pointer; pointer-events:auto;">↩️ 召回</button>`;
         }
 
-        // 決定顯示的目標名稱（玩家名稱 > NPC名稱 > 座標）
-        let targetStr = m.targetName || m.npcName || `(${m.targetX}, ${m.targetY})`;
-
-        // 渲染成漂亮的半透明卡片與進度條
         html += `
-        <div style="background:rgba(15, 23, 42, 0.85); border:1px solid ${color}; border-radius:6px; padding:8px 10px; color:white; pointer-events:auto; box-shadow:0 4px 6px rgba(0,0,0,0.4); backdrop-filter:blur(4px);">
-            <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:6px;">
+        <div style="background:rgba(15, 23, 42, 0.85); border:1px solid ${color}; border-radius:6px; padding:10px; color:white; pointer-events:auto; box-shadow:0 4px 6px rgba(0,0,0,0.4); backdrop-filter:blur(4px);">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.9rem; margin-bottom:8px;">
                 <span style="font-weight:bold; color:${color};">${icon} ${actionName}</span>
                 <span style="color:#facc15; font-family:monospace; font-weight:bold;">${formatTime(remainSec)}</span>
             </div>
-            <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                目標: ${targetStr}
+            <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85px;">${targetStr}</span>
+                <div>${btnHtml}</div>
             </div>
-            <div style="background:#334155; height:4px; border-radius:2px; overflow:hidden;">
+            <div style="background:#334155; height:5px; border-radius:3px; overflow:hidden;">
                 <div style="background:${color}; height:100%; width:${pct}%; transition:width 1s linear;"></div>
             </div>
         </div>
@@ -2763,4 +2756,55 @@ window.renderMarchHUD = function() {
     });
     
     hud.innerHTML = html;
+};
+
+// 📍 定位目標函數
+window.locateMarchTarget = (tx, ty) => {
+    window.switchTab('world');
+    setTimeout(() => { centerCameraOn(tx, ty); }, 50);
+};
+
+// ↩️ 召回部隊函數
+window.recallMarch = async (marchId) => {
+    if (!myData) return;
+    const idx = myData.marches.findIndex(m => m.id === marchId);
+    if (idx === -1) return;
+    
+    let m = myData.marches[idx];
+    if (m.type === 'gathering') {
+        const confirmRecall = confirm("確定要提前召回部隊嗎？\n(系統將會依照已駐紮的時間，按比例結算並帶回資源！)");
+        if (!confirmRecall) return;
+
+        const now = Date.now();
+        const totalTime = m.finishesAt - m.startTime;
+        const elapsed = now - m.startTime;
+        
+        // 算出已經採集了百分之多少
+        const ratio = Math.min(1, Math.max(0, elapsed / totalTime));
+        
+        // 計算按比例獲得的資源
+        const partialLoot = Math.floor((m.capacity || 0) * ratio);
+        
+        m.type = 'return';
+        m.loot = { wood: 0, iron: 0, food: 0 };
+        if (m.resType) m.loot[m.resType] = partialLoot;
+        
+        // 重新計算返航時間與起終點
+        const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
+        m.startX = m.targetX; 
+        m.startY = m.targetY;
+        m.targetX = myData.x;
+        m.targetY = myData.y;
+        m.startTime = now;
+        m.finishesAt = now + Math.ceil(dist * 2.5 * 1000); // 計算返航速度
+        m.timeFixed = true; 
+        
+        // 釋放地圖資源點，讓其他玩家可以佔領
+        try { deleteDoc(doc(db, "world_map", `NODE_${m.startX}_${m.startY}`)); }catch(e){}
+        
+        myData.logs.unshift(`[召回部隊] 駐紮部隊已中斷採集，帶著 ${partialLoot} 資源返航中！`);
+        await savePrivateData();
+        window.renderMarchHUD();
+        window.renderSelf();
+    }
 };
