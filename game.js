@@ -3093,15 +3093,25 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 管理員專用：VIP 發放與權限驗證模組
+// 🛠️ 管理員專用：VIP 發放與權限驗證模組 (信箱認證版)
 // ==========================================
 
-const ADMIN_UID = "i17hElOsMueL6OzmJtRcojDP7Y52"; // 👈 ⚠️ 換成你自己的 ID，只有這個 ID 登入才會看到按鈕！
+// 👈 ⚠️ 換成你用來登入遊戲的管理員信箱 (請確認大小寫完全一致)
+const ADMIN_EMAIL = "topacoau@gmail.com"; 
 
-// 1. 自動檢查身分，只有管理員登入時才生成按鈕
+// 1. 自動檢查信箱，只有管理員登入時才生成按鈕
 function checkAndShowAdminButton() {
-    // 確定已經抓到玩家 ID，並且等於管理員 ID
-    if (typeof myUid !== 'undefined' && myUid === ADMIN_UID) {
+    let currentUserEmail = null;
+    
+    // 嘗試抓取當前玩家的登入信箱 (支援 Firebase 預設寫法與自訂寫法)
+    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+        currentUserEmail = firebase.auth().currentUser.email;
+    } else if (typeof myData !== 'undefined' && myData.email) {
+        currentUserEmail = myData.email;
+    }
+
+    // 確定已經抓到信箱，並且等於管理員信箱
+    if (currentUserEmail && currentUserEmail === ADMIN_EMAIL) {
         let btn = document.getElementById('admin-vip-btn');
         if (!btn) {
             // 自動在畫面上生成按鈕
@@ -3114,7 +3124,7 @@ function checkAndShowAdminButton() {
         }
     }
 }
-// 每 2 秒檢查一次身分 (確保登入讀取資料後會自動顯示按鈕)
+// 每 2 秒檢查一次身分
 setInterval(checkAndShowAdminButton, 2000);
 
 // 2. 點擊按鈕後跳出的輸入框
