@@ -3168,3 +3168,81 @@ window.adminSetVIP = async function(targetUid, days = 30) {
         alert(`❌ 開通失敗：${e.message}`);
     }
 };
+// ==========================================
+// 👑 玩家專用：VIP 介面與每日領獎邏輯
+// ==========================================
+
+window.openVipModal = function() {
+    const modal = document.getElementById('vip-modal');
+    const container = document.getElementById('vip-action-container');
+    if (!modal || !container) return;
+
+    // 檢查玩家目前的 VIP 狀態
+    const vip = myData && myData.vip ? myData.vip : null;
+    const now = Date.now();
+    const isVip = vip && vip.isActive && vip.expiresAt > now;
+
+    if (isVip) {
+        // 🌟 身分為 VIP：計算剩餘天數
+        const daysLeft = Math.ceil((vip.expiresAt - now) / (1000 * 60 * 60 * 24));
+        
+        // 檢查今天是否已經領過獎勵 (利用日期字串比對)
+        const todayStr = new Date().toLocaleDateString();
+        const alreadyClaimed = (vip.lastClaimed === todayStr);
+
+        // 渲染 VIP 專屬介面 (顯示天數 + 領獎按鈕)
+        container.innerHTML = `
+            <div style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                <h4 style="color: #10b981; margin: 0 0 5px 0;">👑 您的 VIP 已生效</h4>
+                <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0;">剩餘時間：<strong style="color: #facc15;">${daysLeft} 天</strong></p>
+            </div>
+            ${alreadyClaimed 
+                ? `<button disabled style="background: #475569; color: #94a3b8; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; cursor: not-allowed;">✅ 今日已領取，明日再來</button>`
+                : `<button onclick="window.claimVipReward()" style="background: linear-gradient(135deg, #10b981, #059669); color: white; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">🎁 領取今日豪華物資</button>`
+            }
+        `;
+    } else {
+        // ❌ 身分不是 VIP：顯示購買按鈕 (請把網址換成你的真實 PayMe 連結)
+        container.innerHTML = `
+            <button onclick="window.open('https://payme.hsbc/你的PayMe名稱', '_blank')" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                💳 前往 PayMe 購買 ($25)
+            </button>
+            <p style="color: #94a3b8; font-size: 0.75rem; margin-top: 10px;">付款時請在備註填寫您的 ID：<br><strong style="color: #facc15; font-size: 1.1rem; user-select: all;">${myUid}</strong></p>
+        `;
+    }
+    
+    // 顯示彈窗
+    modal.style.display = 'flex';
+};
+
+// 🎁 點擊領獎的執行函數
+window.claimVipReward = function() {
+    // 雙重防護：確認真的有 VIP 且未過期
+    if (!myData || !myData.vip || !myData.vip.isActive || myData.vip.expiresAt < Date.now()) return;
+    
+    const todayStr = new Date().toLocaleDateString();
+    if (myData.vip.lastClaimed === todayStr) {
+        alert("❌ 您今天已經領取過 VIP 獎勵了！");
+        return;
+    }
+
+    // 💰 派發獎勵 (這裡設定木鐵糧各 20000，加速卡 2 張，你可以自己改數字)
+    myData.wood = (myData.wood || 0) + 20000;
+    myData.iron = (myData.iron || 0) + 20000;
+    myData.food = (myData.food || 0) + 20000;
+    
+    // 如果背包欄位不存在，先建立
+    if(!myData.items) myData.items = {};
+    myData.items.speed1h = (myData.items.speed1h || 0) + 2; // 給兩張 1小時加速卡
+
+    // 標記今天已領取
+    myData.vip.lastClaimed = todayStr;
+
+    // 儲存進 Firebase (呼叫你原本的存檔函數)
+    if (typeof savePrivateData === 'function') savePrivateData();
+    
+    alert("🎁 領取成功！\n獲得：木材 2w、鐵礦 2w、糧草 2w、1小時加速卡x2");
+    
+    // 重新渲染彈窗 (按鈕會立刻變成「✅ 今日已領取」)
+    window.openVipModal();
+};
