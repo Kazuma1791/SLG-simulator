@@ -1,44 +1,20 @@
 // ==========================================
 // 🛡️ 前端封印：禁止使用 F12 與右鍵 (防護小白作弊)
 // ==========================================
-// 1. 禁止滑鼠右鍵 (防「檢查」)
-document.addEventListener('contextmenu', function (e) {
-    e.preventDefault();
-});
-
-// 2. 攔截各式開發者快捷鍵
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 document.addEventListener('keydown', function (e) {
-    // 擋下 F12
-    if (e.key === 'F12' || e.keyCode === 123) {
-        e.preventDefault();
-        return false;
-    }
-    // 擋下 Ctrl + Shift + I (開發者工具)
-    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) {
-        e.preventDefault();
-        return false;
-    }
-    // 擋下 Ctrl + Shift + J (控制台)
-    if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) {
-        e.preventDefault();
-        return false;
-    }
-    // 擋下 Ctrl + U (檢視原始碼)
-    if (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.keyCode === 85)) {
-        e.preventDefault();
-        return false;
-    }
+    if (e.key === 'F12' || e.keyCode === 123) { e.preventDefault(); return false; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) { e.preventDefault(); return false; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) { e.preventDefault(); return false; }
+    if (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.keyCode === 85)) { e.preventDefault(); return false; }
 });
-
-// 3. (選用) 偵測如果控制台被強制打開，就彈出警告或清空畫面
 let devtools = function() {};
 devtools.toString = function() {
-    if (!window.isAdmin) {
-        alert("⚠️ 系統警告：嚴禁開啟開發者工具，您的行為已被記錄！");
-    }
+    if (!window.isAdmin) alert("⚠️ 系統警告：嚴禁開啟開發者工具，您的行為已被記錄！");
     return '';
 }
 console.log('%c', devtools);
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -77,11 +53,9 @@ const imgDarkCastle = new Image(); imgDarkCastle.src = 'dark_castle.png';
 const imgDarkOutpost = new Image(); imgDarkOutpost.src = 'dark_outpost.png';
 const imgBarbarian = new Image(); imgBarbarian.src = 'ico_buildings_stronghold_cyclopsMound.png';
 const imgRelic = new Image(); imgRelic.src = 'relic.png'; 
-
 const imgBossCore = new Image(); imgBossCore.src = 'boss_core.png';
 const imgBossMid = new Image(); imgBossMid.src = 'boss_mid.png';
 const imgBossOuter = new Image(); imgBossOuter.src = 'boss_outer.png';
-
 const imgResFarm = new Image(); imgResFarm.src = 'res_farm.png';
 const imgResLumber = new Image(); imgResLumber.src = 'res_lumber.png';
 const imgResMine = new Image(); imgResMine.src = 'res_mine.png';
@@ -111,33 +85,9 @@ const CFG = {
     infantry_atk: { name: '步兵鍛甲', icon: '🛡️', desc: '提升步兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
     archer_atk:   { name: '弓兵矢志', icon: '🏹', desc: '提升弓兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
     cavalry_atk:  { name: '騎術改良', icon: '🐎', desc: '提升騎兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
-    // 🐎 行軍加速
-    march_speed: { 
-      name: '急行軍隊', 
-      icon: '🐎', 
-      desc: '提升全軍行軍速度 (+8%/級)', 
-      baseW: 300, 
-      baseI: 150, 
-      baseTime: 60 
-    },
-    // 🎒 負重強化
-    troop_load: { 
-      name: '輜重革新', 
-      icon: '🎒', 
-      desc: '提升部隊資源負重上限 (+15%/級)', 
-      baseW: 400, 
-      baseI: 100, 
-      baseTime: 90 
-    },
-    // 🏥 醫院容量
-    hospital_cap: { 
-      name: '戰地救護', 
-      icon: '🏥', 
-      desc: '提升醫療所傷兵收容容量 (+3,000/級)', 
-      baseW: 250, 
-      baseI: 250, 
-      baseTime: 60 
-    }
+    march_speed:  { name: '急行軍隊', icon: '🐎', desc: '提升全軍行軍速度 (+8%/級)', baseW: 300, baseI: 150, baseTime: 60 },
+    troop_load:   { name: '輜重革新', icon: '🎒', desc: '提升部隊資源負重上限 (+15%/級)', baseW: 400, baseI: 100, baseTime: 90 },
+    hospital_cap: { name: '戰地救護', icon: '🏥', desc: '提升醫療所傷兵收容容量 (+3,000/級)', baseW: 250, baseI: 250, baseTime: 60 }
   },
   troops: {
     infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
@@ -153,43 +103,23 @@ function formatCompact(num) {
   return Math.floor(num).toString();
 }
 
-// ==========================================
-// 💡 升級消耗：資源倍率拉高 (1.5 -> 1.62)，後期需要大量資源支撐
-// ==========================================
 function getUpgradeCost(key, level, isTech=false) { 
     const base = isTech ? CFG.techs[key] : CFG.buildings[key]; 
     if(!base) return {w:0, i:0, f:0};
     const curLv = level || 0;
     const m = Math.pow(1.62, curLv); 
-    const cost = { 
-        w: Math.floor((base.baseW || 100) * m), 
-        i: Math.floor((base.baseI || 80) * m) 
-    };
-    if (base.baseF) {
-        cost.f = Math.floor(base.baseF * m);
-    }
-    return cost; 
+    return { w: Math.floor((base.baseW || 100) * m), i: Math.floor((base.baseI || 80) * m), f: base.baseF ? Math.floor(base.baseF * m) : 0 }; 
 }
-// ==========================================
-// 💡 學院科技介面與數值加成計算模組
-// ==========================================
 
-// 1. 先定義數值加成文字的函數 (獨立在外，絕對不會抓不到)
 function getTechEffectText(techKey, curLevel) {
   const lv = curLevel || 0;
-  if (techKey === 'march_speed') {
-    return `行軍速度：+${lv * 8}% ${lv > 0 ? `(下級: +${(lv + 1) * 8}%)` : ''}`;
-  } else if (techKey === 'troop_load') {
-    return `部隊負重：+${lv * 15}% ${lv > 0 ? `(下級: +${(lv + 1) * 15}%)` : ''}`;
-  } else if (techKey === 'hospital_cap') {
-    return `傷兵上限：+${(lv * 3000).toLocaleString()} ${lv > 0 ? `(下級: +${((lv + 1) * 3000).toLocaleString()})` : ''}`;
-  } else if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') {
-    return `部隊戰力：+${lv} ${lv > 0 ? `(下級: +${lv + 1})` : ''}`;
-  }
+  if (techKey === 'march_speed') return `行軍速度：+${lv * 8}\%${lv > 0 ? `(下級: +${(lv + 1) * 8}%)` : ''}`;
+  if (techKey === 'troop_load') return `部隊負重：+${lv * 15}\%${lv > 0 ? `(下級: +${(lv + 1) * 15}%)` : ''}`;
+  if (techKey === 'hospital_cap') return `傷兵上限：+${(lv * 3000).toLocaleString()}${lv > 0 ? `(下級: +${((lv + 1) * 3000).toLocaleString()})` : ''}`;
+  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return `部隊戰力：+${lv}${lv > 0 ? `(下級: +${lv + 1})` : ''}`;
   return '';
 }
 
-// 2. 學院彈窗渲染邏輯
 window.openAcademyModal = function() {
   if (!myData) return;
   const modal = document.getElementById('academy-modal');
@@ -202,10 +132,9 @@ window.openAcademyModal = function() {
   Object.keys(CFG.techs).forEach(k => {
     const t = CFG.techs[k];
     const curLv = (myData.research && myData.research[k]) || 0;
-    const cost = window.getUpgradeCost ? window.getUpgradeCost(k, curLv, true) : getUpgradeCost(k, curLv, true);
-    const timeSec = window.getUpgradeTime ? window.getUpgradeTime(k, curLv, true) : getUpgradeTime(k, curLv, true);
+    const cost = getUpgradeCost(k, curLv, true);
+    const timeSec = getUpgradeTime(k, curLv, true);
     const effectText = getTechEffectText(k, curLv);
-
     const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
     const canUpgrade = !isResearching && hasRes;
 
@@ -213,50 +142,33 @@ window.openAcademyModal = function() {
       <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
         <div style="flex: 1; margin-right: 12px;">
           <div style="font-weight: bold; font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-            <span>${t.icon || '🔬'}</span>
-            <span>${t.name}</span>
+            <span>${t.icon \vert{}\vert{} '🔬'}</span><span>${t.name}</span>
             <span style="font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 4px;">Lv.${curLv}</span>
           </div>
-          <div style="color: #94a3b8; font-size: 12px; margin-top: 4px; line-height: 1.4;">
-            ${t.desc || '提升部隊科技屬性'}
-          </div>
-          <div style="color: #34d399; font-size: 12px; font-weight: bold; margin-top: 4px;">
-            ✨ 當前效果: ${effectText}
-          </div>
+          <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">${t.desc}</div>
+          <div style="color: #34d399; font-size: 12px; font-weight: bold; margin-top: 4px;">✨ 當前效果: ${effectText}</div>
           <div style="color: #cbd5e1; font-size: 11px; margin-top: 6px; display: flex; gap: 8px;">
-            <span>🪵 木材: ${formatCompact(cost.w)}</span>
-            <span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>
-            ${cost.f ? `<span>🌾 糧草: ${formatCompact(cost.f)}</span>` : ''}
-            <span>⏱️ 耗時: ${formatTime(timeSec)}</span>
+            <span>🪵 木材: ${formatCompact(cost.w)}</span><span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>${cost.f ? `<span>🌾 糧草: ${formatCompact(cost.f)}</span>` : ''}<span>⏱️ 耗時: ${formatTime(timeSec)}</span>
           </div>
         </div>
         <div>
           <button onclick="startResearch('${k}')" ${canUpgrade ? '' : 'disabled'} 
-            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'};
-            background: ${canUpgrade ? '#3b82f6' : '#475569'}; color: ${canUpgrade ? '#ffffff' : '#94a3b8'};">
+            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'}; background: ${canUpgrade ? '#3b82f6' : '#475569'}; color: ${canUpgrade ? '#ffffff' : '#94a3b8'};">
             ${isResearching && myData.researchQueue.target === k ? '研發中' : '研發'}
           </button>
         </div>
-      </div>
-    `;
+      </div>`;
   });
-
   list.innerHTML = html;
   modal.style.display = 'block';
 };
-// ==========================================
-// 💡 升級時間：線性+溫和指數成長，最高封頂 3 小時 (10,800 秒)
-// ==========================================
+
 function getUpgradeTime(key, level, isTech=false) { 
     const baseCfg = isTech ? CFG.techs[key] : CFG.buildings[key]; 
     if(!baseCfg) return 60;
     const base = baseCfg.baseTime || 60;
     const curLv = Math.max(0, (level||0) - 1);
-    
-    // 溫和成長曲線 (1.25 倍率)，避免後期幾百小時
     let calculatedTime = Math.floor(base * Math.pow(1.25, curLv));
-    
-    // 🔒 終極限制：單項升級最高上限為 3 小時 (10,800 秒)
     return Math.min(10800, calculatedTime); 
 }
 
@@ -299,45 +211,16 @@ function getStaticEntity(x, y, type) {
       }
   }
 
-  // 🌲 3. 一般野外隨機物件
   if (r < 0.002) return { type: 'npc_outpost', name: '🏕️ 黑暗前哨', reqPwr: 3000, loot: { wood: 15000, iron: 15000, food: 15000, speedup5m: 5 } };
   if (r < 0.010) return { type: 'barbarian', name: '👹 狂暴野蠻人', reqPwr: 800, loot: { iron: 8000, wood: 4000, food: 6000, speedup5m: 5 } };
-  
-  // 💡 4. 動態資源點生成 (分為 Lv.1 ~ Lv.5)
   if (r < 0.060) {
-      // 1. 根據座標產生穩定的資源種類 (不會因為重整網頁而變換)
       const typeRoll = (x * 13 + y * 31) % 3;
-      const types = [
-          { t: 'res_farm', n: '🌾 農田', r: 'food' },
-          { t: 'res_lumber', n: '🌲 伐木場', r: 'wood' },
-          { t: 'res_mine', n: '⛏️ 鐵礦', r: 'iron' }
-      ];
+      const types = [{ t: 'res_farm', n: '🌾 農田', r: 'food' }, { t: 'res_lumber', n: '🌲 伐木場', r: 'wood' }, { t: 'res_mine', n: '⛏️ 鐵礦', r: 'iron' }];
       const pick = types[typeRoll];
-      
-      // 2. 根據座標產生穩定的等級 (Lv.1 最多，Lv.5 最稀有)
       const lvRoll = (x * 47 + y * 83) % 100;
-      let lv = 1;
-      if (lvRoll >= 50) lv = 2; // 30% 機率
-      if (lvRoll >= 80) lv = 3; // 15% 機率
-      if (lvRoll >= 95) lv = 4; // 4% 機率
-      if (lvRoll === 99) lv = 5; // 1% 機率 (極度稀有)
-      
-      // 3. 定義各等級的「蘊藏量(cap)」與「守軍戰力(reqPwr)」
-      const stats = {
-          1: { cap: 10000, reqPwr: 200 },     // 新手輕鬆佔領
-          2: { cap: 30000, reqPwr: 1000 },    // 前期主力
-          3: { cap: 100000, reqPwr: 5000 },   // 中期大礦
-          4: { cap: 250000, reqPwr: 15000 },  // 兵家必爭之地
-          5: { cap: 500000, reqPwr: 40000 }   // 終極寶藏，必須出動大軍
-      };
-      
-      return { 
-          type: pick.t, 
-          name: `${pick.n} Lv.${lv}`, 
-          res: pick.r, 
-          cap: stats[lv].cap, 
-          reqPwr: stats[lv].reqPwr 
-      };
+      let lv = 1; if (lvRoll >= 50) lv = 2; if (lvRoll >= 80) lv = 3; if (lvRoll >= 95) lv = 4; if (lvRoll === 99) lv = 5;
+      const stats = { 1:{cap:10000,reqPwr:200}, 2:{cap:30000,reqPwr:1000}, 3:{cap:100000,reqPwr:5000}, 4:{cap:250000,reqPwr:15000}, 5:{cap:500000,reqPwr:40000} };
+      return { type: pick.t, name: `${pick.n} Lv.${lv}`, res: pick.r, cap: stats[lv].cap, reqPwr: stats[lv].reqPwr };
   }
   if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
   if (r < 0.080) return { type: 'relic', name: '🏛 破碎遺跡', reqFood: 30, loot: { wood: 500, iron: 500, food: 500 } };
@@ -376,16 +259,9 @@ function sanitizeData() {
   if (!Array.isArray(myData.cheatLog)) myData.cheatLog = [];
   if (!Array.isArray(myData.claimedBosses)) myData.claimedBosses = [];
   if (!Array.isArray(myData.claimedAnnouncements)) myData.claimedAnnouncements = [];
-    // 👇 初始化 VIP 數據
-  if (!myData.vip || typeof myData.vip !== 'object') {
-      myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
-  }
-  // ⏳ 每次登入/刷新時，檢查 VIP 是否已過期
-  if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
-      myData.vip.isActive = false; // 自動取消特權
-  }
+  if (!myData.vip || typeof myData.vip !== 'object') myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
+  if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) myData.vip.isActive = false; 
     
-  // 👇 任務與戰報初始化
   if (!Array.isArray(myData.reports)) myData.reports = [];
   const todayStr = new Date().toDateString();
   if (!myData.quests || myData.quests.dateStr !== todayStr) {
@@ -400,54 +276,40 @@ function sanitizeData() {
   if (typeof myData.isBanned !== 'boolean') myData.isBanned = false;
 }
 
-// 💡 終極防外掛系統：數值驗證 + 設備連坐封鎖 (Device Ban)
 function runAntiCheat() {
     if (isAdmin) return false;
-    
-    // 💀 1. 設備連坐檢查：如果這台裝置曾經被抓過，不管換什麼新帳號，一律瞬間死刑！
     if (localStorage.getItem('SLG_DEATH_MARK') === 'true') {
         if (!myData.isBanned) {
             myData.isBanned = true; myData.banReason = "使用被封鎖的違規設備登入 (連坐處分)";
             setDoc(doc(db, "players", myUid), { isBanned: true, banReason: myData.banReason }, { merge: true });
         }
-        document.getElementById('ban-screen').style.display = 'flex';
-        document.getElementById('ban-reason').innerText = "該設備已列入永久黑名單，禁止遊玩。";
+        document.getElementById('ban-screen').style.display = 'flex'; document.getElementById('ban-reason').innerText = "該設備已列入永久黑名單，禁止遊玩。";
         return true;
     }
-
     if (myData.isBanned) return true;
-
     let cheatDetected = false; let reason = "";
     const MAX_RESOURCE = 500000000; const MAX_TROOPS = 50000000; const MAX_ITEMS = 10000;
-
     const textRegex = /[<>"'`\\]/g;
     if (myData.name) myData.name = myData.name.replace(textRegex, "").substring(0, 12);
     if (myData.allianceName) myData.allianceName = myData.allianceName.replace(textRegex, "").substring(0, 10);
-
-    const resKeys = ['wood', 'iron', 'food'];
-    resKeys.forEach(k => { 
+    ['wood', 'iron', 'food'].forEach(k => { 
         if (!isFinite(myData[k]) || isNaN(myData[k]) || myData[k] < 0) myData[k] = 0; 
         if (myData[k] > MAX_RESOURCE) { cheatDetected = true; reason = `資源數量嚴重異常(${k})`; }
     });
-
     ['infantry', 'archer', 'cavalry'].forEach(k => {
         if (!isFinite(myData.troops[k]) || isNaN(myData.troops[k]) || myData.troops[k] < 0) myData.troops[k] = 0;
         if (myData.troops[k] > MAX_TROOPS) { cheatDetected = true; reason = `兵力數量嚴重異常(${k})`; }
     });
-
     if (myData.items.speedup5m > MAX_ITEMS || myData.items.shieldCard > MAX_ITEMS) { cheatDetected = true; reason = "道具數量超出硬上限"; }
     if (myData.buildings.castle > 100 || myData.buildings.builder > 5) { cheatDetected = true; reason = "建築等級異常"; }
     if (myData.buildQueues.length > 5 || myData.marches.length > 10) { cheatDetected = true; reason = "佇列資料惡意篡改"; }
 
     if (cheatDetected) {
-        // 💀 2. 抓到作弊，立刻在設備植入「死刑印記」
         localStorage.setItem('SLG_DEATH_MARK', 'true');
-        
         myData.isBanned = true; myData.banReason = reason;
         myData.cheatLog.unshift(`[${new Date().toLocaleString()}] 查獲: ${reason}`);
         setDoc(doc(db, "players", myUid), { isBanned: true, banReason: reason, cheatLog: myData.cheatLog }, { merge: true });
-        document.getElementById('ban-screen').style.display = 'flex';
-        document.getElementById('ban-reason').innerText = reason;
+        document.getElementById('ban-screen').style.display = 'flex'; document.getElementById('ban-reason').innerText = reason;
         return true; 
     }
     return false;
@@ -461,27 +323,16 @@ function getClearedPOI(x, y) {
 
 async function spawnWorldBoss(id) {
   let bx, by, n, hp, m;
-  if (id === 'BOSS_CORE') {
-      bx = 28; by = 135; 
-      n = '🌋 熔岩滅世魔龍'; hp = 500000; m = 20;
-  } else if (id === 'BOSS_MID_1') {
-      bx = 55; by = 120; 
-      n = '🌪️ 深海漩渦巨妖'; hp = 150000; m = 8;
-  } else if (id === 'BOSS_MID_2') {
-      bx = 45; by = 35;  
-      n = '❄️ 凜冬風暴巨鷹'; hp = 150000; m = 8;
-  } else if (id === 'BOSS_MID_3') {
-      bx = 160; by = 45; 
-      n = '🩸 猩紅樹魔'; hp = 150000; m = 8;
-  } else if (id === 'BOSS_MID_4') {
-      bx = 160; by = 145; 
-      n = '🌑 腐化岩魔'; hp = 150000; m = 8;
-  } else {
+  if (id === 'BOSS_CORE') { bx = 28; by = 135; n = '🌋 熔岩滅世魔龍'; hp = 500000; m = 20; } 
+  else if (id === 'BOSS_MID_1') { bx = 55; by = 120; n = '🌪️ 深海漩渦巨妖'; hp = 150000; m = 8; } 
+  else if (id === 'BOSS_MID_2') { bx = 45; by = 35; n = '❄️ 凜冬風暴巨鷹'; hp = 150000; m = 8; } 
+  else if (id === 'BOSS_MID_3') { bx = 160; by = 45; n = '🩸 猩紅樹魔'; hp = 150000; m = 8; } 
+  else if (id === 'BOSS_MID_4') { bx = 160; by = 145; n = '🌑 腐化岩魔'; hp = 150000; m = 8; } 
+  else {
       let overlap, tries = 0;
       do {
           overlap = false; tries++;
-          bx = Math.floor(Math.random()*190+5); 
-          by = Math.floor(Math.random()*190+5);
+          bx = Math.floor(Math.random()*190+5); by = Math.floor(Math.random()*190+5);
           for(let b of worldBosses) if(b.id!==id && (b.hp>0||b.despawnAt>Date.now()) && Math.hypot(b.x-bx,b.y-by)<10) {overlap=true;break;}
           if(overlap) continue;
           for(let c of allCastles) if(Math.hypot(c.x-bx, c.y-by)<8) {overlap=true;break;}
@@ -493,7 +344,6 @@ async function spawnWorldBoss(id) {
       } while(overlap && tries<1000);
       n = '🗿 大地岩魔'; hp = 50000; m = 3;
   }
-
   const bObj = { name: n, isBoss: true, x: bx, y: by, hp: hp, maxHp: hp, mult: m, spawnId: Date.now(), contributors: {}, despawnAt: Date.now() + 6 * 3600 * 1000 };
   const idx = worldBosses.findIndex(x=>x.id===id); 
   if(idx>=0) worldBosses[idx]={id,...bObj}; else worldBosses.push({id,...bObj});
@@ -513,12 +363,7 @@ window.switchTab = (tabName) => {
   if (tabName === 'world') { setTimeout(resizeCanvas, 50); }
   if (tabName === 'radar' || tabName === 'gm') { window.refreshMap(); }
   if (tabName === 'mail') { window.renderAnnouncement(); }
-};
-
-const originalSwitchTab = window.switchTab;
-window.switchTab = (t) => {
-    if(typeof originalSwitchTab === 'function') originalSwitchTab(t);
-    if(t === 'alliance') window.renderAllianceUI();
+  if (tabName === 'alliance') { window.renderAllianceUI(); }
 };
 
 window.registerUser = () => {
@@ -562,11 +407,7 @@ onAuthStateChanged(auth, async (user) => {
           setTimeout(() => { window.openGuideModal(); }, 1500);
         } else {
           myData = pSnap.data(); 
-          // 💡 核心修復：在存檔與初始化前，第一時間執行特赦，徹底洗白設備！
-          if (myData.clearDeviceBan) {
-              localStorage.removeItem('SLG_DEATH_MARK');
-              myData.clearDeviceBan = false; // 清除完立刻關閉特赦令
-          }
+          if (myData.clearDeviceBan) { localStorage.removeItem('SLG_DEATH_MARK'); myData.clearDeviceBan = false; }
           sanitizeData(); 
           await setDoc(playerRef, myData, {merge:true});
         }
@@ -585,20 +426,13 @@ onAuthStateChanged(auth, async (user) => {
       if (docSnap.exists()) {
         myData = docSnap.data();
         sanitizeData();
-        // 💡 1. 如果收到管理員的「特赦令」，立刻清除瀏覽器裡的死刑印記！
-        if (myData.clearDeviceBan) {
-            localStorage.removeItem('SLG_DEATH_MARK');
-        }
-        // 💀 2. 如果收到封鎖指令，植入死刑印記
-        else if (myData.triggerDeviceBan) {
-            localStorage.setItem('SLG_DEATH_MARK', 'true');
-        }
+        if (myData.clearDeviceBan) localStorage.removeItem('SLG_DEATH_MARK');
+        else if (myData.triggerDeviceBan) localStorage.setItem('SLG_DEATH_MARK', 'true');
 
-        // 3. 處理畫面顯示
         if (myData.isBanned) { 
             document.getElementById('ban-screen').style.display = 'flex'; 
             document.getElementById('ban-reason').innerText = myData.banReason || "違反遊戲規章"; 
-            return; // 被封鎖者停止後續渲染
+            return; 
         } else { 
             document.getElementById('ban-screen').style.display = 'none'; 
         }
@@ -700,8 +534,7 @@ window.gmSendAnnouncement = async () => {
     const txt = document.getElementById('gm-announce-text').value.trim();
     if (!txt) return alert("請輸入公告內容！");
     const ann = { 
-        id: 'ANN_' + Date.now(), 
-        text: txt, 
+        id: 'ANN_' + Date.now(), text: txt, 
         wood: parseInt(document.getElementById('gm-ann-wood').value)||0, 
         iron: parseInt(document.getElementById('gm-ann-iron').value)||0, 
         food: parseInt(document.getElementById('gm-ann-food').value)||0, 
@@ -745,7 +578,7 @@ window.gmRespawnBosses = () => {
   for(let i=1; i<=4; i++) bossIds.push(`BOSS_MID_${i}`);
   for(let i=1; i<=10; i++) bossIds.push(`BOSS_OUTER_${i}`);
   bossIds.forEach(id => spawnWorldBoss(id)); 
-  alert("已強制重生所有 世界 Boss！(已套用絕對淨空生成機制)");
+  alert("已強制重生所有 世界 Boss！");
 };
 
 window.gmClearQueues = async () => {
@@ -766,18 +599,8 @@ window.gmTargetAction = async (action) => {
     if (!targetSnap.exists()) return alert("找不到該名玩家！");
     let tData = targetSnap.data();
     
-    if (action === 'ban') { 
-        tData.isBanned = true; 
-        tData.banReason = "管理員手動永久封鎖"; 
-        tData.triggerDeviceBan = true;  // 發送封鎖信號
-        tData.clearDeviceBan = false; 
-    }
-    if (action === 'unban') { 
-        tData.isBanned = false; 
-        tData.banReason = ""; 
-        tData.triggerDeviceBan = false; 
-        tData.clearDeviceBan = true;    // 💡 核心：發送「遠端特赦」信號，要求玩家瀏覽器刪除黑名單印記
-    }
+    if (action === 'ban') { tData.isBanned = true; tData.banReason = "管理員手動永久封鎖"; tData.triggerDeviceBan = true; tData.clearDeviceBan = false; }
+    if (action === 'unban') { tData.isBanned = false; tData.banReason = ""; tData.triggerDeviceBan = false; tData.clearDeviceBan = true; }
     if (action === 'addRes') { tData.wood += 1000000; tData.iron += 1000000; tData.food += 1000000; }
     if (action === 'addTroops') { tData.troops.infantry += 100000; tData.troops.archer += 100000; tData.troops.cavalry += 100000; }
     if (action === 'addItems') { tData.items.shieldCard += 100; tData.items.speedup5m += 100; tData.items.speedup1h += 10; }
@@ -801,84 +624,41 @@ window.gmExecuteCustom = async () => {
     
     const field = document.getElementById('gm-custom-field').value.trim();
     const rawAmount = document.getElementById('gm-custom-amount').value;
-    const amount = parseInt(rawAmount); // 嘗試轉換為數字
+    const amount = parseInt(rawAmount); 
     
     const targetRef = doc(db, "players", targetUid);
     const targetSnap = await getDoc(targetRef);
     if (!targetSnap.exists()) return alert("找不到該名玩家！");
     let tData = targetSnap.data();
     
-    // 確保深層資料結構存在，避免報錯
-    tData.troops = tData.troops || {};
-    tData.items = tData.items || {};
-    tData.buildings = tData.buildings || {};
-    tData.research = tData.research || {};
-    
-    let updatedMap = false; // 是否需要同步更新世界地圖
+    tData.troops = tData.troops || {}; tData.items = tData.items || {};
+    tData.buildings = tData.buildings || {}; tData.research = tData.research || {};
+    let updatedMap = false; 
 
-    // 💡 1. 判斷並修改資源
-    if (['wood', 'iron', 'food'].includes(field)) {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        tData[field] = amount;
-    } 
-    // 💡 2. 判斷並修改兵力
-    else if (['infantry', 'archer', 'cavalry'].includes(field)) {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        tData.troops[field] = amount;
-        updatedMap = true;
-    } 
-    // 💡 3. 判斷並修改所有背包道具
-    else if (['speedup5m', 'speedup30m', 'speedup1h', 'shieldCard', 'renameCard', 'resourceCard'].includes(field)) {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        tData.items[field] = amount;
-    } 
-    // 💡 4. 判斷並修改「所有」建築等級 (自動比對 CFG 設定)
-    else if (CFG.buildings[field] || field === 'castleLevel') {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        let bKey = field === 'castleLevel' ? 'castle' : field;
-        tData.buildings[bKey] = amount;
-        if (bKey === 'castle') updatedMap = true;
-    } 
-    // 💡 5. 判斷並修改「所有」科技等級 (自動比對 CFG 設定)
-    else if (CFG.techs[field]) {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        tData.research[field] = amount;
-    } 
-    // 💡 6. 判斷並修改座標 (強制遷城)
-    else if (field === 'x' || field === 'y') {
-        if (isNaN(amount)) return alert("此欄位請輸入正確數字");
-        tData[field] = amount;
-        updatedMap = true;
-    }
-    // 💡 7. 判斷並強制修改/踢出聯盟 (支援文字輸入)
-    else if (field === 'allianceName') {
-        tData.allianceName = rawAmount === 'null' || rawAmount === '' ? null : rawAmount;
-        updatedMap = true;
-    } 
-    else {
-        return alert("未知的欄位名稱：" + field);
-    }
+    if (['wood', 'iron', 'food'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData[field] = amount; } 
+    else if (['infantry', 'archer', 'cavalry'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.troops[field] = amount; updatedMap = true; } 
+    else if (['speedup5m', 'speedup30m', 'speedup1h', 'shieldCard', 'renameCard', 'resourceCard'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.items[field] = amount; } 
+    else if (CFG.buildings[field] || field === 'castleLevel') { if (isNaN(amount)) return alert("請輸入正確數字"); let bKey = field === 'castleLevel' ? 'castle' : field; tData.buildings[bKey] = amount; if (bKey === 'castle') updatedMap = true; } 
+    else if (CFG.techs[field]) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.research[field] = amount; } 
+    else if (field === 'x' || field === 'y') { if (isNaN(amount)) return alert("請輸入正確數字"); tData[field] = amount; updatedMap = true; }
+    else if (field === 'allianceName') { tData.allianceName = rawAmount === 'null' || rawAmount === '' ? null : rawAmount; updatedMap = true; } 
+    else { return alert("未知的欄位名稱：" + field); }
     
-    // 寫入系統日誌
-    tData.logs = tData.logs || []; 
-    tData.logs.unshift(`[GM系統] 您的【${field}】資料已被管理員手動修正。`);
+    tData.logs = tData.logs || []; tData.logs.unshift(`[GM系統] 您的【${field}】資料已被手動修正。`);
     await setDoc(targetRef, tData, { merge: true });
     
-    // 💡 8. 如果修改的內容會影響世界地圖，同步更新！
     if (updatedMap) {
         let mapUpdate = {};
-        if (['infantry', 'archer', 'cavalry'].includes(field)) {
-            mapUpdate.troops = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
-        }
+        if (['infantry', 'archer', 'cavalry'].includes(field)) mapUpdate.troops = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
         if (field === 'castleLevel' || field === 'castle') mapUpdate.castleLevel = amount;
         if (field === 'allianceName') mapUpdate.allianceName = tData.allianceName;
         if (field === 'x') mapUpdate.x = amount;
         if (field === 'y') mapUpdate.y = amount;
         await setDoc(doc(db, "world_map", targetUid), mapUpdate, { merge: true });
     }
-    
-    alert(`✅ 已成功將玩家 ${tData.name} 的 [${field}] 修改為：${rawAmount}`);
+    alert(`✅ 已成功修改！`);
 };
+
 window.gmAuditPlayer = async () => {
     if (!isAdmin) return;
     const targetUid = document.getElementById('gm-target-uid').value.trim();
@@ -1006,9 +786,7 @@ function renderGMPlayers() {
   
   container.innerHTML = sorted.map(p => {
      const isShielded = p.shieldEndsAt && p.shieldEndsAt > Date.now();
-     // 💡 新增：檢查該玩家是否擁有有效的 VIP
      const isVip = p.vip && p.vip.isActive && p.vip.expiresAt > Date.now();
-
      return `
       <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="window.selectGMTarget('${p.id}', '${p.name}')">
           <div style="pointer-events:none;">
@@ -1018,11 +796,8 @@ function renderGMPlayers() {
               ${isVip ? '<span style="color:#facc15; font-size:0.8rem; font-weight:bold;">[👑 VIP]</span>' : ''}<br>
               <span style="font-size:0.75rem; color:#94a3b8;">ID: ${p.id.slice(0,6)}... | 座標: (${p.x}, ${p.y})</span>
           </div>
-          <!-- 💡 將右側改為 Flex 容器，並排放置「尋找」與「發放 VIP」按鈕 -->
           <div style="display:flex; gap:6px;">
               <button onclick="event.stopPropagation(); window.locatePlayer(${p.x}, ${p.y})" style="background:#8b5cf6; padding:6px 10px; font-size:0.8rem; border-radius:4px; border:none; color:#fff;">📍 尋找</button>
-              
-              <!-- 呼叫我們寫好的 adminSetVIP 函數，並防止冒泡點擊 -->
               <button onclick="event.stopPropagation(); window.adminSetVIP('${p.id}', 30)" style="background: linear-gradient(to right, #f59e0b, #eab308); color:#000; padding:6px 10px; font-size:0.8rem; font-weight:bold; border-radius:4px; border:none;">發放 VIP</button>
           </div>
       </div>
@@ -1030,7 +805,6 @@ function renderGMPlayers() {
 }
 
 window.locatePlayer = (x, y) => { window.switchTab('world'); centerCameraOn(x, y); };
-
 // ==========================================
 // 💡 遊戲主心跳 (行軍、採集、升級結算與離線報告)
 // ==========================================
@@ -1040,30 +814,23 @@ async function localTick() {
   
   const now = Date.now(), dt = (now - myData.lastTick) / 1000; myData.lastTick = now;
 
-  // 💡 【新增】離線進度報告 (若玩家離開超過 5 分鐘 / 300秒)
   if (dt > 300) {
       const upkeepPerSec = (myData.troops.infantry*CFG.troops.infantry.upkeep + myData.troops.archer*CFG.troops.archer.upkeep + myData.troops.cavalry*CFG.troops.cavalry.upkeep) / 3600;
       const farmProdPerSec = CFG.buildings.farm.rate * myData.buildings.farm;
-      
       const pW = Math.floor(dt * (CFG.buildings.lumber.rate * myData.buildings.lumber));
       const pI = Math.floor(dt * (CFG.buildings.mine.rate * myData.buildings.mine));
       const pF = Math.floor(dt * farmProdPerSec);
       const cF = Math.floor(dt * upkeepPerSec);
       
       let logMsg = `📴 [離線報告] 歡迎歸來！您離開了 ${formatTime(Math.floor(dt))}。領地產出: 🌲${formatCompact(pW)} ⛏️${formatCompact(pI)}`;
-      if (pF >= cF) {
-          logMsg += ` 🌾+${formatCompact(pF - cF)} (扣除部隊消耗)`;
-      } else {
-          logMsg += ` 🌾-${formatCompact(cF - pF)} (糧草入不敷出)`;
-      }
-      
+      if (pF >= cF) logMsg += ` 🌾+${formatCompact(pF - cF)} (扣除部隊消耗)`;
+      else logMsg += ` 🌾-${formatCompact(cF - pF)} (糧草入不敷出)`;
       myData.logs.unshift(logMsg);
   }
   
   if (typeof window.renderMarchHUD === 'function') {
       window.renderMarchHUD();
-    // 顯示左側任務與戰報按鈕
-    if (typeof window.renderSideMenu === 'function') window.renderSideMenu();
+      if (typeof window.renderSideMenu === 'function') window.renderSideMenu();
   }
 
   let cleanedMarches = [];
@@ -1095,7 +862,6 @@ async function localTick() {
           }
           if (m.loot && (m.loot.wood > 0 || m.loot.iron > 0 || m.loot.food > 0 || m.loot.speedup1h > 0 || m.loot.speedup30m > 0 || m.loot.speedup5m > 0 || m.loot.resourceCard > 0)) {
               myData.wood += (m.loot.wood || 0);
-              // 累積採集任務
               if (myData.quests) myData.quests.daily.gather_wood += (m.loot.wood || 0);
               myData.iron += (m.loot.iron || 0);
               myData.food += (m.loot.food || 0);
@@ -1170,8 +936,7 @@ async function localTick() {
     if (now >= q.finishesAt) {
       if(CFG.buildings[q.target]) {
          myData.buildings[q.target]++;
-          // 累積建築升級任務
-          if (myData.quests) myData.quests.daily.upgrades++;
+         if (myData.quests) myData.quests.daily.upgrades++;
          myData.logs.unshift(`[建造就緒] ${CFG.buildings[q.target].name} 升級至 Lv.${myData.buildings[q.target]}`);
          try{ setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true }); }catch(e){}
       }
@@ -1220,16 +985,12 @@ async function localTick() {
      if (now > boss.despawnAt) { if (Math.random() < 0.05) spawnWorldBoss(boss.id); }
   });
 
-  // 💡 野外勢力隨機攻城系統 (每秒 0.5% 機率觸發，約每 3 分鐘偵測一次)
   if (Math.random() < 0.005) {
     if (!myData.shieldEndsAt || myData.shieldEndsAt <= now) { 
       let nearestNPC = null, minDist = 15;
-      
-      // 掃描玩家周圍 15 格，尋找是否有任何 NPC 據點或外圍營地
       for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
         for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
           const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
-          // 如果發現 npc 開頭的實體 (包含剛加入的 npc_outpost)，且還沒被玩家通關摧毀
           if (cell && cell.entity && (cell.entity.type.startsWith('npc_')) && !getClearedPOI(tx, ty)) {
             const dist = Math.hypot(tx - myData.x, ty - myData.y);
             if (dist < minDist) { minDist = dist; nearestNPC = {x: tx, y: ty, ent: cell.entity}; }
@@ -1237,22 +998,15 @@ async function localTick() {
         }
       }
       
-      // 如果附近有外圍營地，而且目前沒有「正在抵禦該營地」的隊列，就發動攻擊！
       if (nearestNPC && !myData.marches.some(m => m.type === 'defend_npc' && m.startX === nearestNPC.x && m.startY === nearestNPC.y)) {
         const timeMs = Math.ceil(minDist * 4 * 1000); 
-        // 💡 敵軍強度會根據玩家的「主城等級」動態微調，確保有一點威脅感但不會秒殺新手
         const enemyPwr = Math.floor(200 + myData.buildings.castle * 250);
-        
         myData.marches.push({
           id: 'M'+Date.now(), type: 'defend_npc', startX: nearestNPC.x, startY: nearestNPC.y, targetX: myData.x, targetY: myData.y,
           startTime: Date.now(), finishesAt: Date.now() + timeMs, npcPower: enemyPwr, npcName: nearestNPC.ent.name
         });
-        
-        // 觸發紅色警告日誌與戰報
         myData.logs.unshift(`🚨 [警報] 【${nearestNPC.ent.name}】的劫掠部隊正朝我方進軍！預計 ${formatTime(Math.ceil(timeMs/1000))} 抵達！`);
-        if(window.addReport) {
-            window.addReport(`🚨 敵襲警報`, `發現來自【${nearestNPC.ent.name}】的敵軍正朝主城進發！\n預估敵軍戰力：${formatCompact(enemyPwr)}\n\n(💡 請盡快招募士兵防禦，或在內政面板使用和平護盾！)`, false);
-        }
+        if(window.addReport) window.addReport(`🚨 敵襲警報`, `發現來自【${nearestNPC.ent.name}】的敵軍正朝主城進發！\n預估敵軍戰力：${formatCompact(enemyPwr)}\n\n(💡 請盡快招募士兵防禦，或在內政面板使用和平護盾！)`, false);
         needSave = true;
       }
     }
@@ -1276,7 +1030,7 @@ async function localTick() {
           needSave = true; continue; 
       }
       else if (m.type === 'attack_player') { 
-            const res = await resolveAttackPlayer_NEW(m); // 👈 這裡加上 _NEW
+            const res = await resolveAttackPlayer_NEW(m);
             if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
         }
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
@@ -1292,8 +1046,6 @@ async function localTick() {
       else { 
           const res = await resolveInteractNPC(m); 
           if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
-          
-          // 💡 完美接住回傳的「復仇軍團」，讓它正式出現在地圖與 HUD 上！
           if (res.counterMarch) newMarches.push(res.counterMarch);
       }
       needSave = true;
@@ -1351,9 +1103,6 @@ function getPwrByTech(troops, tech) {
          (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
 }
 
-// ==========================================
-// 💡 據點佔領結算系統 (修復 1 兵佔領 Bug)
-// ==========================================
 async function resolveOccupyNode(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, isGathering: false, cap: m.entity.cap, resType: m.entity.res };
   try {
@@ -1362,30 +1111,25 @@ async function resolveOccupyNode(m) {
       const snap = await transaction.get(nodeRef);
       let defender = snap.exists() ? snap.data() : null;
       
-      // 我方真實戰力
       const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
       
       if (defender && defender.uid !== myUid) {
-          // 🆚 玩家對抗玩家 (PVP 爭奪資源點)
           const defPwr = getPwrByTech(defender.troops, defender.techs || {});
           if (attPwr > defPwr) {
               transaction.set(nodeRef, { isNode: true, uid: myUid, name: myData.name, troops: m.troops, techs: m.techs, x: m.targetX, y: m.targetY, type: m.entity.type });
               res.isGathering = true;
               myData.logs.unshift(`[佔領成功] 擊退了敵方佔領軍！部隊開始採集資源。`);
-              if(window.addReport) window.addReport(`⚔️️ 掠奪資源點`, `成功擊敗敵方部隊並佔據資源點！`, true);
+              if(window.addReport) window.addReport(`⚔ 掠奪資源點`, `成功擊敗敵方部隊並佔據資源點！`, true);
           } else {
-              res.survived = false; // 戰敗全滅
+              res.survived = false; 
               res.troops = {infantry:0, archer:0, cavalry:0};
               myData.logs.unshift(`[佔領失敗] 遭遇強大的敵軍防守，我方部隊全數陣亡！`);
               if(window.addReport) window.addReport(`☠️ 資源點爭奪失敗`, `力量懸殊，出征部隊已全數陣亡！`, false);
           }
       } else {
-          // ⚔️ 對抗野生守軍 (PVE 戰鬥判定)
-          const reqPwr = m.entity.reqPwr || 100; // 取得該資源點的戰力要求
+          const reqPwr = m.entity.reqPwr || 100; 
           
-          // 💡 關鍵修復：檢查我方戰力是否大於等於守軍
           if (attPwr >= reqPwr) {
-              // ✅ 戰鬥勝利，計算輕微戰損 (戰力越碾壓，死越少兵)
               let lossRate = reqPwr > 0 ? (reqPwr / (attPwr + 1)) * 0.1 : 0; 
               res.troops.infantry = Math.max(0, m.troops.infantry - Math.floor(m.troops.infantry * lossRate));
               res.troops.archer = Math.max(0, m.troops.archer - Math.floor(m.troops.archer * lossRate));
@@ -1395,9 +1139,8 @@ async function resolveOccupyNode(m) {
               res.isGathering = true;
               myData.logs.unshift(`[抵達據點] 擊退野生守軍，部隊已駐紮並開始採集資源。`);
           } else {
-              // ❌ 戰鬥失敗 (1兵流會直接死在這裡)
               res.survived = false;
-              res.troops = {infantry:0, archer:0, cavalry:0}; // 部隊全軍覆沒
+              res.troops = {infantry:0, archer:0, cavalry:0}; 
               myData.logs.unshift(`[佔領慘敗] 戰力不足以擊敗野生守軍，部隊全軍覆沒！`);
               if(window.addReport) window.addReport(`☠️ 佔領失敗`, `資源點守備戰力高達 ${formatCompact(reqPwr)}，我方戰鬥力 ${formatCompact(attPwr)} 不敵，全軍覆沒！`, false);
           }
@@ -1407,9 +1150,7 @@ async function resolveOccupyNode(m) {
   } catch (e) { console.error(e); }
   return res;
 }
-// ==========================================
-// 💡 世界 Boss 攻擊與傷害結算系統
-// ==========================================
+
 async function resolveAttackBoss(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0} };
   try {
@@ -1421,28 +1162,21 @@ async function resolveAttackBoss(m) {
       let bossData = bossSnap.data();
       if (bossData.hp <= 0) throw new Error("BossDead");
 
-      // 1. 計算我方部隊的總攻擊力
       const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
-      
-      // 2. 造成傷害 (加上 90%~110% 的傷害浮動，更有真實感)
       let dmg = Math.floor(attPwr * (Math.random() * 0.2 + 0.9)); 
-      if (dmg > bossData.hp) dmg = bossData.hp; // 不能超過殘血
+      if (dmg > bossData.hp) dmg = bossData.hp; 
       
-      // 3. 扣除 Boss 血量，並記錄你的貢獻度 (打多少痛多少)
       bossData.hp -= dmg;
       bossData.contributors = bossData.contributors || {};
       bossData.contributors[myUid] = (bossData.contributors[myUid] || 0) + dmg;
 
-      // 將傷害寫入雲端同步給所有玩家
       transaction.set(bossRef, bossData, { merge: true });
 
-      // 4. 計算玩家戰損 (與史詩巨獸戰鬥，損失約 2% ~ 5% 的兵力)
       const lossRate = 0.02 + Math.random() * 0.03;
       res.troops.infantry = Math.floor(res.troops.infantry * (1 - lossRate));
       res.troops.archer = Math.floor(res.troops.archer * (1 - lossRate));
       res.troops.cavalry = Math.floor(res.troops.cavalry * (1 - lossRate));
 
-      // 5. 寫入日誌與戰報信箱
       myData.logs.unshift(`[首領戰] 對 ${m.targetName} 造成了 ${formatCompact(dmg)} 點傷害！`);
       if(window.addReport) {
           window.addReport(`⚔️ 首領討伐戰報`, `部隊成功襲擊了【${m.targetName}】！\n造成傷害：💥 ${formatCompact(dmg)}\n戰鬥損失：約 ${Math.floor(lossRate*100)}% 兵力受傷陣亡。\n\n(💡 最終擊殺獎勵將於首領倒下時，系統會依據您的總貢獻度自動發放！)`, true);
@@ -1491,9 +1225,6 @@ async function resolveDefendNPC(m) {
   try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
 }
 
-// ==========================================
-// 💡 PVE 與 PVP 戰鬥結算引擎 (含醫療所與負重)
-// ==========================================
 async function resolveInteractNPC(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarch: null };
   let reportText = "";
@@ -1507,7 +1238,6 @@ async function resolveInteractNPC(m) {
     const defPwr = m.entity.reqPwr || 100;
 
     if (attPwr >= defPwr) {
-        // ✅ 戰鬥勝利
         let lossRate = (defPwr / (attPwr + 1)) * 0.15;
         
         let lInf = Math.floor(m.troops.infantry * lossRate); let wInf = Math.floor(lInf * 0.9);
@@ -1539,18 +1269,17 @@ async function resolveInteractNPC(m) {
             res.counterMarch = { id: 'COUNTER_'+Date.now(), type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 復仇軍團` };
         }
     } else {
-        // ❌ 戰鬥失敗
         let wInf = Math.floor(m.troops.infantry * 0.7); let wArc = Math.floor(m.troops.archer * 0.7); let wCav = Math.floor(m.troops.cavalry * 0.7);
         window.addWounded(wInf, wArc, wCav);
         res.survived = false; res.troops = {infantry:0, archer:0, cavalry:0};
         reportText = `討伐遭遇慘敗！部隊潰散 (🏥 ${wInf+wArc+wCav} 人已送往醫療所)`;
         if(window.addReport) window.addReport(`☠️ 遠征失敗`, reportText, false);
-        return res; // 這裡的 return 是合法的，因為它在函數內部
+        return res; 
     }
   }
   myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
   if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
-  return res; // 這裡的 return 也是合法的
+  return res;
 }
 
 async function resolveAttackPlayer_NEW(m) {
@@ -1568,7 +1297,6 @@ async function resolveAttackPlayer_NEW(m) {
       const defPwr = getPwrByTech(defTroops, target.research || {}) * (1 + (target.buildings.wall || 0) * 0.05);
 
       if (attPwr > defPwr) {
-        // ✅ 攻擊方勝利 (防守方城破)
         let tWounded = target.wounded || {infantry:0, archer:0, cavalry:0};
         let tHospMax = 10000 + (target.buildings.castle || 1) * 5000;
         let tCurHosp = tWounded.infantry + tWounded.archer + tWounded.cavalry;
@@ -1595,24 +1323,19 @@ async function resolveAttackPlayer_NEW(m) {
         
         transaction.set(tPrivRef, { wood: target.wood - lW, iron: target.iron - lI, food: target.food - lF, troops: {infantry:0,archer:0,cavalry:0}, wounded: tWounded, logs: [`[城破] 遭到突襲！城池正在燃燒！防守部隊已盡數送醫。損失物資 🌲${lW} ⛏️${lI} 🌾${lF}`, ...(target.logs || [])] }, { merge: true });
         
-        // ==========================================
-        // 🔥 在這裡寫入燃燒狀態到世界地圖 🔥
-        // ==========================================
-        const burnTime = Date.now() + (30 * 60 * 1000); // 設定燃燒 30 分鐘
+        const burnTime = Date.now() + (30 * 60 * 1000); 
         transaction.set(tPubRef, { 
             troops: 0, 
-            burnEndsAt: burnTime // 加入這個時間戳！
+            burnEndsAt: burnTime 
         }, { merge: true });
-        // ==========================================
         
         res.survived = true; res.loot = { wood: lW, iron: lI, food: lF };
         if(window.addReport) window.addReport(`⚔️ 攻城勝利`, `成功攻破【${m.targetName}】！\n敵軍城池已陷入火海！🔥\n🎒 負重滿載率：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n掠奪物資：🌲${lW} ⛏️${lI} 🌾${lF}`, true);
       } else {
-        // ❌ 攻擊方失敗
         let wInf = Math.floor(m.troops.infantry * 0.6); let wArc = Math.floor(m.troops.archer * 0.6); let wCav = Math.floor(m.troops.cavalry * 0.6);
         window.addWounded(wInf, wArc, wCav);
         transaction.set(tPrivRef, { logs: [`[堅壁清野] 成功擊退敵軍！`, ...(target.logs || [])] }, { merge: true });
-        if(window.addReport) window.addReport(`☠️ 突擊失敗`, `進攻遭遇重創！我方不敵，殘兵已送醫 (🏥 ${wInf+wArc+wCav} 人)！`, false);
+        if(window.addReport) window.addReport(`☠️️ 突擊失敗`, `進攻遭遇重創！我方不敵，殘兵已送醫 (🏥 ${wInf+wArc+wCav} 人)！`, false);
       }
     });
     window.refreshMap();
@@ -1625,47 +1348,38 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
 }
 
-// ==========================================
-// 🏹 大地圖行軍軌跡與動態箭頭渲染模組
-// ==========================================
 function drawMarchLines(ctx, marches, tileSize) {
   if (!marches || marches.length === 0) return;
   const now = Date.now();
 
   marches.forEach(m => {
-    // 1. 計算進度百分比 (0.0 ~ 1.0)
     const totalDuration = m.finishesAt - m.startTime;
     if (totalDuration <= 0) return;
     const elapsed = now - m.startTime;
     const progress = Math.min(1, Math.max(0, elapsed / totalDuration));
 
-    // 2. 轉換世界像素座標 (取格子中心點)
     const startPxX = m.startX * tileSize + tileSize / 2;
     const startPxY = m.startY * tileSize + tileSize / 2;
     const targetPxX = m.targetX * tileSize + tileSize / 2;
     const targetPxY = m.targetY * tileSize + tileSize / 2;
 
-    // 當前部隊即時所在位置 (線性插值)
     const curPxX = startPxX + (targetPxX - startPxX) * progress;
     const curPxY = startPxY + (targetPxY - startPxY) * progress;
 
-    // 3. 依部隊類型決定顏色與標籤
-    let color = '#38bdf8'; // 天藍色 (我方出征)
+    let color = '#38bdf8'; 
     let label = '⚔️ 部隊';
     if (m.type === 'return') {
-      color = '#10b981'; // 翠綠色 (返航)
+      color = '#10b981'; 
       label = '📦 返航';
     } else if (m.type === 'defend_npc' || m.type === 'counter_attack') {
-      color = '#ef4444'; // 紅色 (敵襲/反擊)
+      color = '#ef4444'; 
       label = `🚨 ${m.npcName || '敵軍'}`;
     } else if (m.type === 'attack_player') {
-      color = '#f59e0b'; // 橘黃色 (攻打玩家)
+      color = '#f59e0b'; 
       label = '⚔️ 攻城';
     }
 
     ctx.save();
-
-    // 4. 繪製動態流動虛線
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
@@ -1678,28 +1392,17 @@ function drawMarchLines(ctx, marches, tileSize) {
     ctx.lineTo(targetPxX, targetPxY);
     ctx.stroke();
 
-    // 5. 繪製箭頭實體
     const angle = Math.atan2(targetPxY - startPxY, targetPxX - startPxX);
-    ctx.setLineDash([]); // 恢復實線
+    ctx.setLineDash([]); 
     ctx.fillStyle = color;
     ctx.beginPath();
     const arrowSize = 9;
-    ctx.moveTo(
-      curPxX + Math.cos(angle) * arrowSize * 1.5,
-      curPxY + Math.sin(angle) * arrowSize * 1.5
-    );
-    ctx.lineTo(
-      curPxX + Math.cos(angle + 2.4) * arrowSize,
-      curPxY + Math.sin(angle + 2.4) * arrowSize
-    );
-    ctx.lineTo(
-      curPxX + Math.cos(angle - 2.4) * arrowSize,
-      curPxY + Math.sin(angle - 2.4) * arrowSize
-    );
+    ctx.moveTo(curPxX + Math.cos(angle) * arrowSize * 1.5, curPxY + Math.sin(angle) * arrowSize * 1.5);
+    ctx.lineTo(curPxX + Math.cos(angle + 2.4) * arrowSize, curPxY + Math.sin(angle + 2.4) * arrowSize);
+    ctx.lineTo(curPxX + Math.cos(angle - 2.4) * arrowSize, curPxY + Math.sin(angle - 2.4) * arrowSize);
     ctx.closePath();
     ctx.fill();
 
-    // 6. 繪製部隊頭頂膠囊名牌
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -2059,7 +1762,6 @@ function drawWorldMap() {
 }
 
 window.zoomMapBtn = (factor) => {
-
   const nZ = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
   if (nZ !== zoom) {
     const cx = canvas.width / 2, cy = canvas.height / 2;
@@ -2146,7 +1848,7 @@ window.syncTroop = (type, source) => {
 };
 
 canvas.addEventListener("click", (e) => {
-  if (myData && myData.isBanned) return; // 👈 加上這行：被封鎖者禁止點擊地圖
+  if (myData && myData.isBanned) return; 
   if (dragDist > 10) return;
   const r = canvas.getBoundingClientRect();
   const cx = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : 0);
@@ -2254,7 +1956,7 @@ canvas.addEventListener("click", (e) => {
 });
 
 document.getElementById("btn-confirm-action").addEventListener('click', async () => {
-  if (myData && myData.isBanned) return; // 👈 加上這行：被封鎖者禁止發送部隊
+  if (myData && myData.isBanned) return; 
   if (!targetAction) return;
     if (targetAction.type.startsWith('attack')) {
         if (myData.shieldEndsAt && myData.shieldEndsAt > Date.now()) {
@@ -2299,14 +2001,12 @@ if (targetAction.type === 'relocate') {
   if (sendInf > 0) spd = Math.max(spd, CFG.troops.infantry.speed);
   if (sendArc > 0) spd = Math.max(spd, CFG.troops.archer.speed);
   
-  // 💡 這裡必須使用 let，才能在下方重新賦值
   let timeMs = Math.ceil(targetAction.dist * spd * 1000);
   myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
 
-  // 🐎 套用【急行軍隊】科技加成：每級提速 8%
   const speedTechLv = (myData.research && myData.research.march_speed) || 0;
   const speedMult = 1 + (speedTechLv * 0.08);
-  timeMs = Math.ceil(timeMs / speedMult); // 縮短行軍時間毫秒數
+  timeMs = Math.ceil(timeMs / speedMult); 
 
   const newMarch = {
     id: 'M'+Date.now(), type: targetAction.type, startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
@@ -2486,10 +2186,7 @@ window.renderSelf = function() {
                       btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
                   }
 
-                  // 💡 取得科技的動態加成文字
                   const effectText = typeof getTechEffectText === 'function' ? getTechEffectText(key, lvl) : `效果等級: ${lvl}`;
-
-                  // 💡 將原本寫死的 "附加戰力" 替換成 "功能描述" + "具體數值加成"
                   const detailHtml = `<span style="color:#94a3b8; font-size:0.75rem;">${d.desc || ''}</span><br/><span style="color:#34d399; font-weight:bold; font-size:0.8rem;">✨ ${effectText}</span>`;
 
                   return genCard(`${d.icon} ${d.name}`, lvl, detailHtml, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
@@ -2531,9 +2228,7 @@ window.renderSelf = function() {
       const logList = document.getElementById('log-list');
       if (logList && myData.logs) logList.innerHTML = myData.logs.slice(0, 8).map(l => `<p>${l}</p>`).join('');
 
-  } catch (e) {
-      console.error("UI 渲染嚴重錯誤:", e);
-  }
+  } catch (e) { console.error("UI 渲染嚴重錯誤:", e); }
 }
 
 window.useResourceCard = async () => {
@@ -2586,7 +2281,7 @@ window.useShield = async () => {
   myData.logs.unshift(`[防禦系統] 啟動和平護盾，領地 6 小時內將免受攻擊！`);
   await savePrivateData();
   try{ await setDoc(doc(db, "world_map", myUid), { shieldEndsAt: myData.shieldEndsAt }, { merge: true }); }catch(e){}
-  alert('🛡️ 護盾已啟動！');
+  alert('🛡️️ 護盾已啟動！');
   try{ window.renderSelf(); }catch(e){} window.refreshMap();
 };
 
@@ -2705,7 +2400,6 @@ window.renderAllianceUI = () => {
         const pubList = document.getElementById('public-alliances-list');
         if (pubList) {
             const sortedAlliances = Object.keys(allianceCounts).sort((a,b) => allianceCounts[b] - allianceCounts[a]);
-            
             if (sortedAlliances.length === 0) {
                 pubList.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center; padding:10px;">伺服器尚無任何聯盟，趕快創立第一個吧！</p>';
             } else {
@@ -2740,9 +2434,7 @@ window.recallMarch = async (marchId) => {
     
     if (m.type === 'gathering') {
         returnTimeMs = Math.ceil(dist * 3 * 1000); 
-        try { 
-            if (typeof deleteDoc !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); 
-        } catch(e) { console.warn("資源點釋放略過"); }
+        try { if (typeof deleteDoc !== 'undefined') await deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); } catch(e) { }
     } else if (m.finishesAt > now) {
         returnTimeMs = now - m.startTime; 
     } else {
@@ -2789,10 +2481,7 @@ window.renderMarchHUD = function() {
         transform-origin: top right;
     `;
     
-    if (myData.marches.length === 0) {
-        hud.innerHTML = '';
-        return;
-    }
+    if (myData.marches.length === 0) { hud.innerHTML = ''; return; }
     
     const now = Date.now();
     let html = '';
@@ -2815,11 +2504,8 @@ window.renderMarchHUD = function() {
         const canRecall = (m.type !== 'return' && m.type !== 'defend_npc' && m.type !== 'npc_attack_node');
 
         let timeDisplay = formatTime(remain);
-        if (m.type === 'gathering' && remain === 0) {
-            timeDisplay = '⛏ 作業中...';
-        } else if (remain === 0) {
-            timeDisplay = '⏳ 結算中...';
-        }
+        if (m.type === 'gathering' && remain === 0) timeDisplay = '⛏ 作業中...';
+        else if (remain === 0) timeDisplay = '⏳ 結算中...';
 
         html += `
         <div style="background: ${bgColor}; border: 1px solid #334155; border-radius: 6px; padding: 8px; color: white; pointer-events: auto; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.6);">
@@ -2834,12 +2520,9 @@ window.renderMarchHUD = function() {
             </div>
         </div>`;
     });
-    
     hud.innerHTML = html;
 };
-// ==========================================
-// 💡 側邊按鈕、戰報與任務系統 UI 引擎
-// ==========================================
+
 window.renderSideMenu = function() {
     if (document.getElementById('side-menu-hud')) return;
     const div = document.createElement('div');
@@ -2908,7 +2591,6 @@ window.openQuestModal = () => {
     const q2Done = q.upgrades >= 2; const q2Claimed = c.includes('q2');
     const q3Done = q.gather_wood >= 10000; const q3Claimed = c.includes('q3');
 
-    // 💡 優化：把獎勵獨立寫在任務說明下方，讓玩家隨時都能看到！
     modal.innerHTML = `
     <div style="background:#1e293b; border:2px solid #10b981; border-radius:10px; width:300px; padding:20px; color:white;">
         <h2 style="color:#10b981; margin-top:0;">🎯 每日任務</h2>
@@ -2939,54 +2621,39 @@ window.openQuestModal = () => {
     modal.style.display = 'flex';
 };
 
-// 🛡️ 嚴格安全版：領取每日任務獎勵
 window.claimQuest = async (qid) => {
     if (!myData || !myData.quests) return;
     const q = myData.quests.daily;
-    
-    // 💀 防駭客 1：檢查是否已經領取過，防止重複刷卡！
-    if (myData.quests.claimed.includes(qid)) {
-        return alert("⚠️ 系統警告：此獎勵已經領取過了，無法重複領取！");
-    }
-    
-    // 💀 防駭客 2：嚴格檢查任務是否「真正達成」，防止用 F12 強制觸發！
+    if (myData.quests.claimed.includes(qid)) return alert("⚠️ 系統警告：此獎勵已經領取過了，無法重複領取！");
     if (qid === 'q1' && q.kills < 3) return alert("⚠️ 非法操作：擊殺任務未達標！");
     if (qid === 'q2' && q.upgrades < 2) return alert("⚠️ 非法操作：升級任務未達標！");
     if (qid === 'q3' && q.gather_wood < 10000) return alert("⚠️ 非法操作：採集任務未達標！");
 
-    // 通過所有驗證，正式發放獎勵
     myData.quests.claimed.push(qid);
     if (qid === 'q1') myData.items.speedup5m += 3;
     if (qid === 'q2') myData.items.speedup1h += 1;
     if (qid === 'q3') myData.items.resourceCard += 1;
     
     myData.logs.unshift(`[任務] 成功領取每日任務獎勵！`);
-    await savePrivateData();
-    window.openQuestModal();
-    try{ window.renderSelf(); }catch(e){}
+    await savePrivateData(); window.openQuestModal(); try{ window.renderSelf(); }catch(e){}
 };
-// ==========================================
-// 💡 傷兵醫療與部隊負重核心系統
-// ==========================================
+
 window.addWounded = function(wInf, wArc, wCav) {
     const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
-    // 預設醫院容量：10,000 + (主城等級 * 5,000) + 科技加成
     let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
     let curHosp = (myData.wounded.infantry||0) + (myData.wounded.archer||0) + (myData.wounded.cavalry||0);
-    let overflow = 0; // 因醫院爆滿而陣亡的數量
+    let overflow = 0; 
 
     let addTroop = (type, amount) => {
         let space = Math.max(0, maxHosp - curHosp);
         let toAdd = Math.min(amount, space);
         myData.wounded[type] = (myData.wounded[type] || 0) + toAdd;
-        curHosp += toAdd;
-        overflow += (amount - toAdd); // 裝不下的直接死亡
+        curHosp += toAdd; overflow += (amount - toAdd); 
     };
     addTroop('infantry', wInf); addTroop('archer', wArc); addTroop('cavalry', wCav);
     return overflow; 
 };
 
-// 🎒 步兵負重 10, 弓兵負重 5, 騎兵負重 8
 window.getLoadCapacity = function(troops) {
     let baseLoad = (troops.infantry||0)*10 + (troops.archer||0)*5 + (troops.cavalry||0)*8;
     let loadTechLv = (myData.research && myData.research.troop_load) || 0;
@@ -3008,7 +2675,6 @@ window.openHospitalModal = () => {
     const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
     let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
 
-    // 治療成本：每人 10 木材、15 糧食
     let costWood = totalW * 10; let costFood = totalW * 15;
     let canHeal = totalW > 0 && myData.wood >= costWood && myData.food >= costFood;
 
@@ -3041,17 +2707,10 @@ window.healAllWounded = async () => {
         myData.troops.infantry += w.infantry; myData.troops.archer += w.archer; myData.troops.cavalry += w.cavalry;
         myData.wounded = {infantry:0, archer:0, cavalry:0};
         myData.logs.unshift(`[醫療] 成功治癒了 ${totalW} 名重傷士兵，部隊已歸隊！`);
-        await savePrivateData(); window.openHospitalModal();
-        try { window.renderSelf(); } catch(e){}
+        await savePrivateData(); window.openHospitalModal(); try { window.renderSelf(); } catch(e){}
     }
 };
-// ==========================================
-// 👑 VIP 系統：打開介面與領取獎勵
-// ==========================================
 
-// ==========================================
-// 🛠️ 寫入資料庫邏輯：發放 VIP (同步寫入地圖版)
-// ==========================================
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     const vipData = { isActive: true, expiresAt: expiry, lastClaimed: "" };
@@ -3061,25 +2720,16 @@ window.adminSetVIP = async function(targetUid, days = 30) {
         alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
         if (typeof renderGMPlayers === 'function') renderGMPlayers();
         if (typeof window.refreshMap === 'function') window.refreshMap();
-    } catch (e) {
-        alert(`❌ 開通失敗：${e.message}`);
-    }
+    } catch (e) { alert(`❌ 開通失敗：${e.message}`); }
 };
 
-// ==========================================
-// 👑 玩家專用：VIP 介面與每日領獎邏輯
-// ==========================================
 window.openVipModal = function() {
     const modal = document.getElementById('vip-modal');
     const container = document.getElementById('vip-action-container');
     if (!modal || !container || !myData) return;
 
-    if (!myData.vip || typeof myData.vip !== 'object') {
-        myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
-    }
-    if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
-        myData.vip.isActive = false; 
-    }
+    if (!myData.vip || typeof myData.vip !== 'object') myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
+    if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) myData.vip.isActive = false; 
 
     if (myData.vip.isActive) {
         const daysLeft = Math.ceil((myData.vip.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
@@ -3097,7 +2747,6 @@ window.openVipModal = function() {
             }
         `;
     } else {
-        // 💡 這裡換成了你的真實 PayMe 連結！
         container.innerHTML = `
             <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
                 <p style="color: #fca5a5; font-size: 0.85rem; margin: 0; line-height: 1.4;">
@@ -3120,12 +2769,11 @@ window.claimVipReward = async function() {
     const todayStr = new Date().toLocaleDateString();
     if (myData.vip.lastClaimed === todayStr) return alert("❌ 您今天已經領取過 VIP 獎勵了！");
 
-    // 💰 平衡版每日獎勵
     myData.wood = (myData.wood || 0) + 5000;  
     myData.iron = (myData.iron || 0) + 5000;
     myData.food = (myData.food || 0) + 5000;
     if(!myData.items) myData.items = {};
-    myData.items.speed30m = (myData.items.speed30m || 0) + 2; // 給2張30分加速
+    myData.items.speed30m = (myData.items.speed30m || 0) + 2; 
 
     myData.vip.lastClaimed = todayStr;
     await savePrivateData();
