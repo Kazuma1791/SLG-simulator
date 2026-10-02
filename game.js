@@ -2014,6 +2014,20 @@ function drawWorldMap() {
     }
     // ==========================================
 
+    你貼的這段代碼讓我完全看清楚問題了！🕵️‍♂️
+
+這裡面總共有 2 個地方 少了括號，導致瀏覽器讀到最後直接崩潰：
+
+城池迴圈沒有關閉：if (zoom>0.5) {...} 結束後，應該要先用 }); 把 allCastles.forEach 關起來，才能繼續畫後面的 epicLandmarks（地標）。
+
+採集部隊的 IF 沒有關閉：在下面 if (m.type === 'gathering') { 的最後，少了一個 }，導致大亂。
+
+另外，檔案最底下有重複兩次畫行軍線的代碼，我也順便幫你整理乾淨了！
+
+🛠️ 終極修復版（請直接全選這一段替換）：
+請把你剛剛貼給我的這整段（從 if (zoom>0.5) { 一直到最後面的 ctx.restore(); }），直接替換成下面這段修好的版本：
+
+JavaScript
     if (zoom>0.5) {
       // 💡 4. VIP 的名字字體變成純金黃色
       if (isVip) {
@@ -2031,9 +2045,15 @@ function drawWorldMap() {
       if (isVip) dispName = '👑 ' + dispName;
 
       ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
-      ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
+      ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
+    
+    ctx.textAlign='start';
+  }); // 👈 【關鍵修復 1】在這裡關閉 allCastles.forEach 迴圈！
 
+  // ==========================================
+  // 🗺️ 繪製大地圖動態地標 (Epic Landmarks)
+  // ==========================================
   epicLandmarks.forEach((lm, idx) => {
       const cycle = 15000; 
       const phase = (t + idx * 4321) % (cycle * 2); 
@@ -2062,8 +2082,10 @@ function drawWorldMap() {
       }
   });
 
+  // ==========================================
   // 🏹 繪製大地圖全新動態行軍軌跡與採集狀態
-  if (myData.marches && myData.marches.length > 0) {
+  // ==========================================
+  if (myData && myData.marches && myData.marches.length > 0) {
     // 1. 保留採集中標籤 (駐留在資源點上挖礦)
     myData.marches.forEach(m => {
       if (m.type === 'gathering') {
@@ -2085,15 +2107,12 @@ function drawWorldMap() {
           ctx.fillText(formatTime(left), cX, cY - 20);
         }
         ctx.textAlign = 'start';
-     });
+      } // 👈 【關鍵修復 2】補上這個 } 來關閉 if 判斷！
+    });
 
     // 2. 移動中部隊繪製全新流動虛線與方向箭頭 (排除原地採集的部隊)
     const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
     drawMarchLines(ctx, movingMarches, TILE_SIZE);
-  }
-    // 🏹 在這裡加入行軍繪製呼叫！
-  if (myData && myData.marches) {
-    drawMarchLines(ctx, myData.marches, TILE_SIZE);
   }
     
   ctx.restore();
