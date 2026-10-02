@@ -376,6 +376,15 @@ function sanitizeData() {
   if (!Array.isArray(myData.cheatLog)) myData.cheatLog = [];
   if (!Array.isArray(myData.claimedBosses)) myData.claimedBosses = [];
   if (!Array.isArray(myData.claimedAnnouncements)) myData.claimedAnnouncements = [];
+    // 👇 初始化 VIP 數據
+  if (!myData.vip || typeof myData.vip !== 'object') {
+      myData.vip = { isActive: false, expiresAt: 0, lastClaimed: "" };
+  }
+  // ⏳ 每次登入/刷新時，檢查 VIP 是否已過期
+  if (myData.vip.isActive && Date.now() > myData.vip.expiresAt) {
+      myData.vip.isActive = false; // 自動取消特權
+  }
+    
   // 👇 任務與戰報初始化
   if (!Array.isArray(myData.reports)) myData.reports = [];
   const todayStr = new Date().toDateString();
