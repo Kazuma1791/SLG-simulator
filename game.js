@@ -171,8 +171,10 @@ function getUpgradeCost(key, level, isTech=false) {
     return cost; 
 }
 // ==========================================
-// 💡 學院科技介面：完整顯示科技圖示、等級、說明與加成數值
+// 💡 學院科技介面與數值加成計算模組
 // ==========================================
+
+// 1. 先定義數值加成文字的函數 (獨立在外，絕對不會抓不到)
 function getTechEffectText(techKey, curLevel) {
   const lv = curLevel || 0;
   if (techKey === 'march_speed') {
@@ -187,6 +189,7 @@ function getTechEffectText(techKey, curLevel) {
   return '';
 }
 
+// 2. 學院彈窗渲染邏輯
 window.openAcademyModal = function() {
   if (!myData) return;
   const modal = document.getElementById('academy-modal');
@@ -199,8 +202,8 @@ window.openAcademyModal = function() {
   Object.keys(CFG.techs).forEach(k => {
     const t = CFG.techs[k];
     const curLv = (myData.research && myData.research[k]) || 0;
-    const cost = getUpgradeCost(k, curLv, true);
-    const timeSec = getUpgradeTime(k, curLv, true);
+    const cost = window.getUpgradeCost ? window.getUpgradeCost(k, curLv, true) : getUpgradeCost(k, curLv, true);
+    const timeSec = window.getUpgradeTime ? window.getUpgradeTime(k, curLv, true) : getUpgradeTime(k, curLv, true);
     const effectText = getTechEffectText(k, curLv);
 
     const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
