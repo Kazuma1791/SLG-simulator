@@ -2085,8 +2085,7 @@ function drawWorldMap() {
           ctx.fillText(formatTime(left), cX, cY - 20);
         }
         ctx.textAlign = 'start';
-      }
-    });
+     });
 
     // 2. 移動中部隊繪製全新流動虛線與方向箭頭 (排除原地採集的部隊)
     const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
