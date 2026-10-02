@@ -475,6 +475,7 @@ onAuthStateChanged(auth, async (user) => {
         const isUnderAttack = myData.marches.some(m => m.type === 'defend_npc');
         document.getElementById('danger-overlay').style.display = isUnderAttack ? 'block' : 'none';
         try { window.renderSelf(); } catch(e) { }
+        try { window.renderSideMenu(); } catch(e) { }
       }
     });
 
