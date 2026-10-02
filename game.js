@@ -1955,20 +1955,52 @@ function drawWorldMap() {
     if (cLv >= 20) imgIdx = 6; else if (cLv >= 17) imgIdx = 5; else if (cLv >= 13) imgIdx = 4;
     else if (cLv >= 9) imgIdx = 3; else if (cLv >= 6) imgIdx = 2; else if (cLv >= 3) imgIdx = 1;
     
+    // 💡 1. 判斷該玩家是否為 VIP (擁有且未過期)
+    const isVip = p.vip && p.vip.isActive && p.vip.expiresAt > Date.now();
+
     let currentCastleImg = castleImgs[imgIdx];
     
     if (currentCastleImg && currentCastleImg.complete && currentCastleImg.naturalHeight !== 0) {
+        // 💡 2. 如果是 VIP，加上黃金發光與濾鏡特效
+        if (isVip) {
+            ctx.save();
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = 20; // 邊緣發出黃金光暈
+            ctx.filter = 'sepia(1) hue-rotate(15deg) saturate(3) brightness(1.2)'; // 城堡材質變成黃金
+        }
+        
         ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
+        
+        // 畫完之後，把畫布設定恢復，以免影響到別的沒課金的玩家
+        if (isVip) {
+            ctx.restore(); 
+        }
     } else {
-        ctx.fillStyle = isMe?'#1d4ed8':'#991b1b'; ctx.fillRect(px+12,py+16+floatY,31,26);
-        ctx.fillStyle = isMe?'#3b82f6':'#ef4444'; ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
+        // 💡 3. 如果圖片沒載入 (備案方塊)，如果是 VIP 也是黃金配色
+        ctx.fillStyle = isVip ? '#b45309' : (isMe?'#1d4ed8':'#991b1b'); 
+        ctx.fillRect(px+12,py+16+floatY,31,26);
+        ctx.fillStyle = isVip ? '#facc15' : (isMe?'#3b82f6':'#ef4444'); 
+        ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
     }
 
     if (zoom>0.5) {
-      ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
-      ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; ctx.textAlign='center';
+      // 💡 4. VIP 的名字字體變成純金黃色
+      if (isVip) {
+          ctx.fillStyle = '#facc15'; // 尊貴金
+      } else {
+          ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
+      }
+      
+      ctx.font = isMe ? 'bold 12px sans-serif' : '11px sans-serif'; 
+      ctx.textAlign='center';
       
       let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
+      
+      // 💡 5. 在 VIP 的名字最前面，直接加上皇冠 👑
+      if (isVip) {
+          dispName = '👑 ' + dispName;
+      }
+
       ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
       ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
