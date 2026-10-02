@@ -1971,7 +1971,6 @@ function drawWorldMap() {
         
         ctx.drawImage(currentCastleImg, px - 20, py - 30 + floatY, TILE_SIZE + 40, TILE_SIZE + 40);
         
-        // 畫完之後，把畫布設定恢復，以免影響到別的沒課金的玩家
         if (isVip) {
             ctx.restore(); 
         }
@@ -1983,10 +1982,31 @@ function drawWorldMap() {
         ctx.fillRect(px+9,py+12+floatY,10,30); ctx.fillRect(px+36,py+12+floatY,10,30);
     }
 
+    // ==========================================
+    // 🔥 城池燃燒動態特效 🔥
+    // ==========================================
+    const isBurning = p.burnEndsAt && p.burnEndsAt > Date.now();
+    
+    if (isBurning) {
+        const time = Date.now();
+        const flicker1 = Math.sin(time / 150) * 4; 
+        const flicker2 = Math.cos(time / 200) * 3; 
+        
+        ctx.font = '22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔥', px + TILE_SIZE / 2 - 15, py + 10 + floatY + flicker1);
+        ctx.fillText('🔥', px + TILE_SIZE / 2 + 10, py - 5 + floatY + flicker2);
+        
+        ctx.font = '16px sans-serif';
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.5 + Math.sin(time/300)*0.2})`; 
+        ctx.fillText('☁️', px + TILE_SIZE / 2, py - 25 + floatY - (time % 1000) / 50); 
+    }
+    // ==========================================
+
     if (zoom>0.5) {
       // 💡 4. VIP 的名字字體變成純金黃色
       if (isVip) {
-          ctx.fillStyle = '#facc15'; // 尊貴金
+          ctx.fillStyle = '#facc15'; 
       } else {
           ctx.fillStyle = isMe ? '#fef08a' : (p.allianceName && p.allianceName === myData.allianceName ? '#10b981' : '#fff'); 
       }
@@ -1996,16 +2016,12 @@ function drawWorldMap() {
       
       let dispName = p.allianceName ? `[${p.allianceName}] ${p.name}` : p.name;
       
-      // 💡 5. 在 VIP 的名字最前面，直接加上皇冠 👑
-      if (isVip) {
-          dispName = '👑 ' + dispName;
-      }
+      // 💡 5. VIP 名字加上皇冠
+      if (isVip) dispName = '👑 ' + dispName;
 
       ctx.fillText(dispName, px+TILE_SIZE/2, py+60 + floatY); 
       ctx.fillStyle='#fbbf24'; ctx.fillText(`⚔️${formatCompact(p.troops||0)}`, px+TILE_SIZE/2, py-5 + floatY);
     }
-    ctx.textAlign='start';
-  });
 
   epicLandmarks.forEach((lm, idx) => {
       const cycle = 15000; 
@@ -3226,14 +3242,14 @@ window.claimVipReward = function() {
         return;
     }
 
-    // 💰 派發獎勵 (這裡設定木鐵糧各 20000，加速卡 2 張，你可以自己改數字)
-    myData.wood = (myData.wood || 0) + 20000;
-    myData.iron = (myData.iron || 0) + 20000;
-    myData.food = (myData.food || 0) + 20000;
+   // 💰 調整後的平衡版獎勵 (微量資源塞牙縫，重點給加速)
+    myData.wood = (myData.wood || 0) + 5000;  // 從 20000 降到 5000
+    myData.iron = (myData.iron || 0) + 5000;
+    myData.food = (myData.food || 0) + 5000;
     
-    // 如果背包欄位不存在，先建立
     if(!myData.items) myData.items = {};
-    myData.items.speed1h = (myData.items.speed1h || 0) + 2; // 給兩張 1小時加速卡
+    // 改給 2 張 30 分鐘加速，或者 1 張 1 小時加速，比較不會讓科技樹瞬間被秒升完
+    myData.items.speed30m = (myData.items.speed30m || 0) + 2;
 
     // 標記今天已領取
     myData.vip.lastClaimed = todayStr;
