@@ -3139,26 +3139,30 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 寫入資料庫邏輯：發放 VIP (Firestore v9 版)
+// 🛠️ 寫入資料庫邏輯：發放 VIP (同步寫入地圖版)
 // ==========================================
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
+    // 準備好 VIP 資料
+    const vipData = {
+        isActive: true,
+        expiresAt: expiry,
+        lastClaimed: ""
+    };
+    
     try {
-        // 使用與 savePrivateData 完全相同的 setDoc 與 doc 語法
-        // 寫入目標：players -> 目標玩家 UID -> 更新 vip 欄位
-        await setDoc(doc(db, "players", targetUid), {
-            vip: {
-                isActive: true,
-                expiresAt: expiry,
-                lastClaimed: ""
-            }
-        }, { merge: true });
+        // 1. 寫入 players 集合 (玩家私人資料，用來領取每日獎勵)
+        await setDoc(doc(db, "players", targetUid), { vip: vipData }, { merge: true });
         
-        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請該玩家重新整理網頁即可生效。`);
+        // 2. 💡 寫入 world_map 集合 (公開地圖資料，這樣大地圖上才畫得出黃金城！)
+        await setDoc(doc(db, "world_map", targetUid), { vip: vipData }, { merge: true });
         
-        // 如果 GM 面板開著，順便刷新一下畫面讓他顯示 [👑 VIP]
+        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
+        
+        // 自動刷新 GM 面板與大地圖，讓你馬上看到黃金城！
         if (typeof renderGMPlayers === 'function') renderGMPlayers();
+        if (typeof window.refreshMap === 'function') window.refreshMap();
         
     } catch (e) {
         alert(`❌ 開通失敗：${e.message}`);
