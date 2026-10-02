@@ -3096,7 +3096,7 @@ window.claimVipDaily = async function() {
 // 🛠️ 管理員專用：VIP 發放與權限驗證模組
 // ==========================================
 
-const ADMIN_UID = "TK(GM)"; // 👈 ⚠️ 換成你自己的 ID，只有這個 ID 登入才會看到按鈕！
+const ADMIN_UID = "i17hElOsMueL6OzmJtRcojDP7Y52"; // 👈 ⚠️ 換成你自己的 ID，只有這個 ID 登入才會看到按鈕！
 
 // 1. 自動檢查身分，只有管理員登入時才生成按鈕
 function checkAndShowAdminButton() {
