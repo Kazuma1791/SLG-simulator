@@ -139,30 +139,36 @@ window.openAcademyModal = function() {
 
   Object.keys(CFG.techs).forEach(k => {
     const t = CFG.techs[k];
-    const curLv = (myData.research && myData.research[k]) || 0;
+    const curLv = (myData.research && myData.research[k]) ? myData.research[k] : 0;
     const cost = getUpgradeCost(k, curLv, true);
     const timeSec = getUpgradeTime(k, curLv, true);
     const effectText = getTechEffectText(k, curLv);
-    const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
+    
+    let hasRes = false;
+    if (myData.wood >= cost.w && myData.iron >= cost.i) {
+        if (!cost.f || myData.food >= cost.f) {
+            hasRes = true;
+        }
+    }
     const canUpgrade = !isResearching && hasRes;
 
-    // 💡 安全寫法：先把糧草的 HTML 獨立準備好，避開複雜的括號嵌套
     let foodHtml = "";
     if (cost.f) {
         foodHtml = "<span>🌾 糧草: " + formatCompact(cost.f) + "</span>";
     }
 
-    // 💡 安全寫法：把按鈕狀態提取出來
     let btnText = (isResearching && myData.researchQueue.target === k) ? '研發中' : '研發';
     let btnBg = canUpgrade ? '#3b82f6' : '#475569';
     let btnCursor = canUpgrade ? 'pointer' : 'not-allowed';
     let btnColor = canUpgrade ? '#ffffff' : '#94a3b8';
+    
+    let iconStr = t.icon ? t.icon : '🔬';
 
     html += `
       <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
         <div style="flex: 1; margin-right: 12px;">
           <div style="font-weight: bold; font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-            <span>${t.icon || '🔬'}</span><span>${t.name}</span>
+            <span>${iconStr}</span><span>${t.name}</span>
             <span style="font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 4px;">Lv.${curLv}</span>
           </div>
           <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">${t.desc}</div>
