@@ -3093,41 +3093,39 @@ window.claimVipDaily = async function() {
     if (typeof renderSelf === 'function') renderSelf();
 };
 // ==========================================
-// 🛠️ 管理員專用：VIP 發放與權限驗證模組 (信箱認證版)
+// 🛠️ 管理員專用：隱藏暗門與 VIP 發放模組
 // ==========================================
 
-// 👈 ⚠️ 換成你用來登入遊戲的管理員信箱 (請確認大小寫完全一致)
-const ADMIN_EMAIL = "topacoau@gmail.com"; 
+// 1. 隱藏暗門：點擊標題後觸發
+window.secretAdminLogin = function() {
+    // 如果按鈕已經存在，就不重複執行
+    if (document.getElementById('admin-vip-btn')) {
+        return alert("管理員模式已啟動！");
+    }
 
-// 1. 自動檢查信箱，只有管理員登入時才生成按鈕
-function checkAndShowAdminButton() {
-    let currentUserEmail = null;
+    // 跳出密碼輸入框
+    const pwd = prompt("請輸入 GM 管理員密碼：");
     
-    // 嘗試抓取當前玩家的登入信箱 (支援 Firebase 預設寫法與自訂寫法)
-    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-        currentUserEmail = firebase.auth().currentUser.email;
-    } else if (typeof myData !== 'undefined' && myData.email) {
-        currentUserEmail = myData.email;
+    // ⚠️ 這裡的 "1791" 就是你的專屬密碼，你可以自己改成想要的數字或英文
+    if (pwd === "1791") {
+        alert("✅ 密碼正確！管理員模式已啟動！");
+        
+        // 畫面上生成發放 VIP 的紅色按鈕
+        let btn = document.createElement('button');
+        btn.id = 'admin-vip-btn';
+        btn.innerHTML = '🛠️ 發放 VIP';
+        btn.style.cssText = 'position: fixed; bottom: 15px; right: 15px; z-index: 9999; background: #ef4444; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);';
+        btn.onclick = window.promptAdminVip; // 點擊按鈕執行發放
+        document.body.appendChild(btn);
+        
+        // 順便把 VIP 彈窗關掉
+        document.getElementById('vip-modal').style.display = 'none';
+    } else if (pwd !== null) {
+        alert("❌ 密碼錯誤！");
     }
+};
 
-    // 確定已經抓到信箱，並且等於管理員信箱
-    if (currentUserEmail && currentUserEmail === ADMIN_EMAIL) {
-        let btn = document.getElementById('admin-vip-btn');
-        if (!btn) {
-            // 自動在畫面上生成按鈕
-            btn = document.createElement('button');
-            btn.id = 'admin-vip-btn';
-            btn.innerHTML = '🛠️ 發放 VIP';
-            btn.style.cssText = 'position: fixed; bottom: 15px; right: 15px; z-index: 9999; background: #ef4444; color: white; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);';
-            btn.onclick = window.promptAdminVip; // 綁定點擊事件
-            document.body.appendChild(btn);
-        }
-    }
-}
-// 每 2 秒檢查一次身分
-setInterval(checkAndShowAdminButton, 2000);
-
-// 2. 點擊按鈕後跳出的輸入框
+// 2. 點擊紅色按鈕後跳出的輸入框
 window.promptAdminVip = function() {
     const targetUid = prompt("👑 請輸入已付款玩家的【ID】：\n（預設為開通 30 天）");
     if (!targetUid || targetUid.trim() === "") return;
@@ -3138,32 +3136,28 @@ window.promptAdminVip = function() {
     }
 };
 
-// 3. 寫入資料庫邏輯 (加入錯誤回報機制，不怕沒反應)
+// 3. 寫入資料庫邏輯
 window.adminSetVIP = async function(targetUid, days = 30) {
     const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
     
     try {
-        // 嘗試寫入資料 (根據你可能的 Firebase 設定自動適配)
         if (typeof database !== 'undefined') {
-            // Firebase Realtime Database 寫法
             await database.ref(`users/${targetUid}/vip`).update({
                 isActive: true,
                 expiresAt: expiry,
                 lastClaimed: ""
             });
         } else if (typeof db !== 'undefined') {
-            // Firebase Firestore 寫法
             await db.collection('users').doc(targetUid).set({
                 vip: { isActive: true, expiresAt: expiry, lastClaimed: "" }
             }, { merge: true });
         } else {
-            alert("❌ 找不到資料庫連線 (database / db)！請聯絡開發者確認 Firebase 變數名稱。");
+            alert("❌ 找不到資料庫連線！");
             return;
         }
         
-        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！\n請請玩家重新整理網頁即可生效。`);
+        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
     } catch (e) {
-        // 如果報錯，這次會直接彈窗告訴你原因！
         alert(`❌ 開通失敗：${e.message}`);
     }
 };
