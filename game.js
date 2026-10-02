@@ -2445,7 +2445,13 @@ window.renderSelf = function() {
                       btnHtml = `<button class="btn-upgrade" style="background:${isMax?'#475569':'#2563eb'}" onclick="window.startResearch('${key}')" ${isMax || myData.researchQueue?'disabled':''}>${isMax?'學院等級不足':`研發 (${formatTime(timeSec)})`}</button>`;
                   }
 
-                  return genCard(`${d.icon} ${d.name}`, lvl, `附加戰力: +${lvl}`, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
+                  // 💡 取得科技的動態加成文字
+                  const effectText = typeof getTechEffectText === 'function' ? getTechEffectText(key, lvl) : `效果等級: ${lvl}`;
+
+                  // 💡 將原本寫死的 "附加戰力" 替換成 "功能描述" + "具體數值加成"
+                  const detailHtml = `<span style="color:#94a3b8; font-size:0.75rem;">${d.desc || ''}</span><br/><span style="color:#34d399; font-weight:bold; font-size:0.8rem;">✨ ${effectText}</span>`;
+
+                  return genCard(`${d.icon} ${d.name}`, lvl, detailHtml, `🌲${formatCompact(cost.w)} ⛏️${formatCompact(cost.i)}`, progressHtml, btnHtml);
               }).join('');
           }
       }
