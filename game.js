@@ -108,36 +108,36 @@ const CFG = {
     barracks:  { name: '兵營',     desc: '解鎖高階兵種，升級可提升單次招募士兵的數量。', rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
   },
   techs: {
-    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', baseW: 300, baseI: 300, baseTime: 600 },
-    archer_atk:   { name: '弓兵矢志', icon: '🏹', baseW: 300, baseI: 300, baseTime: 600 },
-    cavalry_atk:  { name: '騎術改良', icon: '🐎', baseW: 300, baseI: 300, baseTime: 600 },
-    // 🐎 行軍加速：每級 +8% 行軍速度
+    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', desc: '提升步兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    archer_atk:   { name: '弓兵矢志', icon: '🏹', desc: '提升弓兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    cavalry_atk:  { name: '騎術改良', icon: '🐎', desc: '提升騎兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    // 🐎 行軍加速
     march_speed: { 
       name: '急行軍隊', 
-      icon: '🐎',
+      icon: '🐎', 
       desc: '提升全軍行軍速度 (+8%/級)', 
       baseW: 300, 
       baseI: 150, 
       baseTime: 60 
     },
-    // 🎒 負重強化：每級 +15% 攜帶上限
+    // 🎒 負重強化
     troop_load: { 
       name: '輜重革新', 
-      icon: '🎒',
-      desc: '提升部隊負重上限 (+15%/級)', 
+      icon: '🎒', 
+      desc: '提升部隊資源負重上限 (+15%/級)', 
       baseW: 400, 
       baseI: 100, 
       baseTime: 90 
     },
-    // 🏥 醫院容量：每級 +3,000 傷兵上限
+    // 🏥 醫院容量
     hospital_cap: { 
       name: '戰地救護', 
-      icon: '🏥',
-      desc: '提升醫療所傷兵容量 (+3,000/級)', 
+      icon: '🏥', 
+      desc: '提升醫療所傷兵收容容量 (+3,000/級)', 
       baseW: 250, 
       baseI: 250, 
       baseTime: 60 
-    },
+    }
   },
   troops: {
     infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
@@ -170,7 +170,77 @@ function getUpgradeCost(key, level, isTech=false) {
     }
     return cost; 
 }
+// ==========================================
+// 💡 學院科技介面：完整顯示科技圖示、等級、說明與加成數值
+// ==========================================
+function getTechEffectText(techKey, curLevel) {
+  const lv = curLevel || 0;
+  if (techKey === 'march_speed') {
+    return `行軍速度：+${lv * 8}% ${lv > 0 ? `(下級: +${(lv + 1) * 8}%)` : ''}`;
+  } else if (techKey === 'troop_load') {
+    return `部隊負重：+${lv * 15}% ${lv > 0 ? `(下級: +${(lv + 1) * 15}%)` : ''}`;
+  } else if (techKey === 'hospital_cap') {
+    return `傷兵上限：+${(lv * 3000).toLocaleString()} ${lv > 0 ? `(下級: +${((lv + 1) * 3000).toLocaleString()})` : ''}`;
+  } else if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') {
+    return `部隊戰力：+${lv} ${lv > 0 ? `(下級: +${lv + 1})` : ''}`;
+  }
+  return '';
+}
 
+window.openAcademyModal = function() {
+  if (!myData) return;
+  const modal = document.getElementById('academy-modal');
+  const list = document.getElementById('academy-tech-list');
+  if (!modal || !list) return;
+
+  const isResearching = myData.researchQueue && myData.researchQueue.finishesAt > Date.now();
+  let html = '';
+
+  Object.keys(CFG.techs).forEach(k => {
+    const t = CFG.techs[k];
+    const curLv = (myData.research && myData.research[k]) || 0;
+    const cost = getUpgradeCost(k, curLv, true);
+    const timeSec = getUpgradeTime(k, curLv, true);
+    const effectText = getTechEffectText(k, curLv);
+
+    const hasRes = myData.wood >= cost.w && myData.iron >= cost.i && (!cost.f || myData.food >= cost.f);
+    const canUpgrade = !isResearching && hasRes;
+
+    html += `
+      <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex: 1; margin-right: 12px;">
+          <div style="font-weight: bold; font-size: 15px; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+            <span>${t.icon || '🔬'}</span>
+            <span>${t.name}</span>
+            <span style="font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 1px 6px; border-radius: 4px;">Lv.${curLv}</span>
+          </div>
+          <div style="color: #94a3b8; font-size: 12px; margin-top: 4px; line-height: 1.4;">
+            ${t.desc || '提升部隊科技屬性'}
+          </div>
+          <div style="color: #34d399; font-size: 12px; font-weight: bold; margin-top: 4px;">
+            ✨ 當前效果: ${effectText}
+          </div>
+          <div style="color: #cbd5e1; font-size: 11px; margin-top: 6px; display: flex; gap: 8px;">
+            <span>🪵 木材: ${formatCompact(cost.w)}</span>
+            <span>⛏️ 鐵礦: ${formatCompact(cost.i)}</span>
+            ${cost.f ? `<span>🌾 糧草: ${formatCompact(cost.f)}</span>` : ''}
+            <span>⏱️ 耗時: ${formatTime(timeSec)}</span>
+          </div>
+        </div>
+        <div>
+          <button onclick="startResearch('${k}')" ${canUpgrade ? '' : 'disabled'} 
+            style="padding: 8px 14px; border-radius: 6px; border: none; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'};
+            background: ${canUpgrade ? '#3b82f6' : '#475569'}; color: ${canUpgrade ? '#ffffff' : '#94a3b8'};">
+            ${isResearching && myData.researchQueue.target === k ? '研發中' : '研發'}
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  list.innerHTML = html;
+  modal.style.display = 'block';
+};
 // ==========================================
 // 💡 升級時間：線性+溫和指數成長，最高封頂 3 小時 (10,800 秒)
 // ==========================================
@@ -1728,6 +1798,22 @@ function drawWorldMap() {
             if (imgRelic.complete && imgRelic.naturalHeight !== 0) ctx.drawImage(imgRelic, px, py - 5, TILE_SIZE, TILE_SIZE);
             else { ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🏛️', px+TILE_SIZE/2, py+30); }
             ctx.fillStyle = '#38bdf8'; ctx.font = '10px sans-serif'; ctx.textAlign='center'; ctx.fillText('遺跡', px+TILE_SIZE/2, py+45);
+          // 📜 全域公告 / 告示牌：若已領取則跳過不畫
+          } else if (cell.entity.type === 'announcement' || cell.entity.type === 'notice') {
+            // 💡 直接對齊公告物件的 id
+            const annId = cell.entity.id;
+            const isClaimed = myData.claimedAnnouncements && myData.claimedAnnouncements.includes(annId);
+            
+            // 若尚未領取，才繪製在地圖上；領取過後自動隱藏
+            if (!isClaimed) {
+              ctx.font = '24px sans-serif'; 
+              ctx.textAlign = 'center'; 
+              ctx.fillText('📜', px + TILE_SIZE / 2, py + 30);
+              ctx.fillStyle = '#facc15'; 
+              ctx.font = 'bold 10px sans-serif'; 
+              ctx.textAlign = 'center';
+              ctx.fillText(cell.entity.name || '公告', px + TILE_SIZE / 2, py + 45);
+            }
           } else if (cell.entity.type.startsWith('res_')) {
             const isMine = worldNodes.some(n => n.x === x && n.y === y && n.uid === myUid);
             const isEnemy = worldNodes.some(n => n.x === x && n.y === y && n.uid !== myUid && n.uid !== 'NPC');
