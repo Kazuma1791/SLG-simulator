@@ -316,5 +316,24 @@
   </div>
 
   <script type="module" src="game.js"></script>
+    <!-- ==================== 👑 VIP 特權彈窗 ==================== -->
+  <div id="vip-modal" style="display: none; background: rgba(0,0,0,0.85); position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: #1e293b; border: 2px solid #f59e0b; border-radius: 12px; padding: 20px; width: 90%; max-width: 350px; text-align: center; box-shadow: 0 0 25px rgba(245, 158, 11, 0.5); position: relative;">
+      <!-- 關閉按鈕 -->
+      <button onclick="document.getElementById('vip-modal').style.display='none'" style="position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #94a3b8; font-size: 24px; cursor: pointer;">&times;</button>
+      
+      <h2 style="color: #facc15; margin-top: 5px; font-size: 1.5rem;">👑 尊貴 VIP 特權</h2>
+      <p style="color: #cbd5e1; font-size: 0.9rem; margin-bottom: 15px;">僅需 <strong style="color: #10b981; font-size: 1.1rem;">$25 HKD / 30天</strong><br>享受極致發展速度！</p>
+      
+      <div style="text-align: left; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <div style="color: #e2e8f0; font-size: 0.9rem; margin-bottom: 8px;">🏰 <strong>專屬外觀：</strong> 大地圖黃金城堡 Skin</div>
+        <div style="color: #e2e8f0; font-size: 0.9rem; margin-bottom: 8px;">🎁 <strong>每日補給：</strong> 豐厚木、鐵、糧草資源</div>
+        <div style="color: #e2e8f0; font-size: 0.9rem;">🚀 <strong>極速發展：</strong> 每日專屬高級加速卡</div>
+      </div>
+  
+      <!-- 購買與領取區塊會根據玩家狀態動態切換 -->
+      <div id="vip-action-container"></div>
+    </div>
+  </div>
 </body>
 </html>
