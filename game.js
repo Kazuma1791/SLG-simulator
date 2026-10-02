@@ -3092,3 +3092,40 @@ window.claimVipDaily = async function() {
     document.getElementById('vip-modal').style.display = 'none';
     if (typeof renderSelf === 'function') renderSelf();
 };
+// ==========================================
+// 🛠️ 管理員專用：開通 VIP 功能
+// ==========================================
+
+window.promptAdminVip = function() {
+    // 跳出輸入框，讓管理員輸入玩家的 UID
+    const targetUid = prompt("👑 請輸入已付款玩家的【ID】：\n（預設為開通 30 天）");
+    
+    // 如果管理員按了取消或沒輸入，就停止
+    if (!targetUid || targetUid.trim() === "") return;
+
+    // 確認對話框
+    const confirmVip = confirm(`確定要為玩家「${targetUid}」開通 30 天 VIP 嗎？`);
+    if (confirmVip) {
+        window.adminSetVIP(targetUid.trim(), 30);
+    }
+};
+
+window.adminSetVIP = async function(targetUid, days = 30) {
+    // 計算 30 天後的到期時間戳
+    const expiry = Date.now() + (days * 24 * 60 * 60 * 1000);
+    
+    try {
+        // ⚠️️ 這裡的 database.ref 是假設你使用 Firebase
+        // 找到該玩家的資料庫節點，直接更新他的 VIP 狀態
+        await database.ref(`users/${targetUid}/vip`).update({
+            isActive: true,
+            expiresAt: expiry,
+            lastClaimed: "" // 讓玩家開通後可以馬上領取當天獎勵
+        });
+        
+        alert(`✅ 成功！\n已為玩家【${targetUid}】開通 30 天 VIP！`);
+    } catch (e) {
+        console.error("開通失敗：", e);
+        alert("❌ 開通失敗，請檢查資料庫連線或玩家 ID 是否正確！");
+    }
+};
