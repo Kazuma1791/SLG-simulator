@@ -1518,6 +1518,101 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
 }
 
+// ==========================================
+// 🏹 大地圖行軍軌跡與動態箭頭渲染模組
+// ==========================================
+function drawMarchLines(ctx, marches, tileSize) {
+  if (!marches || marches.length === 0) return;
+  const now = Date.now();
+
+  marches.forEach(m => {
+    // 1. 計算進度百分比 (0.0 ~ 1.0)
+    const totalDuration = m.finishesAt - m.startTime;
+    if (totalDuration <= 0) return;
+    const elapsed = now - m.startTime;
+    const progress = Math.min(1, Math.max(0, elapsed / totalDuration));
+
+    // 2. 轉換世界像素座標 (取格子中心點)
+    const startPxX = m.startX * tileSize + tileSize / 2;
+    const startPxY = m.startY * tileSize + tileSize / 2;
+    const targetPxX = m.targetX * tileSize + tileSize / 2;
+    const targetPxY = m.targetY * tileSize + tileSize / 2;
+
+    // 當前部隊即時所在位置 (線性插值)
+    const curPxX = startPxX + (targetPxX - startPxX) * progress;
+    const curPxY = startPxY + (targetPxY - startPxY) * progress;
+
+    // 3. 依部隊類型決定顏色與標籤
+    let color = '#38bdf8'; // 天藍色 (我方出征)
+    let label = '⚔️ 部隊';
+    if (m.type === 'return') {
+      color = '#10b981'; // 翠綠色 (返航)
+      label = '📦 返航';
+    } else if (m.type === 'defend_npc' || m.type === 'counter_attack') {
+      color = '#ef4444'; // 紅色 (敵襲/反擊)
+      label = `🚨 ${m.npcName || '敵軍'}`;
+    } else if (m.type === 'attack_player') {
+      color = '#f59e0b'; // 橘黃色 (攻打玩家)
+      label = '⚔️ 攻城';
+    }
+
+    ctx.save();
+
+    // 4. 繪製動態流動虛線
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    const dashOffset = (now / 40) % 16;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -dashOffset;
+
+    ctx.beginPath();
+    ctx.moveTo(startPxX, startPxY);
+    ctx.lineTo(targetPxX, targetPxY);
+    ctx.stroke();
+
+    // 5. 繪製箭頭實體
+    const angle = Math.atan2(targetPxY - startPxY, targetPxX - startPxX);
+    ctx.setLineDash([]); // 恢復實線
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const arrowSize = 9;
+    ctx.moveTo(
+      curPxX + Math.cos(angle) * arrowSize * 1.5,
+      curPxY + Math.sin(angle) * arrowSize * 1.5
+    );
+    ctx.lineTo(
+      curPxX + Math.cos(angle + 2.4) * arrowSize,
+      curPxY + Math.sin(angle + 2.4) * arrowSize
+    );
+    ctx.lineTo(
+      curPxX + Math.cos(angle - 2.4) * arrowSize,
+      curPxY + Math.sin(angle - 2.4) * arrowSize
+    );
+    ctx.closePath();
+    ctx.fill();
+
+    // 6. 繪製部隊頭頂膠囊名牌
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textWidth = ctx.measureText(label).width;
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.beginPath();
+    ctx.roundRect(curPxX - textWidth / 2 - 6, curPxY - 22, textWidth + 12, 16, 4);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, curPxX, curPxY - 14);
+
+    ctx.restore();
+  });
+}
+
 function drawWorldMap() {
   if (!myData || myData.isBanned) return; 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1796,37 +1891,41 @@ function drawWorldMap() {
       }
   });
 
+  // 🏹 繪製大地圖全新動態行軍軌跡與採集狀態
   if (myData.marches && myData.marches.length > 0) {
+    // 1. 保留採集中標籤 (駐留在資源點上挖礦)
     myData.marches.forEach(m => {
-      let p = Math.max(0, Math.min(1, (t-m.startTime)/(m.finishesAt-m.startTime)));
-      
       if (m.type === 'gathering') {
-          const cX = m.targetX*TILE_SIZE+TILE_SIZE/2, cY = m.targetY*TILE_SIZE+TILE_SIZE/2;
-          ctx.fillStyle = '#10b981'; ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⛏', cX, cY+4);
-          const left = Math.ceil((m.finishesAt-t)/1000);
-          if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
-          return;
+        const cX = m.targetX * TILE_SIZE + TILE_SIZE / 2;
+        const cY = m.targetY * TILE_SIZE + TILE_SIZE / 2;
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(cX, cY, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⛏', cX, cY + 4);
+
+        const left = Math.ceil((m.finishesAt - t) / 1000);
+        if (left > 0) {
+          ctx.fillStyle = '#facc15';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.fillText(formatTime(left), cX, cY - 20);
+        }
+        ctx.textAlign = 'start';
       }
-
-      const sX = m.startX*TILE_SIZE+TILE_SIZE/2, sY = m.startY*TILE_SIZE+TILE_SIZE/2;
-      const tX = m.targetX*TILE_SIZE+TILE_SIZE/2, tY = m.targetY*TILE_SIZE+TILE_SIZE/2;
-      const cX = sX+(tX-sX)*p, cY = sY+(tY-sY)*p;
-
-      ctx.beginPath(); ctx.setLineDash([6,6]); ctx.moveTo(sX, sY); ctx.lineTo(tX, tY);
-      ctx.strokeStyle = m.type === 'return' ? 'rgba(59, 130, 246, 0.8)' : (m.type === 'defend_npc' ? 'rgba(147, 51, 234, 0.8)' : 'rgba(239, 68, 68, 0.8)');
-      ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
-
-      ctx.fillStyle = m.type === 'return' ? '#2563eb' : (m.type === 'defend_npc' ? '#9333ea' : '#dc2626');
-      ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(m.type === 'return' ? '🔙' : '⚔️', cX, cY+4);
-
-      const left = Math.ceil((m.finishesAt-t)/1000);
-      if (left > 0) { ctx.fillStyle='#facc15'; ctx.font='bold 14px sans-serif'; ctx.fillText(formatTime(left), cX, cY-20); }
-      ctx.textAlign = 'start';
     });
+
+    // 2. 移動中部隊繪製全新流動虛線與方向箭頭 (排除原地採集的部隊)
+    const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
+    drawMarchLines(ctx, movingMarches, TILE_SIZE);
   }
+    // 🏹 在這裡加入行軍繪製呼叫！
+  if (myData && myData.marches) {
+    drawMarchLines(ctx, myData.marches, TILE_SIZE);
+  }
+    
   ctx.restore();
 }
 
