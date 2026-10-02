@@ -2227,19 +2227,19 @@ window.renderSelf = function() {
               }
               const buff = myData.research[`${key}_atk`] || 0;
               const isTraining = myData.trainQueue && myData.trainQueue.type === key;
-              const trainCount = bLvl * 5; 
-              const totalTime = d.time * trainCount;
               
               let btnHtml = ''; let progressHtml = '';
               if (isTraining) {
+                  const totalTime = d.time * myData.trainQueue.count;
                   const remainSec = Math.max(0, Math.ceil((myData.trainQueue.finishesAt - now) / 1000));
                   const pct = Math.min(100, Math.max(0, 100 - (remainSec / totalTime * 100)));
                   btnHtml = `<span style="font-size:0.8rem; color:#facc15; text-align:center; display:block;">招募中 (${formatTime(remainSec)})</span>`;
                   progressHtml = `<div class="progress-bar-bg" style="display:block;"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>`;
               } else {
-                  btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.trainTroopType('${key}')" ${myData.trainQueue?'disabled':''}>招募 ${formatCompact(trainCount)}名 (${formatTime(totalTime)})</button>`;
+                  // 這裡改成呼叫自訂招募彈窗
+                  btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.openTrainModal('${key}')" ${myData.trainQueue?'disabled':''}>自訂招募</button>`;
               }
-              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `🌲${formatCompact(d.w * trainCount)} ⛏️${formatCompact(d.i * trainCount)} 🌾${formatCompact(d.f * trainCount)}`, progressHtml, btnHtml);
+              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `單兵消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}`, progressHtml, btnHtml);
           }).join('');
       }
 
@@ -2340,19 +2340,82 @@ window.startResearch = async (key) => {
   await savePrivateData();
 };
 
-window.trainTroopType = async (typeKey) => {
-  if (myData.trainQueue) return alert('已有部隊正在招募！');
-  const req = CFG.troops[typeKey];
-  const bLvl = myData.buildings.barracks || 1;
-  const trainCount = bLvl * 5;
-  const costW = req.w * trainCount; const costI = req.i * trainCount; const costF = req.f * trainCount;
+window.openTrainModal = (typeKey) => {
+    if (myData.trainQueue) return alert('已有部隊正在招募中！');
+    const req = CFG.troops[typeKey];
+    const bLvl = myData.buildings.barracks || 1;
+    
+    // 單次招募上限 (兵營等級 * 50)，並計算目前資源最多能招募多少
+    const limitMax = bLvl * 50;
+    const maxByWood = req.w > 0 ? Math.floor(myData.wood / req.w) : limitMax;
+    const maxByIron = req.i > 0 ? Math.floor(myData.iron / req.i) : limitMax;
+    const maxByFood = req.f > 0 ? Math.floor(myData.food / req.f) : limitMax;
+    let maxCount = Math.min(limitMax, maxByWood, maxByIron, maxByFood);
+    
+    if (maxCount < 1) return alert('資源不足以招募哪怕 1 名士兵！');
 
-  if (bLvl < req.reqLvl) return alert('兵營等級不足！');
-  if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
-  
-  myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
-  myData.trainQueue = { type: typeKey, count: trainCount, finishesAt: Date.now() + (req.time * trainCount * 1000) }; 
-  await savePrivateData(); window.renderSelf();
+    let modal = document.getElementById('train-modal');
+    if (!modal) {
+        modal = document.createElement('div'); modal.id = 'train-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #059669; border-radius:10px; width:320px; padding:20px; color:white;">
+        <h2 style="color:#10b981; margin-top:0;">⚔️ 招募 ${req.icon} ${req.name}</h2>
+        <div style="background:#0f172a; padding:15px; border-radius:6px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="color:#cbd5e1; font-size:0.9rem;">本次招募數量</span>
+                <input type="number" id="train-input" min="1" max="${maxCount}" value="${maxCount}" oninput="window.syncTrainSlider('${typeKey}', this.value)">
+            </div>
+            <input type="range" id="train-slider" min="1" max="${maxCount}" value="${maxCount}" oninput="window.updateTrainCost('${typeKey}')">
+            <p style="text-align:right; font-size:0.8rem; color:#64748b; margin:5px 0 0 0;">可招募上限: <span style="color:#facc15;">${maxCount}</span></p>
+        </div>
+        <div style="background:#0f172a; padding:15px; border-radius:6px; margin-bottom:15px; font-size:0.9rem;">
+            <div style="font-weight:bold; color:#fbbf24; margin-bottom:8px;">總計消耗與時間：</div>
+            <div id="train-cost-wood" style="margin-bottom:4px;">🌲 木材：${formatCompact(req.w * maxCount)}</div>
+            <div id="train-cost-iron" style="margin-bottom:4px;">⛏️ 鐵礦：${formatCompact(req.i * maxCount)}</div>
+            <div id="train-cost-food" style="margin-bottom:4px;">🌾 糧食：${formatCompact(req.f * maxCount)}</div>
+            <div id="train-time" style="color:#38bdf8; margin-top:10px; font-weight:bold; border-top:1px solid #334155; padding-top:8px;">⏱ 耗時：${formatTime(req.time * maxCount)}</div>
+        </div>
+        <button onclick="window.confirmTrain('${typeKey}')" style="background:#10b981; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; font-size:1.05rem;">確認發兵招募</button>
+        <button onclick="document.getElementById('train-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">取消</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+window.updateTrainCost = (typeKey) => {
+    const val = parseInt(document.getElementById('train-slider').value) || 1;
+    document.getElementById('train-input').value = val;
+    const req = CFG.troops[typeKey];
+    document.getElementById('train-cost-wood').innerText = `🌲 木材：${formatCompact(req.w * val)}`;
+    document.getElementById('train-cost-iron').innerText = `⛏️ 鐵礦：${formatCompact(req.i * val)}`;
+    document.getElementById('train-cost-food').innerText = `🌾 糧食：${formatCompact(req.f * val)}`;
+    document.getElementById('train-time').innerText = `⏱ 耗時：${formatTime(req.time * val)}`;
+};
+
+window.syncTrainSlider = (typeKey, val) => {
+    const slider = document.getElementById('train-slider');
+    let num = parseInt(val) || 1;
+    if (num > parseInt(slider.max)) num = parseInt(slider.max);
+    if (num < 1) num = 1;
+    slider.value = num;
+    window.updateTrainCost(typeKey);
+};
+
+window.confirmTrain = async (typeKey) => {
+    const count = parseInt(document.getElementById('train-input').value);
+    const req = CFG.troops[typeKey];
+    const costW = req.w * count; const costI = req.i * count; const costF = req.f * count;
+
+    if (myData.wood < costW || myData.iron < costI || myData.food < costF) return alert('資源不足！');
+    
+    myData.wood -= costW; myData.iron -= costI; myData.food -= costF;
+    myData.trainQueue = { type: typeKey, count: count, finishesAt: Date.now() + (req.time * count * 1000) }; 
+    await savePrivateData(); 
+    document.getElementById('train-modal').style.display='none';
+    window.renderSelf();
 };
 
 // ==========================================
@@ -2610,3 +2673,22 @@ window.claimVipReward = async function() {
     window.openVipModal();
     if (typeof window.renderSelf === 'function') window.renderSelf();
 };
+// ==========================================
+// 📱 手機版 UI 與流暢度優化
+// ==========================================
+const mobileStyles = document.createElement('style');
+mobileStyles.innerHTML = `
+  /* 讓所有彈窗適應手機寬度，開啟平滑滑動 */
+  div[id$="-modal"] > div {
+      width: 90% !important; max-width: 400px !important;
+      max-height: 85vh !important; overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch; 
+  }
+  /* 增加按鈕的點擊回饋動畫，防止連點干擾 */
+  button { touch-action: manipulation; transition: transform 0.1s ease; }
+  button:active:not(:disabled) { transform: scale(0.95); }
+  /* 拉桿與輸入框美化 */
+  input[type=range] { width: 100%; margin: 10px 0; accent-color: #10b981; }
+  input[type=number] { width: 80px; padding: 6px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; text-align: center; font-weight: bold; }
+`;
+document.head.appendChild(mobileStyles);
