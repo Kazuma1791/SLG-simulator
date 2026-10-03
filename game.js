@@ -1395,35 +1395,51 @@ async function resolveAttackBoss(m) {
   return res;
 }
 
-async function resolveDefendNPC(m) {
-  const wallBuff = 1 + (myData.buildings.wall || 0) * 0.05;
-  const defPwr = getPwrByTech(myData.troops, myData.research) * wallBuff;
-  
-  if (defPwr >= m.npcPower) {
-    const lossRatio = m.npcPower / (defPwr + 1);
-    myData.troops.infantry -= Math.floor(myData.troops.infantry * lossRatio * 0.3); myData.troops.archer -= Math.floor(myData.troops.archer * lossRatio * 0.3); myData.troops.cavalry -= Math.floor(myData.troops.cavalry * lossRatio * 0.3);
-    myData.wood += 200; myData.iron += 200; myData.food += 200;
-    myData.logs.unshift(`[守城大捷] 成功擊退 ${m.npcName}！`);
-    if(window.addReport) window.addReport(`🛡️ 守城大捷`, `成功擊退【${m.npcName}】的進攻！\n敵軍已全軍覆沒，城池安然無恙。`, true);
-  } else {
-    myData.troops.infantry = 0; myData.troops.archer = 0; myData.troops.cavalry = 0;
-    const protectAmt = (myData.buildings.warehouse || 0) * 2000;
-    const lW = Math.max(0, Math.floor((myData.wood - protectAmt) * 0.3));
-    const lI = Math.max(0, Math.floor((myData.iron - protectAmt) * 0.3));
-    const lF = Math.max(0, Math.floor((myData.food - protectAmt) * 0.3));
-    myData.wood -= lW; myData.iron -= lI; myData.food -= lF;
-    const bKeys = Object.keys(myData.buildings).filter(k => myData.buildings[k] > 1);
-    let dLog = "";
-    if (bKeys.length > 0) {
-      const rKey = bKeys[Math.floor(Math.random() * bKeys.length)]; myData.buildings[rKey]--;
-      dLog = `，且【${CFG.buildings[rKey].name}】遭破壞降級！`;
-      try{ setDoc(doc(db, "world_map", myUid), { castleLevel: myData.buildings.castle }, { merge: true }); }catch(e){}
+window.resolveDefendNPC = async function(m) {
+    let res = { completed: true };
+    
+    // 計算防守方總戰力 (部隊戰力 + 城牆防禦加成)
+    const myPwr = typeof window.getPwrByTech === 'function' ? window.getPwrByTech(myData.troops, myData.research) : 0;
+    const wallBonus = (myData.buildings.wall || 1) * 800; // 城牆等級越高，提供的額外防禦力越強
+    const totalDef = myPwr + wallBonus;
+
+    if (totalDef >= (m.npcPower || 5000)) {
+        // 🛡️ 玩家防守成功
+        myData.logs.unshift(`[城防大捷] 您的守軍與城牆成功擋下了【${m.npcName}】的襲擊！`);
+        if(myData.quests) myData.quests.daily.kills++;
+        
+        // 守城勝利，僅有 5% 輕微傷兵
+        let wInf = Math.floor((myData.troops.infantry||0) * 0.05);
+        let wArc = Math.floor((myData.troops.archer||0) * 0.05);
+        let wCav = Math.floor((myData.troops.cavalry||0) * 0.05);
+        if(typeof window.addWounded === 'function') window.addWounded(wInf, wArc, wCav);
+        myData.troops.infantry = Math.max(0, myData.troops.infantry - wInf); 
+        myData.troops.archer = Math.max(0, myData.troops.archer - wArc); 
+        myData.troops.cavalry = Math.max(0, myData.troops.cavalry - wCav);
+    } else {
+        // 🚨 玩家防守失敗 (❌ 已移除建築降級懲罰)
+        myData.logs.unshift(`🚨 [城池失守] 防線被【${m.npcName}】攻破！部隊遭受重創，部分資源遭掠奪。`);
+        
+        // 1. 部隊重傷 (40%的部隊會受傷進醫院，而不是直接死亡)
+        let wInf = Math.floor((myData.troops.infantry||0) * 0.4);
+        let wArc = Math.floor((myData.troops.archer||0) * 0.4);
+        let wCav = Math.floor((myData.troops.cavalry||0) * 0.4);
+        if(typeof window.addWounded === 'function') window.addWounded(wInf, wArc, wCav);
+        myData.troops.infantry = Math.max(0, myData.troops.infantry - wInf); 
+        myData.troops.archer = Math.max(0, myData.troops.archer - wArc); 
+        myData.troops.cavalry = Math.max(0, myData.troops.cavalry - wCav);
+
+        // 2. 資源被掠奪 (💡 受「地下倉庫」保護，倉庫等級越高，保底不被搶的資源越多)
+        let protectAmt = (myData.buildings.warehouse || 1) * 8000;
+        
+        // 只有「超出倉庫保護上限」的資源，才會被搶走 30%
+        if (myData.wood > protectAmt) myData.wood -= Math.floor((myData.wood - protectAmt) * 0.3);
+        if (myData.iron > protectAmt) myData.iron -= Math.floor((myData.iron - protectAmt) * 0.3);
+        if (myData.food > protectAmt) myData.food -= Math.floor((myData.food - protectAmt) * 0.3);
     }
-    myData.logs.unshift(`[城防潰敗] ${m.npcName} 攻破防線！被掠奪資源${dLog}`);
-    if(window.addReport) window.addReport(`🔥 城防潰敗`, `【${m.npcName}】攻破了您的防線！\n損失兵力：全軍覆沒\n損失物資：🌲${lW} ⛏️${lI} 🌾${lF}\n${dLog}`, false);
-  }
-  try{ setDoc(doc(db, "world_map", myUid), { troops: myData.troops.infantry+myData.troops.archer+myData.troops.cavalry }, { merge: true }); }catch(e){}
-}
+    return res;
+};
+
 
 async function resolveInteractNPC(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarches: null };
