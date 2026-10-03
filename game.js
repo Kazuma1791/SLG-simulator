@@ -1089,9 +1089,12 @@ async function localTick() {
   }
 // --- 🤖 黑暗前哨 智慧襲擊系統 (防過密 + 嚴格距離限制) ---
   // 1. 防過密機制：檢查目前是否有任何敵軍正在攻擊玩家
-  let isUnderAttack = myData.marches && myData.marches.some(m => m.type === 'defend_npc');
-  
-  if (!isUnderAttack && Math.random() < 0.005) {
+    let isUnderAttack = myData.marches && myData.marches.some(m => m.type === 'defend_npc');
+    let hasShield = (myData.shieldEnd > Date.now()) || (myData.shieldEndTime > Date.now()) || (myData.shieldExpiry > Date.now());
+    
+    // 🛡️ 如果有護盾，NPC 絕對不會發起突襲
+    if (!isUnderAttack && !hasShield && Math.random() < 0.005) {
+
       let nearbyOutposts = [];
       
       // 2. 嚴格警戒範圍：只掃描 12 格內的方塊
@@ -1397,6 +1400,15 @@ async function resolveAttackBoss(m) {
 
 window.resolveDefendNPC = async function(m) {
     let res = { completed: true };
+        // 🛡️ 萬用護盾判定：只要有任何一種護盾時間大於現在，就視為無敵
+    const now = Date.now();
+    const hasShield = (myData.shieldEnd > now) || (myData.shieldEndTime > now) || (myData.shieldExpiry > now);
+    
+    if (hasShield) {
+        myData.logs.unshift(`🛡️ [護盾發威] 您的和平護盾散發出強大能量，將【${m.npcName}】的部隊強行阻擋在外！敵軍無功而返。`);
+        return res; // 直接中斷戰鬥，不扣兵、不扣資源
+    }
+
     
     // 計算防守方總戰力 (部隊戰力 + 城牆防禦加成)
     const myPwr = typeof window.getPwrByTech === 'function' ? window.getPwrByTech(myData.troops, myData.research) : 0;
