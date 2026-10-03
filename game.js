@@ -1181,7 +1181,9 @@ async function localTick() {
     } 
     else if (m.type === 'gathering') {
       if (now >= m.finishesAt) {
-          m.type = 'return'; m.loot = { wood:0, iron:0, food:0 }; m.loot[m.resType] = m.capacity;
+          let maxL = window.getLoadCapacity(m.troops);
+          m.type = 'return'; m.loot = { wood:0, iron:0, food:0 }; 
+          m.loot[m.resType] = Math.min(m.capacity, maxL); // 取資源剩餘量與負重上限的「最小值」
           m.finishesAt = now + (now - m.startTime); 
           try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); }catch(e){}
           myData.logs.unshift(`[採集完成] 駐紮部隊滿載而歸！`);
@@ -2204,7 +2206,8 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
     return;
   }
 
-  if (myData.marches && myData.marches.length >= 3) return alert("⚔️ 您的行軍隊列已滿 (最多 3 隊)！請等待部隊返回。");
+  const myMarchesCount = (myData.marches||[]).filter(m => !['defend_npc', 'npc_attack_node'].includes(m.type)).length;
+  if (myMarchesCount >= 3) return alert("⚔️ 您的行軍隊列已滿 (最多 3 隊)！請等待部隊返回。");
 
   const sendInf = parseInt(document.getElementById('send-inf').value)||0;
   const sendArc = parseInt(document.getElementById('send-arc').value)||0;
@@ -3010,7 +3013,8 @@ window.recallMarch = async (marchId) => {
         
         m.type = 'return';
         m.loot = { wood: 0, iron: 0, food: 0 };
-        if (m.resType) m.loot[m.resType] = partialLoot;
+        let maxL = window.getLoadCapacity(m.troops);
+        if (m.resType) m.loot[m.resType] = Math.min(partialLoot, maxL);
         
         // 重新計算返航時間與起終點
         const dist = Math.hypot(myData.x - m.targetX, myData.y - m.targetY);
