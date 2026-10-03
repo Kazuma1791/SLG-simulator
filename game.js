@@ -934,6 +934,7 @@ async function localTick() {
   let needSave = false;
   
   for (let m of myData.marches) {
+      // 1. 採集驚動 NPC
       if (m.type === 'gathering' && !m.npcWarned) {
           let nearLm = epicLandmarks.find(lm => Math.hypot(m.targetX - lm.x, m.targetY - lm.y) <= 12);
           if (nearLm && Math.random() < 0.02) { 
@@ -946,6 +947,40 @@ async function localTick() {
               });
               myData.logs.unshift(`🚨 [領地警告] 您的採集部隊驚動了 ${nearLm.name}，NPC 守軍正前往發出警告！`);
               needSave = true;
+          }
+      }
+      // 2. 攻城觸發 NPC 烽火台 (視覺化聯防派兵)
+      else if ((m.type === 'attack_npc' || m.type === 'attack_capital') && !m.npcWarned) {
+          m.npcWarned = true; 
+          let factionName = m.entity.faction || (['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n)));
+          if (factionName) {
+              if (!myData.npcMarches) myData.npcMarches = [];
+              let supportCount = 0;
+              for (let dx = -6; dx <= 6; dx++) {
+                  for (let dy = -6; dy <= 6; dy++) {
+                      if (dx === 0 && dy === 0) continue;
+                      let nx = m.targetX + dx, ny = m.targetY + dy;
+                      let cell = MAP_CACHE[nx] && MAP_CACHE[nx][ny];
+                      if (cell && cell.entity && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
+                          let dist = Math.hypot(nx - m.targetX, ny - m.targetY);
+                          // 畫出 NPC 互相支援的線條
+                          myData.npcMarches.push({
+                              id: 'NPCSUP_'+Date.now()+'_'+supportCount, type: 'npc_support',
+                              startX: nx, startY: ny, targetX: m.targetX, targetY: m.targetY,
+                              npcName: cell.entity.name.split(' ')[1] || 'NPC',
+                              startTime: now, 
+                              finishesAt: Math.min(m.finishesAt, now + Math.ceil(dist * 2000)) // 讓他們趕在你抵達前或同時抵達
+                          });
+                          supportCount++;
+                          if (supportCount >= 3) break; // 最多畫出 3 支支援部隊，以免畫面太亂
+                      }
+                  }
+                  if (supportCount >= 3) break;
+              }
+              if (supportCount > 0) {
+                  myData.logs.unshift(`🚨 [情報] 敵方哨塔發現了您的行軍！周邊的【${factionName}】城池正派兵趕往目標點協防！`);
+                  needSave = true;
+              }
           }
       }
   }
@@ -1067,7 +1102,9 @@ async function localTick() {
   if (myData.npcMarches) {
       let nextNpcMarches = [];
       myData.npcMarches.forEach(nm => {
-          if (nm.type === 'npc_gather' && now >= nm.finishesAt) {
+          if (nm.type === 'npc_support' && now >= nm.finishesAt) {
+              needSave = true; // 抵達目標後隱藏線條 (戰力會在碰撞時自動結算)
+          } else if (nm.type === 'npc_gather' && now >= nm.finishesAt) {
               nm.type = 'npc_gathering'; nm.finishesAt = now + 120000; // NPC 採集2分鐘就滿載
               nextNpcMarches.push(nm); needSave = true;
           } else if (nm.type === 'npc_gathering' && now >= nm.finishesAt) {
@@ -1493,6 +1530,7 @@ function drawMarchLines(ctx, marches, tileSize) {
     else if (m.type === 'attack_player') { color = '#f59e0b'; label = '⚔️ 攻城'; }
     else if (m.type === 'npc_gather') { color = '#f97316'; label = `🏃 ${m.npcName || 'NPC'}佔領`; }
     else if (m.type === 'npc_return') { color = '#f97316'; label = `📦 ${m.npcName || 'NPC'}滿載`; }
+    else if (m.type === 'npc_support') { color = '#8b5cf6'; label = `🛡️ ${m.npcName || 'NPC'}協防`; }
     
     ctx.save();
     ctx.strokeStyle = color;
