@@ -760,7 +760,8 @@ window.refreshMap = async function() {
   allCastles = []; worldNodes = [];
   snap.forEach(d => { 
       const data = d.data();
-      if(d.id === 'announcement') return;
+      // 忽略系統公告與聯盟資料，不要當成城堡渲染
+      if(d.id === 'announcement' || data.isAlliance) return; 
       if(!data.isBoss && !data.isNode) allCastles.push({ id: d.id, ...data });
       if(data.isNode) worldNodes.push({ id: d.id, ...data });
   });
@@ -2920,4 +2921,179 @@ window.applyDynamicNPCs = function() {
             MAP_CACHE[d.x][d.y].entity = d.entity;
         }
     });
+};
+// ==========================================
+// 🤝 聯盟系統 (創建、加入、退出、成員名單)
+// ==========================================
+window.renderAllianceUI = async function() {
+    const container = document.getElementById('tab-alliance');
+    if (!container) return;
+
+    if (!myData.allianceName) {
+        // --- 尚未加入聯盟：顯示創建與加入介面 ---
+        container.innerHTML = `
+            <div style="padding: 20px; color: white;">
+                <h2 style="color: #38bdf8; text-align: center; margin-top:0;">🛡️ 聯盟大廳</h2>
+                <p style="text-align: center; color: #94a3b8; font-size: 0.85rem;">加入聯盟，與戰友並肩作戰，享受免受盟友攻擊的保護！</p>
+                
+                <div style="background: #1e293b; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #334155;">
+                    <h3 style="color: #10b981; margin-top: 0; font-size: 1.1rem;">👑 創建新聯盟</h3>
+                    <input type="text" id="input-alliance-name" placeholder="輸入聯盟名稱 (最多6字)" maxlength="6" style="width: calc(100% - 16px); padding: 8px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: white; margin-bottom: 10px;">
+                    <button onclick="window.createAlliance()" style="background: #0ea5e9; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; transition: transform 0.1s;">創建聯盟 (需木鐵糧各 10,000)</button>
+                </div>
+
+                <div style="background: #1e293b; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #334155;">
+                    <h3 style="color: #facc15; margin-top: 0; font-size: 1.1rem;">🤝 加入現有聯盟</h3>
+                    <div id="alliance-list" style="max-height: 250px; overflow-y: auto; padding-right: 5px;">
+                        <p style="color: #64748b; text-align: center;">搜尋聯盟中...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        window.loadAllianceList();
+    } else {
+        // --- 已加入聯盟：顯示內部名單 ---
+        container.innerHTML = `
+            <div style="padding: 20px; color: white;">
+                <h2 style="color: #facc15; text-align: center; margin-top:0;">🛡️ [${myData.allianceName}] 聯盟內部</h2>
+                
+                <div style="background: #1e293b; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #334155;">
+                    <h3 style="color: #38bdf8; margin-top: 0; font-size: 1.1rem;">👥 聯盟成員名單 (依戰力/市政廳排序)</h3>
+                    <div id="alliance-members-list" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
+                        <p style="color: #64748b; text-align: center;">讀取名單中...</p>
+                    </div>
+                </div>
+                
+                <button onclick="window.leaveAlliance()" style="background: #ef4444; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: transform 0.1s;">🚪 退出聯盟</button>
+            </div>
+        `;
+        window.loadAllianceMembers();
+    }
+};
+
+window.createAlliance = async () => {
+    const name = document.getElementById('input-alliance-name').value.trim();
+    if (!name || name.length > 6) return alert("請輸入有效的聯盟名稱 (1~6字)！");
+    if (myData.wood < 10000 || myData.iron < 10000 || myData.food < 10000) return alert("創建聯盟需要 木材、鐵礦、糧草各 10,000！資源不足！");
+    
+    try {
+        const refName = "ALLIANCE_" + name;
+        const snap = await getDoc(doc(db, "world_map", refName));
+        if (snap.exists()) return alert("該聯盟名稱已被使用，請換一個名字！");
+        
+        myData.wood -= 10000; myData.iron -= 10000; myData.food -= 10000;
+        myData.allianceName = name;
+        
+        await setDoc(doc(db, "world_map", refName), {
+            isAlliance: true, name: name, leader: myUid, members: [myUid], createdAt: Date.now()
+        });
+        
+        await savePrivateData();
+        await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true });
+        
+        alert(`🎉 成功創建並成為 [${name}] 的盟主！`);
+        window.renderAllianceUI(); window.refreshMap(); window.renderSelf();
+    } catch (e) { alert("創建失敗: " + e.message); }
+};
+
+window.loadAllianceList = async () => {
+    try {
+        const snap = await getDocs(collection(db, "world_map"));
+        let listHtml = '';
+        snap.forEach(d => {
+            const data = d.data();
+            if (data.isAlliance) {
+                listHtml += `
+                <div style="background: #0f172a; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #1e293b;">
+                    <div>
+                        <strong style="color: #38bdf8; font-size:1.1rem;">[${data.name}]</strong><br>
+                        <span style="font-size: 0.8rem; color: #94a3b8;">成員數: ${data.members ? data.members.length : 1} 人</span>
+                    </div>
+                    <button onclick="window.joinAlliance('${data.name}')" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight:bold; cursor: pointer;">加入</button>
+                </div>`;
+            }
+        });
+        const listDiv = document.getElementById('alliance-list');
+        if (listDiv) listDiv.innerHTML = listHtml || '<p style="color:#94a3b8; text-align:center;">伺服器目前還沒有任何聯盟，來做第一個建國的先驅者吧！</p>';
+    } catch(e) {}
+};
+
+window.joinAlliance = async (name) => {
+    try {
+        const ref = doc(db, "world_map", "ALLIANCE_" + name);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return alert("找不到該聯盟，可能已被解散！");
+        
+        let data = snap.data();
+        if (!data.members) data.members = [];
+        if (!data.members.includes(myUid)) data.members.push(myUid);
+        
+        await setDoc(ref, { members: data.members }, { merge: true });
+        
+        myData.allianceName = name;
+        myData.logs.unshift(`[聯盟] 恭喜您，已成功加入 ${name} 聯盟！`);
+        
+        await savePrivateData();
+        await setDoc(doc(db, "world_map", myUid), { allianceName: name }, { merge: true });
+        
+        alert(`🎉 成功加入聯盟 [${name}]！`);
+        window.renderAllianceUI(); window.refreshMap(); window.renderSelf();
+    } catch (e) { alert("加入失敗: " + e.message); }
+};
+
+window.leaveAlliance = async () => {
+    if (!confirm("🚪 確定要退出聯盟嗎？(退出後將失去盟友保護與支援)")) return;
+    try {
+        const oldName = myData.allianceName;
+        const ref = doc(db, "world_map", "ALLIANCE_" + oldName);
+        const snap = await getDoc(ref);
+        
+        if (snap.exists()) {
+            let data = snap.data();
+            if (data.members) {
+                data.members = data.members.filter(uid => uid !== myUid);
+                if (data.members.length === 0) {
+                    await deleteDoc(ref); // 聯盟沒人自動解散
+                } else {
+                    if (data.leader === myUid) data.leader = data.members[0]; // 盟主退出自動傳位
+                    await setDoc(ref, { members: data.members, leader: data.leader }, { merge: true });
+                }
+            }
+        }
+        
+        myData.allianceName = null;
+        myData.logs.unshift(`[聯盟] 您已離開了聯盟。`);
+        
+        await savePrivateData();
+        await setDoc(doc(db, "world_map", myUid), { allianceName: null }, { merge: true });
+        
+        alert(`🚪 已退出聯盟！`);
+        window.renderAllianceUI(); window.refreshMap(); window.renderSelf();
+    } catch (e) { alert("退出失敗: " + e.message); }
+};
+
+window.loadAllianceMembers = async () => {
+    try {
+        // 利用本機快取的地圖玩家名單，快速找出盟友
+        const members = allCastles.filter(c => c.allianceName === myData.allianceName);
+        members.push({ id: myUid, name: myData.name, castleLevel: myData.buildings.castle, x: myData.x, y: myData.y });
+        
+        const uniqueMembers = []; const seen = new Set();
+        members.forEach(m => { if(!seen.has(m.id)){ seen.add(m.id); uniqueMembers.push(m); }});
+        uniqueMembers.sort((a,b) => (b.castleLevel||1) - (a.castleLevel||1)); // 等級高的排前面
+
+        let html = uniqueMembers.map(m => `
+            <div style="background: #0f172a; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid ${m.id === myUid ? '#facc15' : '#38bdf8'};">
+                <div>
+                    <strong style="color: #fff;">${m.id === myUid ? '(我) ' : ''}${m.name}</strong> 
+                    <span style="color: #facc15; font-size: 0.85rem;">(Lv.${m.castleLevel||1})</span><br>
+                    <span style="font-size: 0.8rem; color: #94a3b8;">座標: (${m.x}, ${m.y})</span>
+                </div>
+                <button onclick="window.locatePlayer(${m.x}, ${m.y})" style="background: #0ea5e9; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight:bold; cursor: pointer; transition: 0.1s;">📍 尋找</button>
+            </div>
+        `).join('');
+        
+        const listDiv = document.getElementById('alliance-members-list');
+        if (listDiv) listDiv.innerHTML = html;
+    } catch(e) {}
 };
