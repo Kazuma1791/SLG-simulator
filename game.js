@@ -1087,6 +1087,52 @@ async function localTick() {
       }
     }
   }
+// --- 🤖 黑暗前哨 智慧襲擊系統 (防過密 + 嚴格距離限制) ---
+  // 1. 防過密機制：檢查目前是否有任何敵軍正在攻擊玩家
+  let isUnderAttack = myData.marches && myData.marches.some(m => m.type === 'defend_npc');
+  
+  if (!isUnderAttack && Math.random() < 0.005) {
+      let nearbyOutposts = [];
+      
+      // 2. 嚴格警戒範圍：只掃描 12 格內的方塊
+      for(let tx = Math.max(0, myData.x - 12); tx <= Math.min(WORLD_COLS-1, myData.x + 12); tx++) {
+          for(let ty = Math.max(0, myData.y - 12); ty <= Math.min(WORLD_ROWS-1, myData.y + 12); ty++) {
+              const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+              if (cell && cell.entity && !getClearedPOI(tx, ty) && cell.entity.type === 'npc_outpost') {
+                  // 算出精確的圓形直線距離
+                  let trueDist = Math.hypot(tx - myData.x, ty - myData.y);
+                  
+                  // 💡 距離過遠保險：超過 10 格 (大約一個螢幕寬度) 絕對不打！
+                  if (trueDist <= 10) {
+                      nearbyOutposts.push({x: tx, y: ty, name: cell.entity.name, pwr: cell.entity.reqPwr, dist: trueDist});
+                  }
+              }
+          }
+      }
+      
+      if (nearbyOutposts.length > 0) {
+          // 依照剛剛算好的直線距離排序
+          nearbyOutposts.sort((a, b) => a.dist - b.dist);
+          
+          // 永遠只挑選「距離最近」的那一個前哨發動攻擊
+          let closest = nearbyOutposts[0];
+          let timeMs = Math.ceil(closest.dist * 4000); 
+          
+          myData.marches.push({
+              id: 'OUTPOST_INVADE_' + Date.now(), 
+              type: 'defend_npc', 
+              startX: closest.x, startY: closest.y, 
+              targetX: myData.x, targetY: myData.y, 
+              startTime: now, finishesAt: now + timeMs,
+              npcPower: (closest.pwr || 5000) * 0.8, // 出征兵力為 80%
+              npcName: closest.name || '前哨襲擊隊'
+          });
+          
+          myData.logs.unshift(`🚨 [突襲警報] 距離您 ${Math.ceil(closest.dist)} 格的【${closest.name || '黑暗前哨'}】發現了您的城池，正派兵前來襲擊！`);
+          needSave = true;
+      }
+  }
+  // ---------------------------------------------
 // --- 🤖 NPC 模擬真人佔領資源系統 ---
   if (Math.random() < 0.05) { 
       if (!myData.npcMarches) myData.npcMarches = [];
