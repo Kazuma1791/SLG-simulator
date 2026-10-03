@@ -1147,6 +1147,19 @@ async function localTick() {
           else newMarches.push(createReturnMarch(m, m.troops, {})); 
       }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
+      else if (m.type === 'rally_wait') { 
+          m.type = m.realType; 
+          m.startTime = Date.now(); 
+          m.finishesAt = Date.now() + m.travelTime;
+          m.isRally = true;
+          // 模擬聯盟大軍加入：大幅臨時提升科技加成 (打完就消失，不會永久影響)
+          m.techs.infantry_atk = (m.techs.infantry_atk||0) + 100;
+          m.techs.archer_atk = (m.techs.archer_atk||0) + 100;
+          m.techs.cavalry_atk = (m.techs.cavalry_atk||0) + 100;
+          newMarches.push(m);
+          myData.logs.unshift(`[集結出發] 盟友大軍集結完畢！獲得巨幅聯盟戰力加成，浩浩蕩蕩向目標進發！`);
+          needSave = true;
+      }
       else if (m.type === 'occupy_node') { 
           const res = await resolveOccupyNode(m);
           if (res.isGathering) {
@@ -2611,9 +2624,32 @@ window.renderSideMenu = function() {
     div.innerHTML = `
         <button id="btn-float-hospital" onclick="window.openHospitalModal()" style="background:#1e293b; border:1px solid #ef4444; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🏥 醫療所</button>
         <button id="btn-float-report" onclick="window.openReportModal()" style="background:#1e293b; border:1px solid #3b82f6; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">📬 戰報</button>
-        <button id="btn-float-quest" onclick="window.openQuestModal()" style="background:#1e293b; border:1px solid #10b981; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🎯 任務</button>
+        <button id="btn-float-quest" onclick="window.openQuestModal()" style="background:#1e293b; border:1px solid #10b981; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">🎯 每日</button>
+        <button id="btn-float-chapter" onclick="window.openChapterModal()" style="background:#1e293b; border:1px solid #eab308; color:white; padding:8px 12px; border-radius:8px; font-weight:bold; box-shadow:0 4px 6px rgba(0,0,0,0.5); cursor:pointer;">📜 主線</button>
     `;
     document.body.appendChild(div);
+
+    // 動態監聽並注入「聯盟集結按鈕」
+    setTimeout(() => {
+        const modal = document.getElementById('action-modal');
+        if (modal) {
+            let rallyBtn = document.createElement('button');
+            rallyBtn.id = 'btn-rally-action';
+            rallyBtn.style.cssText = "background:#8b5cf6; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; font-size:1.05rem; margin-top:10px; display:none;";
+            rallyBtn.innerText = "📢 發起聯盟集結 (1分鐘準備)";
+            rallyBtn.onclick = () => window.confirmRally();
+            let confirmBtn = document.getElementById('btn-confirm-action');
+            if (confirmBtn) confirmBtn.parentNode.insertBefore(rallyBtn, confirmBtn.nextSibling);
+
+            new MutationObserver(() => {
+                let rBtn = document.getElementById('btn-rally-action');
+                if (rBtn && targetAction) {
+                    const canRally = myData.allianceName && ['attack_player', 'attack_boss', 'attack_capital', 'attack_npc'].includes(targetAction.type);
+                    rBtn.style.display = canRally ? 'block' : 'none';
+                }
+            }).observe(modal, { attributes: true, attributeFilter: ['style'] });
+        }
+    }, 1500);
 };
 
 window.addReport = function(title, text, isWin = true) {
@@ -3228,4 +3264,107 @@ window.resolveSupportPlayer = async function(m) {
         });
     } catch(e) {}
     return res;
+};
+// ==========================================
+// 📜 主線章節任務系統
+// ==========================================
+const CHAPTERS = [
+    { id: 1, title: '第一章：初建領地', desc: '升級主城至 Lv.2\n擁有 30 名步兵', reqCastle: 2, reqInf: 30, reward: {w:5000, i:5000, f:5000, speed:5} },
+    { id: 2, title: '第二章：嶄露頭角', desc: '升級主城至 Lv.5\n科技總等級達到 2', reqCastle: 5, reqTech: 2, reward: {w:20000, i:20000, f:20000, speed:10} },
+    { id: 3, title: '第三章：稱霸一方', desc: '升級主城至 Lv.10\n總兵力達到 5,000', reqCastle: 10, reqTroops: 5000, reward: {w:100000, i:100000, f:100000, speed:30} }
+];
+
+window.openChapterModal = () => {
+    let modal = document.getElementById('chapter-modal');
+    if (!modal) {
+        modal = document.createElement('div'); modal.id = 'chapter-modal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+    
+    if (typeof myData.chapter !== 'number') myData.chapter = 1;
+    let curChapter = CHAPTERS.find(c => c.id === myData.chapter);
+    let isCompleted = false;
+
+    if (!curChapter) {
+        modal.innerHTML = `<div style="background:#1e293b; border:2px solid #eab308; border-radius:10px; width:300px; padding:20px; color:white; text-align:center;"><h2>🎉 霸業已成</h2><p>您已完成所有主線任務！</p><button onclick="document.getElementById('chapter-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; border-radius:6px; cursor:pointer; color:white; font-weight:bold; border:none;">關閉</button></div>`;
+        modal.style.display = 'flex'; return;
+    }
+
+    // 檢查任務條件
+    let totalTech = (myData.research.infantry_atk||0) + (myData.research.archer_atk||0) + (myData.research.cavalry_atk||0) + (myData.research.march_speed||0) + (myData.research.troop_load||0) + (myData.research.hospital_cap||0);
+    let totalTroops = (myData.troops.infantry||0) + (myData.troops.archer||0) + (myData.troops.cavalry||0);
+    
+    if (myData.buildings.castle >= curChapter.reqCastle) {
+        if (curChapter.reqInf && myData.troops.infantry >= curChapter.reqInf) isCompleted = true;
+        if (curChapter.reqTech && totalTech >= curChapter.reqTech) isCompleted = true;
+        if (curChapter.reqTroops && totalTroops >= curChapter.reqTroops) isCompleted = true;
+    }
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #eab308; border-radius:10px; width:320px; padding:20px; color:white;">
+        <h2 style="color:#eab308; margin-top:0;">📜 ${curChapter.title}</h2>
+        <div style="background:#0f172a; padding:15px; border-radius:6px; margin-bottom:15px; border-left:4px solid #38bdf8;">
+            <div style="font-weight:bold; color:#fff; font-size:1.05rem; white-space:pre-wrap; line-height:1.5;">${curChapter.desc}</div>
+        </div>
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:15px;">
+            <div style="color:#facc15; font-weight:bold;">🎁 完成獎勵：</div>
+            <div style="font-size:0.9rem; color:#cbd5e1; margin-top:5px;">🌲${formatCompact(curChapter.reward.w)} ⛏️${formatCompact(curChapter.reward.i)} 🌾${formatCompact(curChapter.reward.f)} | ⚡5分加速 x ${curChapter.reward.speed}</div>
+        </div>
+        ${isCompleted ? `<button onclick="window.claimChapter()" style="background:#10b981; width:100%; padding:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; color:white; font-size:1.05rem;">領取獎勵</button>` : `<button disabled style="background:#475569; width:100%; padding:12px; font-weight:bold; border-radius:6px; border:none; color:#94a3b8; font-size:1.05rem;">條件未達成</button>`}
+        <button onclick="document.getElementById('chapter-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+window.claimChapter = async () => {
+    let curChapter = CHAPTERS.find(c => c.id === myData.chapter);
+    if (!curChapter) return;
+    myData.wood += curChapter.reward.w; myData.iron += curChapter.reward.i; myData.food += curChapter.reward.f;
+    myData.items.speedup5m += curChapter.reward.speed;
+    myData.chapter++;
+    myData.logs.unshift(`[主線] 恭喜完成《${curChapter.title}》！`);
+    await savePrivateData(); window.openChapterModal(); try{ window.renderSelf(); }catch(e){}
+};
+
+// ==========================================
+// 📢 發起聯盟集結 (虛擬大軍支援)
+// ==========================================
+window.confirmRally = async () => {
+    if (myData.marches && myData.marches.length >= 3) return alert("⚔️ 您的行軍隊列已滿！");
+    const sendInf = parseInt(document.getElementById('send-inf').value)||0;
+    const sendArc = parseInt(document.getElementById('send-arc').value)||0;
+    const sendCav = parseInt(document.getElementById('send-cav').value)||0;
+    
+    if (sendInf===0 && sendArc===0 && sendCav===0) return alert("請派遣部隊！");
+    if (sendInf > myData.troops.infantry || sendArc > myData.troops.archer || sendCav > myData.troops.cavalry) return alert("兵力不足！");
+    
+    let spd = 2; 
+    if (sendInf > 0) spd = Math.max(spd, CFG.troops.infantry.speed);
+    if (sendArc > 0) spd = Math.max(spd, CFG.troops.archer.speed);
+    
+    let timeMs = Math.ceil(targetAction.dist * spd * 1000);
+    const speedMult = 1 + ((myData.research.march_speed||0) * 0.08);
+    timeMs = Math.ceil(timeMs / speedMult); 
+
+    myData.troops.infantry -= sendInf; myData.troops.archer -= sendArc; myData.troops.cavalry -= sendCav;
+
+    // 複製科技資料避免汙染原本的科技樹
+    let rallyTechs = JSON.parse(JSON.stringify(myData.research));
+
+    const newMarch = {
+        id: 'M'+Date.now(), type: 'rally_wait', realType: targetAction.type,
+        startX: myData.x, startY: myData.y, targetX: targetAction.x, targetY: targetAction.y,
+        startTime: Date.now(), finishesAt: Date.now() + 60000, travelTime: timeMs, // 集結等待 60 秒
+        troops: { infantry: sendInf, archer: sendArc, cavalry: sendCav }, techs: rallyTechs
+    };
+    if (targetAction.entity) newMarch.entity = targetAction.entity;
+    if (targetAction.targetUid) newMarch.targetUid = targetAction.targetUid;
+    if (targetAction.npcPower) newMarch.npcPower = targetAction.npcPower;
+    if (targetAction.name) newMarch.targetName = targetAction.name;
+
+    myData.marches.push(newMarch);
+    myData.logs.unshift(`[發起集結] 已向聯盟發出集結令！部隊將在 1 分鐘後攜帶盟軍戰力出發。`);
+    
+    await savePrivateData(); window.closeActionModal(); try{window.renderSelf();}catch(e){}
 };
