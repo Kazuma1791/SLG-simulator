@@ -932,7 +932,15 @@ async function localTick() {
   myData.wood += dt * (CFG.buildings.lumber.rate * myData.buildings.lumber);
   myData.iron += dt * (CFG.buildings.mine.rate * myData.buildings.mine);
   myData.food += dt * farmProdPerSec - dt * upkeepPerSec;
-  if (myData.food < 0) myData.food = 0;
+  if (myData.food <= 0) { 
+      myData.food = 0;
+      // 當農田產量不足以支付軍餉時，隨機觸發警告通知玩家 (避免每秒跳針)
+      if (upkeepPerSec > farmProdPerSec && Math.random() < 0.05) {
+          if (myData.logs.length === 0 || !myData.logs[0].includes('缺糧危機')) {
+              myData.logs.unshift(`⚠️ [缺糧危機] 糧草已徹底耗盡！大軍處於飢餓狀態，全軍戰鬥力下降 50%！`);
+          }
+      }
+  }
 
   let needSave = false;
   
@@ -1238,7 +1246,16 @@ function getPwrByTech(troops, tech) {
   const infPwr = (troops.infantry||0) * CFG.troops.infantry.pwr * (1 + (tech.infantry_atk||0) * 0.05);
   const arcPwr = (troops.archer||0) * CFG.troops.archer.pwr * (1 + (tech.archer_atk||0) * 0.05);
   const cavPwr = (troops.cavalry||0) * CFG.troops.cavalry.pwr * (1 + (tech.cavalry_atk||0) * 0.05);
-  return Math.floor(infPwr + arcPwr + cavPwr);
+  let totalPwr = Math.floor(infPwr + arcPwr + cavPwr);
+  
+  // 💀 飢餓檢查：判斷這支部隊是不是玩家的
+  let isMe = (troops === myData.troops) || (myData.marches && myData.marches.some(m => m.troops === troops));
+  if (isMe && myData.food <= 0) {
+      const upkeep = ((myData.troops.infantry||0)*CFG.troops.infantry.upkeep + (myData.troops.archer||0)*CFG.troops.archer.upkeep + (myData.troops.cavalry||0)*CFG.troops.cavalry.upkeep) / 3600;
+      const prod = CFG.buildings.farm.rate * (myData.buildings.farm||1);
+      if (upkeep > prod) totalPwr = Math.floor(totalPwr * 0.5); // 養不起就扣 50% 戰鬥力
+  }
+  return totalPwr;
 }
 async function resolveOccupyNode(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, isGathering: false, cap: m.entity.cap, resType: m.entity.res };
@@ -2792,40 +2809,86 @@ window.openHospitalModal = () => {
     const hospBonus = ((myData.research && myData.research.hospital_cap) || 0) * 3000;
     let maxHosp = 10000 + (myData.buildings.castle || 1) * 5000 + hospBonus;
 
-    let costWood = totalW * 10; let costFood = totalW * 15;
-    let canHeal = totalW > 0 && myData.wood >= costWood && myData.food >= costFood;
+    // 計算資源最多能治癒多少人
+    let maxByWood = Math.floor(myData.wood / 10);
+    let maxByFood = Math.floor(myData.food / 15);
+    let maxAffordable = Math.min(totalW, maxByWood, maxByFood);
+    let initVal = maxAffordable > 0 ? maxAffordable : 0;
 
     modal.innerHTML = `
-    <div style="background:#1e293b; border:2px solid #ef4444; border-radius:10px; width:300px; padding:20px; color:white;">
+    <div style="background:#1e293b; border:2px solid #ef4444; border-radius:10px; width:320px; padding:20px; color:white;">
         <h2 style="color:#ef4444; margin-top:0;">🏥 醫療所</h2>
-        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
+        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:15px;">
             <div style="color:#94a3b8; font-size:0.85rem;">傷兵收容：${totalW} / ${maxHosp}</div>
-            <div style="margin-top:10px; color:#fca5a5;">🛡️ 重傷步兵：${w.infantry||0}</div>
-            <div style="color:#fca5a5;">🏹 重傷弓兵：${w.archer||0}</div>
-            <div style="color:#fca5a5;">🐎 重傷騎兵：${w.cavalry||0}</div>
+            <div style="margin-top:5px; color:#fca5a5; font-size:0.9rem;">🛡️步兵:${w.infantry||0} | 🏹弓兵:${w.archer||0} | 🐎騎兵:${w.cavalry||0}</div>
         </div>
-        <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:10px;">
-            <div style="font-weight:bold; color:#fbbf24;">治療所需物資：</div>
-            <div>🌲 木材：${formatCompact(costWood)} ${myData.wood < costWood ? '❌' : '✅'}</div>
-            <div>🌾 糧食：${formatCompact(costFood)} ${myData.food < costFood ? '❌' : '✅'}</div>
+        <div style="background:#0f172a; padding:15px; border-radius:6px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="color:#cbd5e1; font-size:0.9rem;">治療數量</span>
+                <input type="number" id="heal-input" min="0" max="${maxAffordable}" value="${initVal}" oninput="window.syncHealSlider(this.value, ${maxAffordable})">
+            </div>
+            <input type="range" id="heal-slider" min="0" max="${maxAffordable}" value="${initVal}" oninput="window.syncHealInput(this.value, ${maxAffordable})">
+            <p style="text-align:right; font-size:0.8rem; color:#64748b; margin:5px 0 0 0;">物資可治癒上限: <span style="color:#facc15;">${maxAffordable}</span> 人</p>
         </div>
-        ${canHeal ? '<button onclick="window.healAllWounded()" style="background:#10b981; width:100%; font-weight:bold; border-radius:4px; padding:10px; cursor:pointer; border:none; color:white;">✨ 立即治療全部傷兵</button>' : '<button disabled style="background:#475569; width:100%; font-weight:bold; border-radius:4px; padding:10px; border:none; color:#94a3b8;">物資不足或無傷兵</button>'}
+        <div style="background:#0f172a; padding:15px; border-radius:6px; margin-bottom:15px; font-size:0.9rem;">
+            <div style="font-weight:bold; color:#fbbf24; margin-bottom:8px;">消耗物資：</div>
+            <div id="heal-cost-wood" style="margin-bottom:4px;">🌲 木材：${formatCompact(initVal * 10)}</div>
+            <div id="heal-cost-food">🌾 糧食：${formatCompact(initVal * 15)}</div>
+        </div>
+        ${initVal > 0 ? `<button onclick="window.confirmHeal()" style="background:#10b981; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; font-size:1.05rem;">✨ 立即治療</button>` : `<button disabled style="background:#475569; width:100%; font-weight:bold; border-radius:6px; padding:12px; border:none; color:#94a3b8; font-size:1.05rem;">無傷兵或物資不足</button>`}
         <button onclick="document.getElementById('hospital-modal').style.display='none'" style="background:#ef4444; width:100%; padding:10px; font-weight:bold; border-radius:6px; margin-top:10px; cursor:pointer; border:none; color:white;">關閉</button>
     </div>`;
     modal.style.display = 'flex';
 };
 
-window.healAllWounded = async () => {
+window.syncHealSlider = (val, max) => {
+    let num = parseInt(val) || 0; if (num > max) num = max; if (num < 0) num = 0;
+    document.getElementById('heal-slider').value = num; window.updateHealCost(num);
+};
+window.syncHealInput = (val, max) => {
+    let num = parseInt(val) || 0; document.getElementById('heal-input').value = num; window.updateHealCost(num);
+};
+window.updateHealCost = (num) => {
+    document.getElementById('heal-cost-wood').innerText = `🌲 木材：${formatCompact(num * 10)}`;
+    document.getElementById('heal-cost-food').innerText = `🌾 糧食：${formatCompact(num * 15)}`;
+};
+
+window.confirmHeal = async () => {
+    let count = parseInt(document.getElementById('heal-input').value) || 0;
+    if (count <= 0) return;
+    let costWood = count * 10; let costFood = count * 15;
+    if (myData.wood < costWood || myData.food < costFood) return alert('物資不足！');
+    
+    myData.wood -= costWood; myData.food -= costFood;
+    
     let w = myData.wounded;
     let totalW = (w.infantry||0) + (w.archer||0) + (w.cavalry||0);
-    let costWood = totalW * 10; let costFood = totalW * 15;
-    if (myData.wood >= costWood && myData.food >= costFood) {
-        myData.wood -= costWood; myData.food -= costFood;
-        myData.troops.infantry += w.infantry; myData.troops.archer += w.archer; myData.troops.cavalry += w.cavalry;
-        myData.wounded = {infantry:0, archer:0, cavalry:0};
-        myData.logs.unshift(`[醫療] 成功治癒了 ${totalW} 名重傷士兵，部隊已歸隊！`);
-        await savePrivateData(); window.openHospitalModal(); try { window.renderSelf(); } catch(e){}
+    let ratio = count / totalW;
+    
+    let toHeal = count;
+    let hTroops = {infantry:0, archer:0, cavalry:0};
+    
+    // 依比例恢復各兵種
+    ['infantry', 'archer', 'cavalry'].forEach(k => {
+        if(toHeal <= 0) return;
+        let healAmt = Math.min(w[k], Math.ceil(w[k] * ratio));
+        if (healAmt > toHeal) healAmt = toHeal;
+        hTroops[k] += healAmt; w[k] -= healAmt; toHeal -= healAmt;
+    });
+    // 將剩餘零頭補給第一個有受傷的兵種
+    if (toHeal > 0) {
+        ['infantry', 'archer', 'cavalry'].forEach(k => {
+            let maxCanHeal = Math.min(toHeal, w[k]);
+            hTroops[k] += maxCanHeal; w[k] -= maxCanHeal; toHeal -= maxCanHeal;
+        });
     }
+
+    myData.troops.infantry += hTroops.infantry;
+    myData.troops.archer += hTroops.archer;
+    myData.troops.cavalry += hTroops.cavalry;
+
+    myData.logs.unshift(`[醫療] 成功治癒了 ${count} 名重傷士兵，部隊已歸隊！`);
+    await savePrivateData(); window.openHospitalModal(); try { window.renderSelf(); } catch(e){}
 };
 
 window.adminSetVIP = async function(targetUid, days = 30) {
