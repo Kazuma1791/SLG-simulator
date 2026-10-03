@@ -3485,3 +3485,51 @@ window.confirmRally = async () => {
     
     await savePrivateData(); window.closeActionModal(); try{window.renderSelf();}catch(e){}
 };
+// ==========================================
+// 📱 手機版 UI 終極防擋優化 (RWD 響應式排版)
+// ==========================================
+const mobileUIFix = document.createElement('style');
+mobileUIFix.innerHTML = `
+  @media (max-width: 768px) {
+      /* 1. 左側選單：改成「橫排」並縮小，貼在資源條下方 */
+      #side-menu-hud {
+          top: 60px !important;
+          left: 5px !important;
+          flex-direction: row !important;
+          flex-wrap: wrap !important;
+          gap: 5px !important;
+          pointer-events: none; /* 確保容器空白處不會擋住地圖滑動 */
+      }
+      /* 按鈕體積縮小、背景變成半透明，不阻擋玩家視線 */
+      #side-menu-hud button {
+          pointer-events: auto;
+          padding: 5px 8px !important;
+          font-size: 0.75rem !important;
+          background: rgba(30, 41, 59, 0.75) !important;
+          border-width: 1px !important;
+      }
+
+      /* 2. 右側行軍隊列：寬度大幅縮小，排版極簡化 */
+      #march-hud-container {
+          top: 100px !important;
+          right: 5px !important;
+          width: 155px !important; /* 寬度從 220 縮小到 155 */
+      }
+      #march-hud-container > div {
+          padding: 6px !important;
+          background: rgba(15, 23, 42, 0.65) !important; /* 提高透明度 */
+          backdrop-filter: blur(2px) !important;
+      }
+      /* 縮小行軍介面內的文字 */
+      #march-hud-container span {
+          font-size: 0.75rem !important;
+      }
+      /* 縮小定位與召回按鈕 */
+      #march-hud-container button {
+          padding: 2px 4px !important;
+          font-size: 0.65rem !important;
+          margin-left: 2px !important;
+      }
+  }
+`;
+document.head.appendChild(mobileUIFix);
