@@ -961,7 +961,7 @@ async function localTick() {
                       if (dx === 0 && dy === 0) continue;
                       let nx = m.targetX + dx, ny = m.targetY + dy;
                       let cell = MAP_CACHE[nx] && MAP_CACHE[nx][ny];
-                      if (cell && cell.entity && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
+                      if (cell && cell.entity && !getClearedPOI(nx, ny) && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
                           let dist = Math.hypot(nx - m.targetX, ny - m.targetY);
                           // 畫出 NPC 互相支援的線條
                           myData.npcMarches.push({
@@ -1345,28 +1345,29 @@ async function resolveDefendNPC(m) {
 }
 
 async function resolveInteractNPC(m) {
-  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarch: null };
+  let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, counterMarches: null };
   let reportText = "";
   
   if (m.entity.type === 'relic') { 
     res.loot = m.entity.loot; 
     myData.logs.unshift(`[發掘] 探險隊挖出巨量資源，正在返航中！`); 
     reportText = `探險隊成功發掘【${m.entity.name}】！`;
+    res.survived = true;
   } else {
     const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
     let defPwr = m.entity.reqPwr || 100;
-    
+
     let factionName = m.entity.faction || (['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n)));
     let supportCount = 0; let swarmSources = [];
 
-    // 💡 模擬真人的區域聯防：周邊 6 格內的同陣營城池會提供 40% 戰力支援
+    // 計算周圍活著的盟友支援戰力
     if (factionName && !m.entity.type.includes('relic')) {
         for (let dx = -6; dx <= 6; dx++) {
             for (let dy = -6; dy <= 6; dy++) {
                 if (dx === 0 && dy === 0) continue;
                 let nx = m.targetX + dx, ny = m.targetY + dy;
                 let cell = MAP_CACHE[nx] && MAP_CACHE[nx][ny];
-                if (cell && cell.entity && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
+                if (cell && cell.entity && !getClearedPOI(nx, ny) && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
                     supportCount++;
                     defPwr += Math.floor((cell.entity.reqPwr || 1000) * 0.4); 
                     swarmSources.push({x: nx, y: ny, pwr: cell.entity.reqPwr});
@@ -1375,7 +1376,10 @@ async function resolveInteractNPC(m) {
         }
         if (supportCount > 0) myData.logs.unshift(`[情報] 目標呼叫了 ${supportCount} 座【${factionName}】城池進行聯防！敵軍戰力暴增至 ${formatCompact(defPwr)}！`);
     }
+
+    // 戰鬥結算
     if (attPwr >= defPwr) {
+        // 玩家勝利
         let lossRate = (defPwr / (attPwr + 1)) * 0.15;
         let lInf = Math.floor(m.troops.infantry * lossRate); let wInf = Math.floor(lInf * 0.9);
         let lArc = Math.floor(m.troops.archer * lossRate); let wArc = Math.floor(lArc * 0.9);
@@ -1394,48 +1398,70 @@ async function resolveInteractNPC(m) {
             res.loot[k] = amt; currentLoad += amt;
         });
 
-        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠️️陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
+        reportText = `成功剿滅【${m.entity.name}】！\n戰鬥損失：🏥重傷 ${wInf+wArc+wCav} | ☠陣亡 ${(lInf-wInf)+(lArc-wArc)+(lCav-wCav)+overflow}\n🎒 部隊負重：${formatCompact(currentLoad)} / ${formatCompact(maxLoad)}\n獲得戰利品：🌲${res.loot.wood} ⛏️${res.loot.iron} 🌾${res.loot.food}`;
         if(myData.quests) myData.quests.daily.kills++;
-
-        let factionName = m.entity.faction;
-        if (!factionName && ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].some(n => m.entity.name.includes(n))) {
-            factionName = ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n));
-        }
-        if (factionName) {
-            myData.logs.unshift(`⚠️ 警告！您激怒了【${factionName}】，敵方多座城池同時發動了聯合反撲！`);
-            res.counterMarches = [];
-            // 1. 被打的本體進行主力反擊
-            res.counterMarches.push({ id: 'COUNTER_'+Date.now()+'_0', type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 主力軍` });
-            // 2. 周圍有協防的盟友城池，同時發起側翼包抄反撲
-            for (let i = 0; i < Math.min(2, swarmSources.length); i++) {
-                let s = swarmSources[i];
-                let dist = Math.hypot(s.x - myData.x, s.y - myData.y);
-                res.counterMarches.push({ id: 'COUNTER_'+Date.now()+'_'+(i+1), type: 'defend_npc', startX: s.x, startY: s.y, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + Math.ceil(dist * 3500) + 5000, npcPower: (s.pwr||10000)*1.2, npcName: `${factionName} 側翼援軍` });
-            }
-        }
+        res.survived = true;
     } else {
+        // 玩家失敗
         let wInf = Math.floor(m.troops.infantry * 0.7); let wArc = Math.floor(m.troops.archer * 0.7); let wCav = Math.floor(m.troops.cavalry * 0.7);
         window.addWounded(wInf, wArc, wCav);
         res.survived = false; res.troops = {infantry:0, archer:0, cavalry:0};
         reportText = `討伐遭遇慘敗！部隊潰散 (🏥 ${wInf+wArc+wCav} 人已送往醫療所)`;
-        if(window.addReport) window.addReport(`☠️ 遠征失敗`, reportText, false);
-        return res; 
+    }
+
+    // --- 無論勝敗，只要你敢打大聯盟，一定會遭到報復！ ---
+    if (factionName) {
+        res.counterMarches = [];
+        
+        // 如果玩家打輸了，原本被打的目標城池還活著，它會親自對你發起主力反擊！
+        if (!res.survived) {
+            let mainDist = Math.hypot(m.targetX - myData.x, m.targetY - myData.y);
+            res.counterMarches.push({ 
+                id: 'COUNTER_'+Date.now()+'_main', type: 'defend_npc', 
+                startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, 
+                startTime: Date.now(), finishesAt: Date.now() + Math.ceil(mainDist * 3500), 
+                npcPower: (m.entity.reqPwr||15000) * 1.5, 
+                npcName: `${factionName} 主力軍` 
+            });
+        }
+        
+        // 周圍的盟友城池同時發起多線包抄反撲！
+        if (swarmSources.length > 0) {
+            myData.logs.unshift(`⚠️ 【${factionName}】的聯盟成員集結了大軍，對您的主城發起報復性聯合反撲！`);
+            for (let i = 0; i < Math.min(3, swarmSources.length); i++) {
+                let s = swarmSources[i];
+                let dist = Math.hypot(s.x - myData.x, s.y - myData.y);
+                res.counterMarches.push({ 
+                    id: 'COUNTER_'+Date.now()+'_'+i, type: 'defend_npc', 
+                    startX: s.x, startY: s.y, targetX: myData.x, targetY: myData.y, 
+                    startTime: Date.now(), finishesAt: Date.now() + Math.ceil(dist * 3500) + 5000, 
+                    npcPower: (s.pwr||10000) * 1.5, 
+                    npcName: `${factionName} 復仇聯軍` 
+                });
+            }
+        }
     }
   }
-  myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
-  if (myData.clearedPOI.length > 500) myData.clearedPOI.shift(); // 避免陣列無限膨脹，最多記錄500個墳墓
-  
-  // 清除舊的動態 NPC 記錄
-  if (!myData.dynamicNPCs) myData.dynamicNPCs = [];
-  const dIdx = myData.dynamicNPCs.findIndex(dn => dn.x === m.targetX && dn.y === m.targetY);
-  if (dIdx !== -1) myData.dynamicNPCs.splice(dIdx, 1);
 
-  // 在旁邊隨機生成新的野怪 (排除主城與大型要塞，只針對一般野怪)
-  if (['barbarian', 'npc_outpost', 'relic'].includes(m.entity.type)) {
-      if (typeof window.spawnDynamicNPC === 'function') window.spawnDynamicNPC(m.targetX, m.targetY, m.entity);
+  // --- 地圖狀態更新 ---
+  if (res.survived) {
+      // 玩家勝利：才會把城池摧毀並變成廢墟
+      myData.clearedPOI.push(`${m.targetX},${m.targetY},${Date.now()},${m.entity.type}`);
+      if (myData.clearedPOI.length > 500) myData.clearedPOI.shift(); 
+      
+      if (!myData.dynamicNPCs) myData.dynamicNPCs = [];
+      const dIdx = myData.dynamicNPCs.findIndex(dn => dn.x === m.targetX && dn.y === m.targetY);
+      if (dIdx !== -1) myData.dynamicNPCs.splice(dIdx, 1);
+
+      if (['barbarian', 'npc_outpost', 'relic'].includes(m.entity.type)) {
+          if (typeof window.spawnDynamicNPC === 'function') window.spawnDynamicNPC(m.targetX, m.targetY, m.entity);
+      }
+      if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
+  } else {
+      // 玩家失敗：城池依然安好，不會變成廢墟！
+      if(window.addReport) window.addReport(`☠️️ 遠征失敗`, reportText, false);
   }
-
-  if(window.addReport) window.addReport(`⚔️ 遠征大捷`, reportText, true);
+  
   return res;
 }
 
