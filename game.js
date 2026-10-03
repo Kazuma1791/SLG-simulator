@@ -82,17 +82,17 @@ const CFG = {
     barracks:  { name: '兵營',     desc: '解鎖高階兵種，升級可提升單次招募士兵的數量。', rate: 0,   baseW: 200, baseI: 200, baseTime: 600, maxLevel: 99 } 
   },
   techs: {
-    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', desc: '提升步兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
-    archer_atk:   { name: '弓兵矢志', icon: '🏹', desc: '提升弓兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
-    cavalry_atk:  { name: '騎術改良', icon: '🐎', desc: '提升騎兵攻擊力 (+1/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    infantry_atk: { name: '步兵鍛甲', icon: '🛡️', desc: '提升步兵攻擊力 (+5%/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    archer_atk:   { name: '弓兵矢志', icon: '🏹', desc: '提升弓兵攻擊力 (+5%/級)', baseW: 300, baseI: 300, baseTime: 600 },
+    cavalry_atk:  { name: '騎術改良', icon: '🐎', desc: '提升騎兵攻擊力 (+5%/級)', baseW: 300, baseI: 300, baseTime: 600 },
     march_speed:  { name: '急行軍隊', icon: '🐎', desc: '提升全軍行軍速度 (+8%/級)', baseW: 300, baseI: 150, baseTime: 60 },
     troop_load:   { name: '輜重革新', icon: '🎒', desc: '提升部隊資源負重上限 (+15%/級)', baseW: 400, baseI: 100, baseTime: 90 },
     hospital_cap: { name: '戰地救護', icon: '🏥', desc: '提升醫療所傷兵收容容量 (+3,000/級)', baseW: 250, baseI: 250, baseTime: 60 }
   },
   troops: {
-    infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 10 },
-    archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 30, reqLvl: 3, upkeep: 25 },
-    cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 45, reqLvl: 5, upkeep: 45 }
+    infantry: { icon: '🛡️', name: '重裝步兵', w: 40, i: 30, f: 0,  pwr: 1, speed: 6, time: 20, reqLvl: 1, upkeep: 2 },
+    archer:   { icon: '🏹', name: '長弓射手', w: 60, i: 10, f: 20, pwr: 2, speed: 4, time: 30, reqLvl: 3, upkeep: 4 },
+    cavalry:  { icon: '🐎', name: '驃騎兵',   w: 20, i: 80, f: 60, pwr: 3, speed: 2, time: 45, reqLvl: 5, upkeep: 6 }
   }
 };
 
@@ -125,7 +125,10 @@ function getTechEffectText(techKey, curLevel) {
   if (techKey === 'march_speed') return "行軍速度：+" + (lv * 8) + "%" + nextText;
   if (techKey === 'troop_load') return "部隊負重：+" + (lv * 15) + "%" + nextText;
   if (techKey === 'hospital_cap') return "傷兵上限：+" + (lv * 3000).toLocaleString() + nextText;
-  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') return "部隊戰力：+" + lv + nextText;
+  if (techKey === 'infantry_atk' || techKey === 'archer_atk' || techKey === 'cavalry_atk') {
+      nextText = lv > 0 ? " (下級: +" + ((lv + 1) * 5) + "%)" : " (下級: +5%)";
+      return "部隊戰力：+" + (lv * 5) + "%" + nextText;
+  }
   return "";
 } // 👈 就是漏了這個右括號！！！
 
@@ -248,7 +251,7 @@ function getStaticEntity(x, y, type) {
       const pick = types[typeRoll];
       const lvRoll = (x * 47 + y * 83) % 100;
       let lv = 1; if (lvRoll >= 50) lv = 2; if (lvRoll >= 80) lv = 3; if (lvRoll >= 95) lv = 4; if (lvRoll === 99) lv = 5;
-      const stats = { 1:{cap:10000,reqPwr:200}, 2:{cap:30000,reqPwr:1000}, 3:{cap:100000,reqPwr:5000}, 4:{cap:250000,reqPwr:15000}, 5:{cap:500000,reqPwr:40000} };
+      const stats = { 1:{cap:2000,reqPwr:200}, 2:{cap:6000,reqPwr:1000}, 3:{cap:20000,reqPwr:5000}, 4:{cap:50000,reqPwr:15000}, 5:{cap:100000,reqPwr:40000} };
       return { type: pick.t, name: `${pick.n} Lv.${lv}`, res: pick.r, cap: stats[lv].cap, reqPwr: stats[lv].reqPwr };
   }
   if (r < 0.065) return { type: 'barbarian', name: '👹 野蠻人部落', reqPwr: 100, loot: { iron: 1500, wood: 1000, food: 1200, speedup5m: 1 } };
@@ -1230,11 +1233,11 @@ function createReturnMarch(oldMarch, survivedTroops, loot) {
 }
 
 function getPwrByTech(troops, tech) {
-  return (troops.infantry||0) * (CFG.troops.infantry.pwr + (tech.infantry_atk||0)) +
-         (troops.archer||0) * (CFG.troops.archer.pwr + (tech.archer_atk||0)) +
-         (troops.cavalry||0) * (CFG.troops.cavalry.pwr + (tech.cavalry_atk||0));
+  const infPwr = (troops.infantry||0) * CFG.troops.infantry.pwr * (1 + (tech.infantry_atk||0) * 0.05);
+  const arcPwr = (troops.archer||0) * CFG.troops.archer.pwr * (1 + (tech.archer_atk||0) * 0.05);
+  const cavPwr = (troops.cavalry||0) * CFG.troops.cavalry.pwr * (1 + (tech.cavalry_atk||0) * 0.05);
+  return Math.floor(infPwr + arcPwr + cavPwr);
 }
-
 async function resolveOccupyNode(m) {
   let res = { survived: true, troops: m.troops, loot: {wood:0, iron:0, food:0}, isGathering: false, cap: m.entity.cap, resType: m.entity.res };
   try {
@@ -2421,7 +2424,8 @@ window.renderSelf = function() {
               if (bLvl < d.reqLvl) {
                   return `<div class="item-card" style="opacity:0.5; justify-content:flex-start;"><div><strong style="font-size:1.05rem;">🔒 未解鎖</strong><div style="font-size:0.8rem;color:#94a3b8;margin:4px 0">需 兵營 Lv.${d.reqLvl}</div></div><div style="width:100px;text-align:right"><button class="btn-upgrade" style="background:#475569;" disabled>未解鎖</button></div></div>`;
               }
-              const buff = myData.research[`${key}_atk`] || 0;
+              const buffLv = myData.research[`${key}_atk`] || 0;
+              const buffPct = buffLv * 5;
               const isTraining = myData.trainQueue && myData.trainQueue.type === key;
               
               let btnHtml = ''; let progressHtml = '';
@@ -2435,7 +2439,7 @@ window.renderSelf = function() {
                   // 這裡改成呼叫自訂招募彈窗
                   btnHtml = `<button class="btn-upgrade" style="background:#059669;" onclick="window.openTrainModal('${key}')" ${myData.trainQueue?'disabled':''}>自訂招募</button>`;
               }
-              return genCard(`${d.icon} ${d.name}`, 0, `戰力: ${d.pwr}<span style="color:#10b981;">+${buff}</span> | 耗糧: 🌾${d.upkeep}/h`, `單兵消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}`, progressHtml, btnHtml);
+              return genCard(`${d.icon} ${d.name}`, 0, `基礎戰力: ${d.pwr} <span style="color:#10b981;">(+${buffPct}%)</span> | 耗糧: 🌾${d.upkeep}/h`, `單兵消耗: 🌲${d.w} ⛏️${d.i} 🌾${d.f}`, progressHtml, btnHtml);
           }).join('');
       }
 
