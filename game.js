@@ -1049,7 +1049,7 @@ async function localTick() {
           for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
               const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
               if (!cell || !cell.entity || getClearedPOI(tx, ty)) continue;
-              if (cell.entity.type.includes('npc_') || cell.entity.type === 'barbarian') npcList.push({x: tx, y: ty, name: cell.entity.name.split(' ')[1] || 'NPC'});
+              if (cell.entity.type.includes('npc_')) npcList.push({x: tx, y: ty, name: cell.entity.name.split(' ')[1] || 'NPC'});
               if (cell.entity.type.startsWith('res_')) resList.push({x: tx, y: ty});
           }
       }
@@ -1104,6 +1104,11 @@ async function localTick() {
             if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
         }
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
+      else if (m.type === 'support_player') { 
+          const res = await window.resolveSupportPlayer(m); 
+          if (res.completed) myData.logs.unshift(`[支援抵達] 部隊已順利抵達盟友 ${m.targetName} 的城池並加入協防！`);
+          else newMarches.push(createReturnMarch(m, m.troops, {})); 
+      }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
       else if (m.type === 'occupy_node') { 
           const res = await resolveOccupyNode(m);
@@ -1117,6 +1122,7 @@ async function localTick() {
           const res = await resolveInteractNPC(m); 
           if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); 
           if (res.counterMarch) newMarches.push(res.counterMarch);
+          if (res.counterMarches) res.counterMarches.forEach(cm => newMarches.push(cm));
       }
       needSave = true;
     } 
@@ -1311,8 +1317,27 @@ async function resolveInteractNPC(m) {
     reportText = `探險隊成功發掘【${m.entity.name}】！`;
   } else {
     const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
-    const defPwr = m.entity.reqPwr || 100;
+    let defPwr = m.entity.reqPwr || 100;
+    
+    let factionName = m.entity.faction || (['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n)));
+    let supportCount = 0; let swarmSources = [];
 
+    // 💡 模擬真人的區域聯防：周邊 6 格內的同陣營城池會提供 40% 戰力支援
+    if (factionName && !m.entity.type.includes('relic')) {
+        for (let dx = -6; dx <= 6; dx++) {
+            for (let dy = -6; dy <= 6; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                let nx = m.targetX + dx, ny = m.targetY + dy;
+                let cell = MAP_CACHE[nx] && MAP_CACHE[nx][ny];
+                if (cell && cell.entity && (cell.entity.faction === factionName || cell.entity.name.includes(factionName))) {
+                    supportCount++;
+                    defPwr += Math.floor((cell.entity.reqPwr || 1000) * 0.4); 
+                    swarmSources.push({x: nx, y: ny, pwr: cell.entity.reqPwr});
+                }
+            }
+        }
+        if (supportCount > 0) myData.logs.unshift(`[情報] 目標呼叫了 ${supportCount} 座【${factionName}】城池進行聯防！敵軍戰力暴增至 ${formatCompact(defPwr)}！`);
+    }
     if (attPwr >= defPwr) {
         let lossRate = (defPwr / (attPwr + 1)) * 0.15;
         let lInf = Math.floor(m.troops.infantry * lossRate); let wInf = Math.floor(lInf * 0.9);
@@ -1340,8 +1365,16 @@ async function resolveInteractNPC(m) {
             factionName = ['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n));
         }
         if (factionName) {
-            myData.logs.unshift(`⚠️ 【${factionName}】守備軍已集結大軍朝您的主城反撲！`);
-            res.counterMarch = { id: 'COUNTER_'+Date.now(), type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 復仇軍團` };
+            myData.logs.unshift(`⚠️ 警告！您激怒了【${factionName}】，敵方多座城池同時發動了聯合反撲！`);
+            res.counterMarches = [];
+            // 1. 被打的本體進行主力反擊
+            res.counterMarches.push({ id: 'COUNTER_'+Date.now()+'_0', type: 'defend_npc', startX: m.targetX, startY: m.targetY, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + 30000, npcPower: (m.entity.reqPwr||15000)*1.2, npcName: `${factionName} 主力軍` });
+            // 2. 周圍有協防的盟友城池，同時發起側翼包抄反撲
+            for (let i = 0; i < Math.min(2, swarmSources.length); i++) {
+                let s = swarmSources[i];
+                let dist = Math.hypot(s.x - myData.x, s.y - myData.y);
+                res.counterMarches.push({ id: 'COUNTER_'+Date.now()+'_'+(i+1), type: 'defend_npc', startX: s.x, startY: s.y, targetX: myData.x, targetY: myData.y, startTime: Date.now(), finishesAt: Date.now() + Math.ceil(dist * 3500) + 5000, npcPower: (s.pwr||10000)*1.2, npcName: `${factionName} 側翼援軍` });
+            }
         }
     } else {
         let wInf = Math.floor(m.troops.infantry * 0.7); let wArc = Math.floor(m.troops.archer * 0.7); let wCav = Math.floor(m.troops.cavalry * 0.7);
@@ -1961,7 +1994,16 @@ canvas.addEventListener("click", (e) => {
 
   if (tC && tC.id!==myUid) {
     if (tC.shieldEndsAt && tC.shieldEndsAt > Date.now()) { return alert("🛡️ 目標處於和平護盾保護中，無法對其發起軍事行動！"); }
-    if (tC.allianceName && myData.allianceName && tC.allianceName === myData.allianceName) { return alert("🛡️ 目標是您的歃血盟友，無法發起攻擊！"); }
+    if (tC.allianceName && myData.allianceName && tC.allianceName === myData.allianceName) { 
+        targetAction = { type: 'support_player', targetUid: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
+        document.getElementById("modal-title").innerHTML = `🤝 支援盟友 ${queueStatus}`; 
+        document.getElementById("modal-desc").innerHTML = `目標：【${tC.name}】 (Lv.${tC.castleLevel||1})<br>距離：${Math.ceil(dist)} 格<br><span style="color:#10b981; font-weight:bold;">🛡️ 派遣部隊協防 (抵達後將無償併入盟友城防守軍)</span>`;
+        document.getElementById("troop-selector").style.display = 'block'; 
+        document.getElementById("btn-confirm-action").style.display = 'block'; 
+        document.getElementById("btn-confirm-action").innerText = "發動支援"; 
+        document.getElementById("btn-confirm-action").style.background = '#3b82f6';
+        return;
+    }
 
     targetAction = { type: 'attack_player', targetUid: tC.id, name: tC.name, x: tX, y: tY, dist, techs: myData.research };
     document.getElementById("modal-title").innerHTML = `⚔️ 攻擊城池 ${queueStatus}`; 
@@ -3096,4 +3138,30 @@ window.loadAllianceMembers = async () => {
         const listDiv = document.getElementById('alliance-members-list');
         if (listDiv) listDiv.innerHTML = html;
     } catch(e) {}
+};
+// ==========================================
+// 🤝 盟友派兵支援系統
+// ==========================================
+window.resolveSupportPlayer = async function(m) {
+    let res = { completed: false };
+    try {
+        await runTransaction(db, async (transaction) => {
+            const tPrivRef = doc(db, "players", m.targetUid);
+            const tPubRef = doc(db, "world_map", m.targetUid);
+            const tDoc = await transaction.get(tPrivRef);
+            if (!tDoc.exists()) throw new Error("城池空");
+            const target = tDoc.data();
+            
+            let targetTroops = target.troops || {infantry:0, archer:0, cavalry:0};
+            targetTroops.infantry += m.troops.infantry; targetTroops.archer += m.troops.archer; targetTroops.cavalry += m.troops.cavalry;
+            
+            let allyLog = `[盟友支援] 盟友【${myData.name}】的支援部隊抵達！獲得兵力: 🛡️${m.troops.infantry} 🏹${m.troops.archer} 🐎${m.troops.cavalry}`;
+            transaction.set(tPrivRef, { troops: targetTroops, logs: [allyLog, ...(target.logs || [])] }, { merge: true });
+            
+            const totalT = targetTroops.infantry + targetTroops.archer + targetTroops.cavalry;
+            transaction.set(tPubRef, { troops: totalT }, { merge: true });
+            res.completed = true;
+        });
+    } catch(e) {}
+    return res;
 };
