@@ -1040,7 +1040,47 @@ async function localTick() {
       }
     }
   }
-
+// --- 🤖 NPC 模擬真人佔領資源系統 ---
+  if (Math.random() < 0.05) { 
+      if (!myData.npcMarches) myData.npcMarches = [];
+      let npcList = [], resList = [];
+      for(let tx = Math.max(0, myData.x - 15); tx <= Math.min(WORLD_COLS-1, myData.x + 15); tx++) {
+          for(let ty = Math.max(0, myData.y - 15); ty <= Math.min(WORLD_ROWS-1, myData.y + 15); ty++) {
+              const cell = MAP_CACHE[tx] && MAP_CACHE[tx][ty];
+              if (!cell || !cell.entity || getClearedPOI(tx, ty)) continue;
+              if (cell.entity.type.includes('npc_') || cell.entity.type === 'barbarian') npcList.push({x: tx, y: ty, name: cell.entity.name.split(' ')[1] || 'NPC'});
+              if (cell.entity.type.startsWith('res_')) resList.push({x: tx, y: ty});
+          }
+      }
+      if (npcList.length > 0 && resList.length > 0 && myData.npcMarches.length < 4) {
+          let rNpc = npcList[Math.floor(Math.random() * npcList.length)];
+          let rRes = resList[Math.floor(Math.random() * resList.length)];
+          // 確認該資源點沒有人正在採集
+          if (!myData.npcMarches.some(m => m.targetX === rRes.x && m.targetY === rRes.y) && !myData.marches.some(m => m.targetX === rRes.x && m.targetY === rRes.y)) {
+              let timeMs = Math.ceil(Math.hypot(rNpc.x - rRes.x, rNpc.y - rRes.y) * 5 * 1000); 
+              myData.npcMarches.push({ id: 'NPCM_'+Date.now(), type: 'npc_gather', startX: rNpc.x, startY: rNpc.y, targetX: rRes.x, targetY: rRes.y, npcName: rNpc.name, startTime: now, finishesAt: now + timeMs });
+              needSave = true;
+          }
+      }
+  }
+  if (myData.npcMarches) {
+      let nextNpcMarches = [];
+      myData.npcMarches.forEach(nm => {
+          if (nm.type === 'npc_gather' && now >= nm.finishesAt) {
+              nm.type = 'npc_gathering'; nm.finishesAt = now + 120000; // NPC 採集2分鐘就滿載
+              nextNpcMarches.push(nm); needSave = true;
+          } else if (nm.type === 'npc_gathering' && now >= nm.finishesAt) {
+              myData.clearedPOI.push(`${nm.targetX},${nm.targetY},${now},res_gathered`);
+              nm.type = 'npc_return'; nm.finishesAt = now + Math.ceil(Math.hypot(nm.startX-nm.targetX, nm.startY-nm.targetY) * 5 * 1000);
+              let tx = nm.startX, ty = nm.startY; nm.startX = nm.targetX; nm.startY = nm.targetY; nm.targetX = tx; nm.targetY = ty;
+              nextNpcMarches.push(nm); needSave = true;
+          } else if (nm.type === 'npc_return' && now >= nm.finishesAt) {
+              needSave = true; 
+          } else { nextNpcMarches.push(nm); }
+      });
+      myData.npcMarches = nextNpcMarches;
+  }
+  // ----------------------------------
   let newMarches = [];
   for (let m of myData.marches) {
     if (now >= m.finishesAt && m.type !== 'gathering') {
@@ -1085,6 +1125,8 @@ async function localTick() {
           m.finishesAt = now + (now - m.startTime); 
           try { deleteDoc(doc(db, "world_map", `NODE_${m.targetX}_${m.targetY}`)); }catch(e){}
           myData.logs.unshift(`[採集完成] 駐紮部隊滿載而歸！`);
+          myData.clearedPOI.push(`${m.targetX},${m.targetY},${now},res_gathered`);
+          if (myData.clearedPOI.length > 500) myData.clearedPOI.shift();
           newMarches.push(m);
           needSave = true;
       } else {
@@ -1115,6 +1157,10 @@ async function localTick() {
       worldNodes.forEach(n => {
           if (n.uid === 'NPC' && typeof deleteDoc !== 'undefined') {
               try { deleteDoc(doc(db, "world_map", `NODE_${n.x}_${n.y}`)); } catch(e){}
+              // 如果已經採集超過 10% 以上，召回時順便把資源點弄枯竭
+                if (ratio > 0.1) {
+                    myData.clearedPOI.push(`${m.startX},${m.startY},${Date.now()},res_gathered`);
+                }
           }
       });
   }
@@ -1408,17 +1454,12 @@ function drawMarchLines(ctx, marches, tileSize) {
 
     let color = '#38bdf8'; 
     let label = '⚔️ 部隊';
-    if (m.type === 'return') {
-      color = '#10b981'; 
-      label = '📦 返航';
-    } else if (m.type === 'defend_npc' || m.type === 'counter_attack') {
-      color = '#ef4444'; 
-      label = `🚨 ${m.npcName || '敵軍'}`;
-    } else if (m.type === 'attack_player') {
-      color = '#f59e0b'; 
-      label = '⚔️ 攻城';
-    }
-
+    if (m.type === 'return') { color = '#10b981'; label = '📦 返航'; } 
+    else if (m.type === 'defend_npc' || m.type === 'counter_attack') { color = '#ef4444'; label = `🚨 ${m.npcName || '敵軍'}`; } 
+    else if (m.type === 'attack_player') { color = '#f59e0b'; label = '⚔️ 攻城'; }
+    else if (m.type === 'npc_gather') { color = '#f97316'; label = `🏃 ${m.npcName || 'NPC'}佔領`; }
+    else if (m.type === 'npc_return') { color = '#f97316'; label = `📦 ${m.npcName || 'NPC'}滿載`; }
+    
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
@@ -1514,7 +1555,12 @@ function drawWorldMap() {
         const clrInfo = getClearedPOI(x, y);
         
         if (clrInfo) {
-          ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+          if (clrInfo.type === 'res_gathered') {
+              ctx.font = '20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🪓', px+TILE_SIZE/2, py+32);
+              ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif'; ctx.fillText('已枯竭', px+TILE_SIZE/2, py+48);
+          } else {
+              ctx.font = '24px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥', px+TILE_SIZE/2, py+35);
+          }
         } else {
           if (cell.entity.type === 'npc_capital' || cell.entity.type === 'npc_super_castle') {
               ctx.shadowColor = '#facc15'; ctx.shadowBlur = 15 + Math.sin(t/200)*10;
@@ -1789,7 +1835,23 @@ function drawWorldMap() {
       } 
     });
     const movingMarches = myData.marches.filter(m => m.type !== 'gathering');
-    drawMarchLines(ctx, movingMarches, TILE_SIZE);
+    let allMoving = [...movingMarches];
+    
+    if (myData.npcMarches) {
+        myData.npcMarches.forEach(m => {
+            if (m.type === 'npc_gathering') {
+                const cX = m.targetX * TILE_SIZE + TILE_SIZE / 2;
+                const cY = m.targetY * TILE_SIZE + TILE_SIZE / 2;
+                ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.arc(cX, cY, 14, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⛏', cX, cY + 4);
+                const left = Math.ceil((m.finishesAt - Date.now()) / 1000);
+                if (left > 0) { ctx.fillStyle = '#f97316'; ctx.font = 'bold 13px sans-serif'; ctx.fillText(formatTime(left), cX, cY - 20); }
+            } else {
+                allMoving.push(m);
+            }
+        });
+    }
+    drawMarchLines(ctx, allMoving, TILE_SIZE);
   }
     
   ctx.restore();
