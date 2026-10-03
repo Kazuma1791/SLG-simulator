@@ -2659,7 +2659,7 @@ window.renderSideMenu = function() {
         if (modal) {
             let rallyBtn = document.createElement('button');
             rallyBtn.id = 'btn-rally-action';
-            rallyBtn.style.cssText = "background:#8b5cf6; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; font-size:1.05rem; margin-top:10px; display:none;";
+            rallyBtn.style.cssText = "background:transparent; border:1px solid #8b5cf6; color:#c4b5fd; width:100%; border-radius:6px; padding:8px; cursor:pointer; font-size:0.85rem; margin-top:8px; display:none; transition:0.2s;";
             rallyBtn.innerText = "📢 發起聯盟集結 (1分鐘準備)";
             rallyBtn.onclick = () => window.confirmRally();
             let confirmBtn = document.getElementById('btn-confirm-action');
