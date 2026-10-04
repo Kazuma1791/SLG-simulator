@@ -1203,8 +1203,13 @@ async function localTick() {
       else if (m.type === 'attack_boss') { const res = await resolveAttackBoss(m); if (res.survived) newMarches.push(createReturnMarch(m, res.troops, res.loot)); }
       else if (m.type === 'support_player') { 
           const res = await window.resolveSupportPlayer(m); 
-          if (res.completed) myData.logs.unshift(`[支援抵達] 部隊已順利抵達盟友 ${m.targetName} 的城池並加入協防！`);
-          else newMarches.push(createReturnMarch(m, m.troops, {})); 
+          if (res.completed) {
+              myData.logs.unshift(`[支援抵達] 部隊已順利抵達盟友 ${m.targetName} 的城池並加入協防！`);
+          } else {
+              let msg = res.bounced ? `[支援失敗] 盟友 ${m.targetName} 的城池駐防空間已滿，部隊已調頭返航！` : `[支援失敗] 目標城池異常，部隊返航。`;
+              myData.logs.unshift(msg);
+              newMarches.push(createReturnMarch(m, m.troops, {})); // 原班人馬回家
+          }
       }
       else if (m.type === 'defend_npc') { await resolveDefendNPC(m); }
       else if (m.type === 'rally_wait') { 
@@ -2301,6 +2306,16 @@ document.getElementById("btn-confirm-action").addEventListener('click', async ()
 
   const myMarchesCount = (myData.marches||[]).filter(m => !['defend_npc', 'npc_attack_node'].includes(m.type)).length;
   if (myMarchesCount >= 3) return alert("⚔️ 您的行軍隊列已滿 (最多 3 隊)！請等待部隊返回。");
+    // 🛡️️ 破盾機制：如果發起攻擊行為，立刻解除和平護盾！
+  if (targetAction && ['attack_player', 'attack_npc', 'attack_capital', 'attack_boss'].includes(targetAction.type)) {
+        let hasShield = (myData.shieldEnd > Date.now()) || (myData.shieldEndTime > Date.now()) || (myData.shieldExpiry > Date.now());
+        if (hasShield) {
+            const confirmBreak = confirm("⚠️ 警告：發起攻擊將會立刻【打破您的和平護盾】！確定要出兵嗎？");
+            if (!confirmBreak) return; // 玩家反悔，中斷出兵
+            myData.shieldEnd = 0; myData.shieldEndTime = 0; myData.shieldExpiry = 0; // 護盾歸零
+            myData.logs.unshift(`[護盾解除] 您主動發起了攻擊，和平護盾已失效！`);
+        }
+   }
 
   const sendInf = parseInt(document.getElementById('send-inf').value)||0;
   const sendArc = parseInt(document.getElementById('send-arc').value)||0;
@@ -3401,7 +3416,7 @@ window.loadAllianceMembers = async () => {
 // 🤝 盟友派兵支援系統
 // ==========================================
 window.resolveSupportPlayer = async function(m) {
-    let res = { completed: false };
+    let res = { completed: false, bounced: false };
     try {
         await runTransaction(db, async (transaction) => {
             const tPrivRef = doc(db, "players", m.targetUid);
@@ -3411,6 +3426,17 @@ window.resolveSupportPlayer = async function(m) {
             const target = tDoc.data();
             
             let targetTroops = target.troops || {infantry:0, archer:0, cavalry:0};
+            let currentTotal = (targetTroops.infantry||0) + (targetTroops.archer||0) + (targetTroops.cavalry||0);
+            let incomingTotal = (m.troops.infantry||0) + (m.troops.archer||0) + (m.troops.cavalry||0);
+            
+            // 🛑 駐軍上限：城池等級 x 15,000。超過就拒收，部隊會直接彈回！
+            let maxGarrison = (target.buildings.castle || 1) * 15000;
+            
+            if (currentTotal + incomingTotal > maxGarrison) {
+                res.bounced = true; // 標記為遭拒絕退回
+                return;
+            }
+
             targetTroops.infantry += m.troops.infantry; targetTroops.archer += m.troops.archer; targetTroops.cavalry += m.troops.cavalry;
             
             let allyLog = `[盟友支援] 盟友【${myData.name}】的支援部隊抵達！獲得兵力: 🛡️${m.troops.infantry} 🏹${m.troops.archer} 🐎${m.troops.cavalry}`;
