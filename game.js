@@ -1464,7 +1464,9 @@ async function resolveInteractNPC(m) {
     res.survived = true;
   } else {
     const attPwr = getPwrByTech(m.troops, m.techs || myData.research);
-    let defPwr = m.entity.reqPwr || 100;
+        // 💡 判斷如果是野外資源點 (res_)，防禦力強制為 0，保證不會有任何傷亡
+    let defPwr = m.entity.type.startsWith('res_') ? 0 : (m.entity.reqPwr || 100);
+
 
     let factionName = m.entity.faction || (['中央王都','猩紅法師塔','迷霧監視塔','砂海要塞'].find(n => m.entity.name.includes(n)));
     let supportCount = 0; let swarmSources = [];
@@ -3065,61 +3067,72 @@ window.renderMarchHUD = function() {
     if (!hud) {
         hud = document.createElement('div');
         hud.id = 'march-hud-container';
-        // 稍微加寬以容納按鈕
-        hud.style.cssText = 'position:fixed; right:10px; top:80px; z-index:9980; display:flex; flex-direction:column; gap:8px; width:220px; pointer-events:none;';
+        hud.style.cssText = 'position:fixed; right:10px; top:80px; z-index:9980; display:flex; flex-direction:column; width:220px; pointer-events:none;';
         document.body.appendChild(hud);
+        
+        // 💡 智慧偵測：如果是手機螢幕，一開始預設將隊列「收起」以節省空間
+        if (window.innerWidth <= 768) window.isMarchHudCollapsed = true;
     }
     
     if (myData.marches.length === 0) {
-        hud.innerHTML = '';
-        return;
+        hud.innerHTML = ''; return;
     }
+
+    if (typeof window.isMarchHudCollapsed === 'undefined') window.isMarchHudCollapsed = false;
 
     const now = Date.now();
     let html = '';
     
-    myData.marches.forEach((m) => {
-        const remainSec = Math.max(0, Math.ceil((m.finishesAt - now) / 1000));
-        const totalSec = Math.ceil((m.finishesAt - m.startTime) / 1000);
-        let pct = totalSec > 0 ? Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100))) : 100;
-        
-        let actionName = '行軍中'; let icon = '🚀'; let color = '#38bdf8';
-        if (m.type === 'gathering') { actionName = '採集中'; icon = '⛏️'; color = '#10b981'; } 
-        else if (m.type === 'return') { actionName = '返回中'; icon = '📦'; color = '#34d399'; } 
-        else if (m.type === 'attack_player' || m.type === 'attack_capital' || m.type === 'attack_npc') { actionName = '進攻中'; icon = '⚔️'; color = '#ef4444'; } 
-        else if (m.type === 'defend_npc' || m.type === 'counter_attack') { actionName = '敵襲警戒'; icon = '🚨'; color = '#f97316'; } 
-        else if (m.type === 'relic') { actionName = '探索中'; icon = '🏛️️'; color = '#a855f7'; } 
-        else if (m.type === 'occupy_node') { actionName = '前往佔領'; icon = '🚩'; color = '#8b5cf6'; }
+    // 🔘 頂部：收起 / 展開 切換按鈕
+    html += `<div onclick="window.isMarchHudCollapsed = !window.isMarchHudCollapsed; window.renderMarchHUD();" style="background:rgba(15, 23, 42, 0.95); border:1px solid #38bdf8; color:#38bdf8; padding:8px 10px; border-radius:6px; cursor:pointer; font-weight:bold; text-align:center; pointer-events:auto; box-shadow:0 4px 6px rgba(0,0,0,0.5); margin-bottom:8px; backdrop-filter:blur(4px); transition:0.2s;">
+        ${window.isMarchHudCollapsed ? '🔽 展開部隊 (' + myData.marches.length + ')' : '🔼 收起列表'}
+    </div>`;
 
-        let targetStr = m.targetName || m.npcName || `(${m.targetX}, ${m.targetY})`;
-        
-        // 建立「定位」按鈕
-        let btnHtml = `<button onclick="window.locateMarchTarget(${m.targetX||m.startX}, ${m.targetY||m.startY})" style="background:#0ea5e9; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; cursor:pointer; pointer-events:auto;">📍 定位</button>`;
-        
-        // 如果是「採集中」，增加「召回」按鈕
-        if (m.type === 'gathering') {
-            btnHtml += `<button onclick="window.recallMarch('${m.id}')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; margin-left:6px; cursor:pointer; pointer-events:auto;">↩️ 召回</button>`;
-        }
+    // 📜 底部：隊列卡片清單 (只有在「未收起」時才渲染)
+    if (!window.isMarchHudCollapsed) {
+        html += `<div style="display:flex; flex-direction:column; gap:8px; max-height:65vh; overflow-y:auto; pointer-events:auto; padding-right:4px;">`;
+        myData.marches.forEach((m) => {
+            const remainSec = Math.max(0, Math.ceil((m.finishesAt - now) / 1000));
+            const totalSec = Math.ceil((m.finishesAt - m.startTime) / 1000);
+            let pct = totalSec > 0 ? Math.min(100, Math.max(0, 100 - (remainSec / totalSec * 100))) : 100;
+            
+            let actionName = '行軍中'; let icon = '🚀'; let color = '#38bdf8';
+            if (m.type === 'gathering') { actionName = '採集中'; icon = '⛏️'; color = '#10b981'; } 
+            else if (m.type === 'return') { actionName = '返回中'; icon = '📦'; color = '#34d399'; } 
+            else if (m.type === 'attack_player' || m.type === 'attack_capital' || m.type === 'attack_npc') { actionName = '進攻中'; icon = '⚔️'; color = '#ef4444'; } 
+            else if (m.type === 'defend_npc' || m.type === 'counter_attack') { actionName = '敵襲警戒'; icon = '🚨'; color = '#f97316'; } 
+            else if (m.type === 'relic') { actionName = '探索中'; icon = '🏛'; color = '#a855f7'; } 
+            else if (m.type === 'occupy_node') { actionName = '前往佔領'; icon = '🚩'; color = '#8b5cf6'; }
+            else if (m.type === 'rally_wait') { actionName = '集結中'; icon = '📢'; color = '#8b5cf6'; }
 
-        html += `
-        <div style="background:rgba(15, 23, 42, 0.85); border:1px solid ${color}; border-radius:6px; padding:10px; color:white; pointer-events:auto; box-shadow:0 4px 6px rgba(0,0,0,0.4); backdrop-filter:blur(4px);">
-            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.9rem; margin-bottom:8px;">
-                <span style="font-weight:bold; color:${color};">${icon} ${actionName}</span>
-                <span style="color:#facc15; font-family:monospace; font-weight:bold;">${formatTime(remainSec)}</span>
-            </div>
-            <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:85px;">${targetStr}</span>
-                <div>${btnHtml}</div>
-            </div>
-            <div style="background:#334155; height:5px; border-radius:3px; overflow:hidden;">
-                <div style="background:${color}; height:100%; width:${pct}%; transition:width 1s linear;"></div>
-            </div>
-        </div>
-        `;
-    });
-    
+            let targetStr = m.targetName || m.npcName || `(${m.targetX}, ${m.targetY})`;
+            
+            // 縮小版的📍與↩️按鈕
+            let btnHtml = `<button onclick="window.locateMarchTarget(${m.targetX||m.startX}, ${m.targetY||m.startY})" style="background:#0ea5e9; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; cursor:pointer;">📍</button>`;
+            if (m.type === 'gathering') {
+                btnHtml += `<button onclick="window.recallMarch('${m.id}')" style="background:#ef4444; color:white; border:none; border-radius:4px; padding:3px 8px; font-size:0.75rem; margin-left:4px; cursor:pointer;">↩️</button>`;
+            }
+
+            html += `
+            <div style="background:rgba(15, 23, 42, 0.9); border:1px solid ${color}; border-radius:6px; padding:10px; color:white; box-shadow:0 4px 6px rgba(0,0,0,0.4);">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; margin-bottom:6px;">
+                    <span style="font-weight:bold; color:${color};">${icon} ${actionName}</span>
+                    <span style="color:#facc15; font-family:monospace; font-weight:bold;">${formatTime(remainSec)}</span>
+                </div>
+                <div style="font-size:0.75rem; color:#cbd5e1; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px;">${targetStr}</span>
+                    <div>${btnHtml}</div>
+                </div>
+                <div style="background:#334155; height:4px; border-radius:2px; overflow:hidden;">
+                    <div style="background:${color}; height:100%; width:${pct}%; transition:width 1s linear;"></div>
+                </div>
+            </div>`;
+        });
+        html += `</div>`;
+    }
     hud.innerHTML = html;
 };
+
 
 // 📍 定位目標函數
 window.locateMarchTarget = (tx, ty) => {
