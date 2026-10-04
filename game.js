@@ -3600,3 +3600,129 @@ mobileUIFix.innerHTML = `
   }
 `;
 document.head.appendChild(mobileUIFix);
+// ==========================================
+// 🛠️ 獨立版 GM 道具發放系統 (🛡️ Email 安全鎖版)
+// ==========================================
+
+// 🌟🌟🌟 重要：請將這串文字換成你自己的 Email (可以設定多個) 🌟🌟🌟
+const ADMIN_EMAILS = ['topacoau@gmail.com']; 
+
+// 檢查是否為管理員 (改為驗證 Email)
+window.isAdmin = function() {
+    let currentEmail = null;
+    // 自動從遊戲資料或 Firebase 登入狀態中抓取 Email
+    if (typeof myData !== 'undefined' && myData && myData.email) {
+        currentEmail = myData.email;
+    } else if (typeof auth !== 'undefined' && auth.currentUser && auth.currentUser.email) {
+        currentEmail = auth.currentUser.email;
+    }
+    
+    return currentEmail && ADMIN_EMAILS.includes(currentEmail);
+};
+
+// 1. 自動在畫面上產生一個 GM 專屬按鈕 (只有管理員看得到)
+setTimeout(() => {
+    // 🛡️ 安全鎖 1：信箱不符合，直接終止生成按鈕
+    if (!window.isAdmin()) return; 
+
+    let gmBtn = document.createElement('button');
+    gmBtn.innerHTML = '🛠️ 發放道具';
+    gmBtn.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:9999; background:#dc2626; color:white; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.5); opacity:0.8;';
+    gmBtn.onmouseover = () => gmBtn.style.opacity = '1';
+    gmBtn.onmouseout = () => gmBtn.style.opacity = '0.8';
+    gmBtn.onclick = () => window.openGMModal();
+    document.body.appendChild(gmBtn);
+}, 2000); 
+
+// 2. 打開 GM 面板的 UI 介面
+window.openGMModal = function() {
+    // 🛡️ 安全鎖 2：雙重驗證
+    if (!window.isAdmin()) return alert("⚠️ 警告：您沒有管理員權限！"); 
+
+    let modal = document.getElementById('gm-modal-standalone');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gm-modal-standalone';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; justify-content:center; align-items:center;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+    <div style="background:#1e293b; border:2px solid #dc2626; border-radius:10px; width:320px; padding:20px; color:white; box-shadow:0 0 20px rgba(220, 38, 38, 0.5);">
+        <h2 style="color:#ef4444; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">🛠️ GM 道具發放</h2>
+        
+        <div style="margin-bottom:15px;">
+            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">發送對象 (UID):</label>
+            <input type="text" id="gm-target-uid" placeholder="留空則發送給自己" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+        </div>
+        
+        <div style="margin-bottom:15px;">
+            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">選擇道具:</label>
+            <select id="gm-item-type" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+                <option value="wood">🌲 木材</option>
+                <option value="iron">⛏️ 鐵礦</option>
+                <option value="food">🌾 糧草</option>
+                <option value="speedup5m">⚡ 5分鐘加速卡</option>
+                <option value="speedup30m">⚡ 30分鐘加速卡</option>
+                <option value="speedup1h">⚡ 1小時加速卡</option>
+                <option value="resourceCard">📦 資源隨機箱</option>
+            </select>
+        </div>
+        
+        <div style="margin-bottom:15px;">
+            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">數量:</label>
+            <input type="number" id="gm-item-amount" value="1000" min="1" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+        </div>
+        
+        <button onclick="window.sendGMItem()" style="background:#10b981; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; margin-bottom:10px;">📤 發送</button>
+        <button onclick="document.getElementById('gm-modal-standalone').style.display='none'" style="background:#475569; width:100%; padding:10px; border-radius:6px; cursor:pointer; border:none; color:white;">關閉</button>
+    </div>`;
+    modal.style.display = 'flex';
+};
+
+// 3. 實際發送邏輯 (安全寫入 Firebase)
+window.sendGMItem = async function() {
+    // 🛡️ 安全鎖 3：後端寫入前做最後把關 (最重要！)
+    if (!window.isAdmin()) return alert("⚠ 警告：您沒有管理員權限，無法執行寫入操作！"); 
+
+    let targetUid = document.getElementById('gm-target-uid').value.trim();
+    if (!targetUid) targetUid = myData.uid; // 如果沒填，預設發給自己
+
+    let itemType = document.getElementById('gm-item-type').value;
+    let amount = parseInt(document.getElementById('gm-item-amount').value) || 0;
+    if (amount <= 0) return alert("數量必須大於 0！");
+
+    try {
+        let updateData = {};
+        if (['wood', 'iron', 'food'].includes(itemType)) {
+            updateData[itemType] = increment(amount); 
+        } else {
+            updateData[`items.${itemType}`] = increment(amount);
+        }
+
+        let itemNameText = document.getElementById('gm-item-type').options[document.getElementById('gm-item-type').selectedIndex].text;
+        let logMsg = `🎁 [系統獎勵] 管理員發放了獎勵！您獲得了 ${itemNameText} x ${amount}。`;
+        
+        await runTransaction(db, async (transaction) => {
+            const playerRef = doc(db, "players", targetUid);
+            const pDoc = await transaction.get(playerRef);
+            if (!pDoc.exists()) throw new Error("找不到該玩家！");
+            
+            let pData = pDoc.data();
+            let newLogs = [logMsg, ...(pData.logs || [])].slice(0, 50); 
+            updateData['logs'] = newLogs;
+
+            transaction.update(playerRef, updateData);
+        });
+
+        alert(`✅ 成功發送！`);
+        document.getElementById('gm-modal-standalone').style.display = 'none'; 
+        
+        if (targetUid === myData.uid) {
+            setTimeout(() => { if(typeof window.renderSelf === 'function') window.renderSelf(); }, 500);
+        }
+    } catch (e) {
+        console.error(e);
+        alert(`❌ 發送失敗：${e.message}`);
+    }
+};
