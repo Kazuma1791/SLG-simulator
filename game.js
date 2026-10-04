@@ -17,7 +17,7 @@ console.log('%c', devtools);
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
@@ -3605,26 +3605,27 @@ document.head.appendChild(mobileUIFix);
 // ==========================================
 
 // 🌟🌟🌟 重要：請將這串文字換成你自己的 Email (可以設定多個) 🌟🌟🌟
+// ==========================================
+// 🛠️ 獨立版 GM 道具發放系統 (🛡️ Email 鎖 + 下拉選單版)
+// ==========================================
+
+// 🌟🌟🌟 重要：請將這串文字換成你自己的 Email 🌟🌟🌟
 const ADMIN_EMAILS = ['topacoau@gmail.com']; 
 
-// 檢查是否為管理員 (改為驗證 Email)
+// 檢查是否為管理員
 window.isAdmin = function() {
     let currentEmail = null;
-    // 自動從遊戲資料或 Firebase 登入狀態中抓取 Email
     if (typeof myData !== 'undefined' && myData && myData.email) {
         currentEmail = myData.email;
     } else if (typeof auth !== 'undefined' && auth.currentUser && auth.currentUser.email) {
         currentEmail = auth.currentUser.email;
     }
-    
     return currentEmail && ADMIN_EMAILS.includes(currentEmail);
 };
 
-// 1. 自動在畫面上產生一個 GM 專屬按鈕 (只有管理員看得到)
+// 1. 自動產生 GM 按鈕 (右下角)
 setTimeout(() => {
-    // 🛡️ 安全鎖 1：信箱不符合，直接終止生成按鈕
     if (!window.isAdmin()) return; 
-
     let gmBtn = document.createElement('button');
     gmBtn.innerHTML = '🛠️ 發放道具';
     gmBtn.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:9999; background:#dc2626; color:white; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.5); opacity:0.8;';
@@ -3634,10 +3635,9 @@ setTimeout(() => {
     document.body.appendChild(gmBtn);
 }, 2000); 
 
-// 2. 打開 GM 面板的 UI 介面
-window.openGMModal = function() {
-    // 🛡️ 安全鎖 2：雙重驗證
-    if (!window.isAdmin()) return alert("⚠️ 警告：您沒有管理員權限！"); 
+// 2. 打開 GM 面板 (動態抓取玩家名單)
+window.openGMModal = async function() {
+    if (!window.isAdmin()) return alert("⚠️️ 警告：您沒有管理員權限！"); 
 
     let modal = document.getElementById('gm-modal-standalone');
     if (!modal) {
@@ -3646,47 +3646,78 @@ window.openGMModal = function() {
         modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; justify-content:center; align-items:center;';
         document.body.appendChild(modal);
     }
-
-    modal.innerHTML = `
-    <div style="background:#1e293b; border:2px solid #dc2626; border-radius:10px; width:320px; padding:20px; color:white; box-shadow:0 0 20px rgba(220, 38, 38, 0.5);">
-        <h2 style="color:#ef4444; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">🛠️ GM 道具發放</h2>
-        
-        <div style="margin-bottom:15px;">
-            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">發送對象 (UID):</label>
-            <input type="text" id="gm-target-uid" placeholder="留空則發送給自己" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
-        </div>
-        
-        <div style="margin-bottom:15px;">
-            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">選擇道具:</label>
-            <select id="gm-item-type" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
-                <option value="wood">🌲 木材</option>
-                <option value="iron">⛏️ 鐵礦</option>
-                <option value="food">🌾 糧草</option>
-                <option value="speedup5m">⚡ 5分鐘加速卡</option>
-                <option value="speedup30m">⚡ 30分鐘加速卡</option>
-                <option value="speedup1h">⚡ 1小時加速卡</option>
-                <option value="resourceCard">📦 資源隨機箱</option>
-            </select>
-        </div>
-        
-        <div style="margin-bottom:15px;">
-            <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">數量:</label>
-            <input type="number" id="gm-item-amount" value="1000" min="1" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
-        </div>
-        
-        <button onclick="window.sendGMItem()" style="background:#10b981; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; margin-bottom:10px;">📤 發送</button>
-        <button onclick="document.getElementById('gm-modal-standalone').style.display='none'" style="background:#475569; width:100%; padding:10px; border-radius:6px; cursor:pointer; border:none; color:white;">關閉</button>
-    </div>`;
+    
+    // 💡 因為要從資料庫抓名單，先顯示讀取中畫面
     modal.style.display = 'flex';
+    modal.innerHTML = `<h2 style="color:#10b981; animation: pulse 1.5s infinite;">讀取全服玩家名單中... ⏳</h2>`;
+
+    try {
+        // 從 Firebase 的 players 集合抓取所有玩家資料
+        const playersSnap = await getDocs(collection(db, "players"));
+        let playerOptions = `<option value="${myData.uid}">👑 發給自己 (${myData.name || '未命名'})</option>`; // 預設第一個是自己
+        
+        // 迴圈跑過每一個玩家
+        playersSnap.forEach(docSnap => {
+            if (docSnap.id !== myData.uid) { // 排除自己，因為上面已經加了
+                let pData = docSnap.data();
+                let pName = pData.name || '未知玩家';
+                playerOptions += `<option value="${docSnap.id}">👤 ${pName}</option>`;
+            }
+        });
+
+        // 渲染正式發放介面
+        modal.innerHTML = `
+        <div style="background:#1e293b; border:2px solid #dc2626; border-radius:10px; width:320px; padding:20px; color:white; box-shadow:0 0 20px rgba(220, 38, 38, 0.5);">
+            <h2 style="color:#ef4444; margin-top:0; border-bottom:1px solid #334155; padding-bottom:10px;">🛠️ GM 道具發放</h2>
+            
+            <div style="margin-bottom:15px;">
+                <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">選擇發送對象:</label>
+                <!-- 💡 這裡變成了下拉選單 -->
+                <select id="gm-target-uid" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+                    ${playerOptions}
+                </select>
+            </div>
+            
+            <div style="margin-bottom:15px;">
+                <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">選擇道具:</label>
+                <select id="gm-item-type" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+                    <option value="wood">🌲 木材</option>
+                    <option value="iron">⛏️ 鐵礦</option>
+                    <option value="food">🌾 糧草</option>
+                    <option value="speedup5m">⚡ 5分鐘加速卡</option>
+                    <option value="speedup30m">⚡ 30分鐘加速卡</option>
+                    <option value="speedup1h">⚡ 1小時加速卡</option>
+                    <option value="resourceCard">📦 資源隨機箱</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom:15px;">
+                <label style="color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:5px;">數量:</label>
+                <input type="number" id="gm-item-amount" value="1000" min="1" style="width:100%; padding:8px; border-radius:4px; border:1px solid #334155; background:#0f172a; color:white; box-sizing:border-box;">
+            </div>
+            
+            <button onclick="window.sendGMItem()" style="background:#10b981; width:100%; font-weight:bold; border-radius:6px; padding:12px; cursor:pointer; border:none; color:white; margin-bottom:10px;">📤 發送道具</button>
+            <button onclick="document.getElementById('gm-modal-standalone').style.display='none'" style="background:#475569; width:100%; padding:10px; border-radius:6px; cursor:pointer; border:none; color:white;">關閉</button>
+        </div>`;
+    } catch (e) {
+        console.error("讀取玩家名單失敗:", e);
+        modal.innerHTML = `
+        <div style="background:#1e293b; padding:20px; border-radius:10px; text-align:center; color:white;">
+            <h3 style="color:#ef4444;">❌ 讀取玩家名單失敗</h3>
+            <p style="font-size:0.8rem; color:#94a3b8;">請確認程式最上方有 import getDocs 和 collection</p>
+            <button onclick="document.getElementById('gm-modal-standalone').style.display='none'" style="background:#475569; padding:8px 15px; border-radius:6px; border:none; color:white; cursor:pointer;">關閉</button>
+        </div>`;
+    }
 };
 
-// 3. 實際發送邏輯 (安全寫入 Firebase)
+// 3. 實際發送邏輯 (從下拉選單獲取對象)
 window.sendGMItem = async function() {
-    // 🛡️ 安全鎖 3：後端寫入前做最後把關 (最重要！)
-    if (!window.isAdmin()) return alert("⚠ 警告：您沒有管理員權限，無法執行寫入操作！"); 
+    if (!window.isAdmin()) return alert("⚠ 警告：您沒有管理員權限！"); 
 
-    let targetUid = document.getElementById('gm-target-uid').value.trim();
-    if (!targetUid) targetUid = myData.uid; // 如果沒填，預設發給自己
+    // 💡 獲取下拉選單選中的 UID 和 玩家名稱
+    let targetSelect = document.getElementById('gm-target-uid');
+    let targetUid = targetSelect.value;
+    let targetName = targetSelect.options[targetSelect.selectedIndex].text;
 
     let itemType = document.getElementById('gm-item-type').value;
     let amount = parseInt(document.getElementById('gm-item-amount').value) || 0;
@@ -3715,7 +3746,7 @@ window.sendGMItem = async function() {
             transaction.update(playerRef, updateData);
         });
 
-        alert(`✅ 成功發送！`);
+        alert(`✅ 成功發送道具給：${targetName}！`);
         document.getElementById('gm-modal-standalone').style.display = 'none'; 
         
         if (targetUid === myData.uid) {
