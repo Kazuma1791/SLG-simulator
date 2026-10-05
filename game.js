@@ -652,46 +652,78 @@ window.gmTargetAction = async (action) => {
     alert(`✅ 成功對玩家 ${tData.name} 執行操作！`); window.refreshMap();
 };
 
-window.gmExecuteCustom = async () => {
-    if (!isAdmin) return;
-    const targetUid = document.getElementById('gm-target-uid').value.trim();
-    if (!targetUid) return alert("請先從下方列表選取玩家！");
-    
-    const field = document.getElementById('gm-custom-field').value.trim();
-    const rawAmount = document.getElementById('gm-custom-amount').value;
-    const amount = parseInt(rawAmount); 
-    
-    const targetRef = doc(db, "players", targetUid);
-    const targetSnap = await getDoc(targetRef);
-    if (!targetSnap.exists()) return alert("找不到該名玩家！");
-    let tData = targetSnap.data();
-    
-    tData.troops = tData.troops || {}; tData.items = tData.items || {};
-    tData.buildings = tData.buildings || {}; tData.research = tData.research || {};
-    let updatedMap = false; 
+window.gmExecuteCustom = async function() {
+    if (!isAdmin) return alert("權限不足！");
 
-    if (['wood', 'iron', 'food'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData[field] = amount; } 
-    else if (['infantry', 'archer', 'cavalry'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.troops[field] = amount; updatedMap = true; } 
-    else if (['speedup5m', 'speedup30m', 'speedup1h', 'shieldCard', 'renameCard', 'resourceCard'].includes(field)) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.items[field] = amount; } 
-    else if (CFG.buildings[field] || field === 'castleLevel') { if (isNaN(amount)) return alert("請輸入正確數字"); let bKey = field === 'castleLevel' ? 'castle' : field; tData.buildings[bKey] = amount; if (bKey === 'castle') updatedMap = true; } 
-    else if (CFG.techs[field]) { if (isNaN(amount)) return alert("請輸入正確數字"); tData.research[field] = amount; } 
-    else if (field === 'x' || field === 'y') { if (isNaN(amount)) return alert("請輸入正確數字"); tData[field] = amount; updatedMap = true; }
-    else if (field === 'allianceName') { tData.allianceName = rawAmount === 'null' || rawAmount === '' ? null : rawAmount; updatedMap = true; } 
-    else { return alert("未知的欄位名稱：" + field); }
-    
-    tData.logs = tData.logs || []; tData.logs.unshift(`[GM系統] 您的【${field}】資料已被手動修正。`);
-    await setDoc(targetRef, tData, { merge: true });
-    
-    if (updatedMap) {
-        let mapUpdate = {};
-        if (['infantry', 'archer', 'cavalry'].includes(field)) mapUpdate.troops = (tData.troops.infantry||0) + (tData.troops.archer||0) + (tData.troops.cavalry||0);
-        if (field === 'castleLevel' || field === 'castle') mapUpdate.castleLevel = amount;
-        if (field === 'allianceName') mapUpdate.allianceName = tData.allianceName;
-        if (field === 'x') mapUpdate.x = amount;
-        if (field === 'y') mapUpdate.y = amount;
-        await setDoc(doc(db, "world_map", targetUid), mapUpdate, { merge: true });
+    // 1. 取得目標 UID (從你原本的 HTML 架構抓取)
+    let targetUid = document.getElementById('gm-target-uid').value;
+    if (!targetUid) {
+        // 如果沒有鎖定任何人，預設發給自己
+        targetUid = myData.uid; 
+        document.getElementById('gm-selected-name').innerText = `(預設) 發給自己`;
+        document.getElementById('gm-selected-name').style.color = '#38bdf8';
     }
-    alert(`✅ 已成功修改！`);
+
+    // 2. 獲取要寫入的欄位與數量
+    let field = document.getElementById('gm-custom-field').value;
+    let amount = parseInt(document.getElementById('gm-custom-amount').value) || 0;
+    if (amount === 0 && field !== 'castleLevel') return alert("數量不能為 0！");
+
+    let confirmMsg = `確定要給予玩家 ${amount} 個 【${document.getElementById('gm-custom-field').options[document.getElementById('gm-custom-field').selectedIndex].text}】 嗎？`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        let updateData = {};
+        let logMsg = "";
+
+        // 3. 判斷不同道具的寫入路徑
+        if (['wood', 'iron', 'food'].includes(field)) {
+            updateData[field] = increment(amount);
+            logMsg = `🎁 [系統獎勵] 管理員發放了補給！獲得 ${field} x ${amount}`;
+        } 
+        else if (['infantry', 'archer', 'cavalry'].includes(field)) {
+            updateData[`troops.${field}`] = increment(amount);
+            logMsg = `⚔️ [系統獎勵] 管理員徵召了軍隊！獲得兵力 ${amount}`;
+            
+            // 同時更新世界地圖的總兵力顯示
+            let wRef = doc(db, "world_map", targetUid);
+            let wSnap = await getDoc(wRef);
+            if(wSnap.exists()) {
+                await setDoc(wRef, { troops: increment(amount) }, {merge:true});
+            }
+        } 
+        else if (field === 'castleLevel') {
+            updateData['buildings.castle'] = amount;
+            logMsg = `⚠️ [系統操作] 管理員強制將您的主城等級修改為 ${amount}`;
+            // 同時更新世界地圖的等級顯示
+            await setDoc(doc(db, "world_map", targetUid), { castleLevel: amount }, {merge:true});
+        }
+        else {
+            // 其他皆歸類為背包道具 (items)
+            updateData[`items.${field}`] = increment(amount);
+            logMsg = `📦 [系統獎勵] 管理員發放了道具！獲得補給 x ${amount}`;
+        }
+
+        // 4. 寫入資料庫並附上系統信件
+        await runTransaction(db, async (transaction) => {
+            const playerRef = doc(db, "players", targetUid);
+            const pDoc = await transaction.get(playerRef);
+            if (!pDoc.exists()) throw new Error("找不到該玩家資料！");
+            
+            let pData = pDoc.data();
+            let newLogs = [logMsg, ...(pData.logs || [])].slice(0, 50); 
+            updateData['logs'] = newLogs;
+
+            transaction.update(playerRef, updateData);
+        });
+
+        alert("✅ 操作成功！");
+        document.getElementById('gm-custom-amount').value = ''; // 清空輸入框
+        
+    } catch (e) {
+        console.error(e);
+        alert(`❌ 操作失敗：${e.message}`);
+    }
 };
 
 window.gmAuditPlayer = async () => {
