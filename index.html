@@ -274,15 +274,32 @@
 
         <h4 style="margin-top:16px; color:#cbd5e1; border-top: 1px solid #334155; padding-top: 10px; font-size:0.9rem;">⚙️ 自訂數據寫入器 (任意修改)</h4>
         <div style="display:flex; gap:6px; margin-top:8px;">
-          <select id="gm-custom-field" style="background:#1e2c40; color:white; padding:8px; border-radius:4px; flex:1;">
-             <option value="wood">資源 - 木材</option>
-             <option value="iron">資源 - 鐵礦</option>
-             <option value="food">資源 - 糧草</option>
-             <option value="infantry">兵力 - 步兵</option>
-             <option value="speedup5m">道具 - 5分加速卡</option>
-             <option value="shieldCard">道具 - 和平護盾</option>
-             <option value="castleLevel">建築 - 主城等級(慎用)</option>
-          </select>
+          <!-- 把你原本的 gm-custom-field 替換成下面這串 -->
+        <select id="gm-custom-field" style="background:#1e2c40; color:white; padding:8px; border-radius:4px; flex:1;">
+             <optgroup label="📦 基礎資源">
+                 <option value="wood">木材 (Wood)</option>
+                 <option value="iron">鐵礦 (Iron)</option>
+                 <option value="food">糧草 (Food)</option>
+             </optgroup>
+             <optgroup label="⚔️ 軍隊兵力">
+                 <option value="infantry">步兵 (Infantry)</option>
+                 <option value="archer">弓兵 (Archer)</option>
+                 <option value="cavalry">騎兵 (Cavalry)</option>
+             </optgroup>
+             <optgroup label="⚡ 加速道具">
+                 <option value="speedup5m">5分鐘加速卡</option>
+                 <option value="speedup30m">30分鐘加速卡</option>
+                 <option value="speedup1h">1小時加速卡</option>
+             </optgroup>
+             <optgroup label="📜 特殊道具">
+                 <option value="resourceCard">資源隨機箱</option>
+                 <option value="shieldCard">和平護盾</option>
+                 <option value="renameCard">改名卡</option>
+             </optgroup>
+             <optgroup label="⚠️ 危險操作">
+                 <option value="castleLevel">強制修改主城等級</option>
+             </optgroup>
+        </select>
           <input type="number" id="gm-custom-amount" placeholder="數量" style="width:80px; padding:8px; background:#1e2c40; color:white; border:1px solid #475569; border-radius:4px;">
           <button onclick="window.gmExecuteCustom()" style="background:#8b5cf6; padding:8px 12px;">確認寫入</button>
         </div>
