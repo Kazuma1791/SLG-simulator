@@ -1124,8 +1124,12 @@ async function localTick() {
     let isUnderAttack = myData.marches && myData.marches.some(m => m.type === 'defend_npc');
     let hasShield = (myData.shieldEnd > Date.now()) || (myData.shieldEndTime > Date.now()) || (myData.shieldExpiry > Date.now());
     
-    // 🛡️ 如果有護盾，NPC 絕對不會發起突襲
-    if (!isUnderAttack && !hasShield && Math.random() < 0.005) {
+    // 👇 新增這行：🔰 判斷是不是 5 級以下的新手
+    let isNewbie = (myData.buildings && myData.buildings.castle < 5);
+    
+    // 🛡️ 如果有護盾、被攻擊中、「或是新手」，NPC 絕對不會發起突襲！
+    // 👇 注意這裡多加了一個 !isNewbie 的判斷
+    if (!isUnderAttack && !hasShield && !isNewbie && Math.random() < 0.005) {
 
       let nearbyOutposts = [];
       
