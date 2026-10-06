@@ -18,6 +18,7 @@ console.log('%c', devtools);
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, collection, runTransaction, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCaowUN5atHnnlfvGmfWA0PDyjfQU3Qr0U",
@@ -3791,5 +3792,43 @@ window.sendGMItem = async function() {
     } catch (e) {
         console.error(e);
         alert(`❌ 發送失敗：${e.message}`);
+    }
+};
+// ==========================================
+// 📜 公告系統：標記為已讀並隱藏
+// ==========================================
+window.claimAnnouncement = async function() {
+    // 檢查有沒有公告，或者是不是已經看過了
+    if (!currentAnnouncement || !currentAnnouncement.id) return;
+    if (myData.claimedAnnouncements && myData.claimedAnnouncements.includes(currentAnnouncement.id)) {
+        return; // 已經讀過了，直接跳出
+    }
+
+    try {
+        // 1. 寫入 Firebase，把這則公告的 ID 永久加入「已讀名單」
+        const playerRef = doc(db, "players", myData.uid);
+        await setDoc(playerRef, {
+            claimedAnnouncements: arrayUnion(currentAnnouncement.id)
+        }, { merge: true });
+        
+        // 2. 立刻更新本地端的資料 (不用等伺服器回傳，讓畫面瞬間反應)
+        myData.claimedAnnouncements.push(currentAnnouncement.id);
+        
+        // 3. 把選單上的 🔴 紅點消除，恢復成原本的文字
+        const mailBtn = document.getElementById('btn-tab-mail'); 
+        if (mailBtn) mailBtn.innerText = "📜 郵件"; 
+
+        // 4. 清除畫面上的公告顯示
+        // (如果你是彈出視窗，就把視窗隱藏)
+        let modal = document.getElementById('announcement-modal');
+        if (modal) modal.style.display = 'none';
+
+        // (如果是顯示在面板裡，呼叫重新渲染讓它變空)
+        if (typeof window.renderAnnouncement === 'function') {
+            window.renderAnnouncement(); 
+        }
+
+    } catch (e) {
+        console.error("更新公告狀態失敗:", e);
     }
 };
