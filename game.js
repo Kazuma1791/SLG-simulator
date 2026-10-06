@@ -1441,15 +1441,20 @@ async function resolveAttackBoss(m) {
 
 window.resolveDefendNPC = async function(m) {
     let res = { completed: true };
-        // 🛡️ 萬用護盾判定：只要有任何一種護盾時間大於現在，就視為無敵
+    // 🛡️ 萬用護盾判定：把盾的所有可能名稱都加上 (特別是 shieldEndsAt)
     const now = Date.now();
-    const hasShield = (myData.shieldEnd > now) || (myData.shieldEndTime > now) || (myData.shieldExpiry > now);
+    const hasShield = 
+        (myData.shieldEndsAt > now) || 
+        (myData.shieldEnd > now) || 
+        (myData.shieldEndTime > now) || 
+        (myData.shieldExpiry > now);
     
     if (hasShield) {
         myData.logs.unshift(`🛡️ [護盾發威] 您的和平護盾散發出強大能量，將【${m.npcName}】的部隊強行阻擋在外！敵軍無功而返。`);
+        // 讓日誌不要太長
+        if (myData.logs.length > 50) myData.logs = myData.logs.slice(0, 50); 
         return res; // 直接中斷戰鬥，不扣兵、不扣資源
     }
-
     
     // 計算防守方總戰力 (部隊戰力 + 城牆防禦加成)
     const myPwr = typeof window.getPwrByTech === 'function' ? window.getPwrByTech(myData.troops, myData.research) : 0;
